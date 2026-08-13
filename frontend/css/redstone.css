@@ -1,0 +1,194 @@
+/* 红石联机页面样式 */
+
+.rs-form-row {
+  margin-bottom: 12px;
+}
+
+.rs-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rs-form-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.rs-form-card span:first-child {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 50px;
+}
+
+.rs-form-card input[type="text"] {
+  flex: 1;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  text-align: left;
+}
+
+.rs-form-card input[type="text"]::placeholder {
+  color: var(--text-muted);
+}
+
+.rs-form-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.rs-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.rs-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rs-title-row.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.rs-title-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  max-width: 180px;
+}
+
+.rs-title-input-wrap input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.rs-title-input-wrap input:hover {
+  border-color: var(--text-muted);
+}
+
+.rs-title-input-wrap input:focus {
+  border-color: var(--accent);
+  background: var(--bg-primary);
+}
+
+.rs-title-input-wrap input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.rs-title-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+  transition: color 0.2s;
+}
+
+.rs-title-count.warn {
+  color: var(--orange);
+}
+
+.rs-title-count.full {
+  color: var(--green);
+}
+
+.rs-switch-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.rs-form-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding: 0 14px;
+  line-height: 1.5;
+  opacity: 0.7;
+}
+
+.rs-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: help;
+}
+
+.rs-tooltip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: 240px;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  z-index: 100;
+}
+
+.rs-tooltip:hover::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 1px);
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--border);
+  z-index: 100;
+}

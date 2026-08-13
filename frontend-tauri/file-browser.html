@@ -1,0 +1,142 @@
+<!-- file-browser.html - 自定义文件浏览器对话框 -->
+<div class="file-browser-overlay" id="fileBrowserOverlay">
+  <div class="file-browser" id="fileBrowser">
+    <!-- 标题栏 -->
+    <div class="file-browser-header">
+      <div class="fb-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        <span id="fbDialogTitle">选择保存位置</span>
+      </div>
+      <button class="fb-close-btn" id="fbCloseBtn" title="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 地址栏 -->
+    <div class="fb-address-bar">
+      <button class="fb-nav-btn" id="fbBackBtn" title="后退" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <button class="fb-nav-btn" id="fbForwardBtn" title="前进" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+      <button class="fb-nav-btn" id="fbUpBtn" title="上级目录">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="18 15 12 9 6 15"/>
+        </svg>
+      </button>
+
+      <div class="fb-path-container" id="fbPathContainer"></div>
+
+      <button class="fb-refresh-btn" id="fbRefreshBtn" title="刷新">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="fb-body">
+      <!-- 左侧导航 -->
+      <div class="fb-sidebar" id="fbSidebar">
+        <div class="fb-sidebar-header">快速访问</div>
+        <div id="fbQuickAccess"></div>
+
+        <div class="fb-sidebar-header" style="margin-top: 8px;">此电脑</div>
+        <div id="fbDrives"></div>
+      </div>
+
+      <!-- 右侧内容 -->
+      <div class="fb-content">
+        <!-- 工具栏 -->
+        <div class="fb-toolbar">
+          <div class="fb-toolbar-left">
+            <button class="fb-new-folder-btn" id="fbNewFolderBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+              </svg>
+              新建文件夹
+            </button>
+
+            <div class="fb-view-toggle">
+              <button class="fb-view-btn active" data-view="list" title="列表视图">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+              </button>
+              <button class="fb-view-btn" data-view="grid" title="图标视图">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="fb-search-box">
+            <svg class="fb-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" class="fb-search-input" id="fbSearchInput" placeholder="在当前文件夹中搜索...">
+          </div>
+        </div>
+
+        <!-- 文件列表 -->
+        <div class="fb-file-list" id="fbFileList">
+          <div class="fb-loading" id="fbLoading">
+            <div class="spinner-sm"></div>
+            <span>加载中...</span>
+          </div>
+        </div>
+
+        <!-- 底部操作栏 -->
+        <div class="fb-footer">
+          <div class="fb-input-row">
+            <div class="fb-input-group">
+              <label class="fb-input-label">文件名(N):</label>
+              <input type="text" class="fb-input-field" id="fbFileNameInput" placeholder="输入文件名...">
+            </div>
+            <div class="fb-input-group" style="flex: 0 0 auto;">
+              <label class="fb-input-label">保存类型(T):</label>
+              <select class="fb-select-field" id="fbFileTypeSelect">
+                <option value="*.jar">Mod 文件 (*.jar)</option>
+                <option value="*.*">所有文件 (*.*)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="fb-actions-row">
+            <div class="fb-options">
+              <label class="fb-checkbox-label">
+                <input type="checkbox" id="fbShowHidden">
+                显示隐藏的文件夹
+              </label>
+            </div>
+            <div class="fb-buttons">
+              <button class="fb-btn fb-btn-secondary" id="fbCancelBtn">取消</button>
+              <button class="fb-btn fb-btn-primary" id="fbSaveBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                </svg>
+                保存(S)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,68 @@
+[package]
+name = "verse-tauri"
+version = "0.1.0"
+description = "VersePC Tauri 框架替换项目"
+edition = "2024"
+# 通过 rust-version 说明需要较新的编译器；let-chains 语法在 2024 edition 下可用
+rust-version = "1.95"
+default-run = "verse-tauri"
+
+[lib]
+name = "verse_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tokio = { version = "1", features = ["time", "fs", "io-util", "sync", "rt-multi-thread", "macros", "process", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-dialog = "2"
+dirs = "5"
+md5 = "0.7"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json", "blocking", "gzip", "deflate"] }
+sha1 = "0.10"
+futures-util = "0.3"
+regex = "1"
+sha2 = "0.10"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+uuid = { version = "1", features = ["v4"] }
+hostname = "0.4"
+open = "5"
+zip = "2"
+urlencoding = "2"
+if-addrs = "0.13"
+flate2 = "1"
+tokio-tungstenite = { version = "0.21", features = ["rustls"] }
+
+# theseus 整合包下载生态依赖
+async_zip = { version = "0.0.17", features = ["full", "tokio", "deflate", "chrono"] }
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+rand = "0.8"
+httpdate = "1"
+derive_more = { version = "1", features = ["display"] }
+eyre = "0.6"
+tempfile = "3"
+sha1_smol = "1"
+futures-lite = "2"
+governor = "0.7"
+async-walkdir = "0.2"
+tracing = "0.1"
+futures = "0.3"
+sysinfo = "0.30"
+arboard = "3"
+
+# ============== Release 体积优化 ==============
+# 通过 LTO + strip + 单 codegen-unit 大幅缩小 exe 体积
+[profile.release]
+opt-level = "z"          # 优先体积优化（比默认的 3 小很多）
+lto = true               # 链接时优化，跨 crate 内联去冗余
+codegen-units = 1        # 单单元编译，更好的全局优化
+strip = true             # 移除调试符号
+panic = "unwind"         # 后台任务/命令异常时只回滚该任务，软件不整体崩溃（配合崩溃日志定位）

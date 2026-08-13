@@ -1,0 +1,676 @@
+/**
+ * layout.css - 主布局样式表
+ * ----------------------------------------------------------------------------
+ * 文件职责：定义应用主框架布局，包括侧边栏导航、内容区、首页英雄区、
+ * 卡片容器、账户头像、新闻列表等布局结构。
+ *
+ * 样式分区：
+ * 1. 侧边栏 - 左侧导航栏容器、导航按钮、子菜单
+ * 2. 内容区 - 主内容滚动容器、页面头部
+ * 3. 首页 - 英雄区、统计卡片、快速启动
+ * 4. 卡片 - 通用卡片容器
+ * 5. 新闻列表 - 版本动态条目
+ * 6. 账户 - 头像、信息展示
+ * 7. 游戏运行态 - 运行时动画抑制
+ */
+
+/* 侧边栏 - 左侧导航栏容器 */
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--bg-glass);
+    backdrop-filter: blur(8px) saturate(1.4);
+    -webkit-backdrop-filter: blur(8px) saturate(1.4);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+    padding: 10px 8px;
+    animation: slideRight 0.4s var(--ease-out-expo) both;
+    overflow: hidden;
+    contain: layout style;
+    will-change: transform;
+}
+
+body.game-running .sidebar {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--sidebar-bg-solid, rgba(30, 30, 35, 0.95)) !important;
+}
+
+.sidebar-nav, .sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    scrollbar-width: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.sidebar-footer {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(var(--accent-rgb), 0.06);
+    padding-top: 6px;
+    margin-top: 4px;
+}
+
+/* 导航按钮 - 侧边栏主按钮（图标+文字） */
+.nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 4px 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 12px;
+    transition: color 0.25s var(--ease-out-expo), transform 0.2s var(--ease-out-expo);
+    width: 60px;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    font-weight: 500;
+    position: relative;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+.nav-btn::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0);
+    width: 3px;
+    height: 0;
+    background: var(--accent);
+    border-radius: 0 3px 3px 0;
+    transition: height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.nav-btn.active::before {
+    transform: translateY(-50%) scaleY(1);
+    height: 20px;
+}
+
+.nav-btn::after {
+    content: '';
+    position: absolute;
+    inset: 2px 4px;
+    background: var(--accent);
+    opacity: 0;
+    border-radius: 10px;
+    transition: opacity 0.3s var(--ease-out-expo);
+    pointer-events: none;
+}
+
+.nav-btn:hover::after {
+    opacity: 0.06;
+}
+
+.nav-btn.active::after {
+    opacity: 0.1;
+}
+
+.nav-btn svg {
+    width: 21px;
+    height: 21px;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s var(--ease-out-expo), opacity 0.25s var(--ease-out-expo);
+    flex-shrink: 0;
+}
+
+.nav-btn:hover {
+    color: var(--text-secondary);
+    transform: scale(1.05);
+}
+
+.nav-btn:hover svg {
+    transform: scale(1.1);
+}
+
+.nav-btn:active {
+    transform: scale(0.94);
+}
+
+.nav-btn:active svg {
+    transform: scale(0.88);
+}
+
+.nav-btn.active {
+    color: var(--text-primary);
+}
+
+.nav-btn.active svg {
+    filter: drop-shadow(0 0 8px var(--accent-glow));
+}
+
+/* 简约线条导航图标 */
+.nav-icon-svg {
+    width: 24px;
+    height: 24px;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s var(--ease-out-expo), opacity 0.25s var(--ease-out-expo);
+    flex-shrink: 0;
+    display: block;
+    color: var(--text-primary);
+}
+
+.nav-btn:hover .nav-icon-svg {
+    transform: scale(1.1);
+}
+.nav-btn:active .nav-icon-svg {
+    transform: scale(0.88);
+}
+.nav-btn.active .nav-icon-svg {
+    filter: drop-shadow(0 0 8px var(--accent-glow));
+}
+
+.nav-globe-icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    position: relative;
+    opacity: 0.5;
+    transition: opacity 0.25s var(--ease-out-expo), border-color 0.25s var(--ease-out-expo), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    margin: 0 auto 2px;
+}
+.nav-btn:hover .nav-globe-icon,
+.nav-btn.active .nav-globe-icon {
+    opacity: 1;
+}
+.nav-globe-icon::before {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    right: 2px; bottom: 2px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    opacity: 0.4;
+}
+.nav-globe-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -2px;
+    right: -2px;
+    border-top: 1.5px solid currentColor;
+    transform: translateY(-50%);
+    opacity: 0.4;
+}
+
+/* 实验性功能导航按钮 - 紫色高亮标识实验功能 */
+.nav-btn-experimental {
+    color: var(--purple);
+}
+.nav-btn-experimental::after {
+    background: var(--purple);
+    opacity: 0;
+}
+.nav-btn-experimental:hover {
+    color: var(--purple);
+    opacity: 0.85;
+}
+.nav-btn-experimental:hover::after {
+    opacity: 0.08;
+}
+.nav-btn-experimental.active {
+    color: var(--purple);
+}
+.nav-btn-experimental.active::after {
+    opacity: 0.12;
+}
+.nav-btn-experimental.active svg {
+    filter: drop-shadow(0 0 6px var(--purple));
+}
+.nav-btn-experimental-badge {
+    position: absolute;
+    top: -1px;
+    right: -2px;
+    z-index: 2;
+    font-size: 7px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 10px;
+    background: var(--purple);
+    color: #fff;
+    opacity: 0.7;
+    pointer-events: none;
+    transition: opacity 0.25s var(--ease-out-expo);
+}
+.nav-btn-experimental:hover .nav-btn-experimental-badge,
+.nav-btn-experimental.active .nav-btn-experimental-badge {
+    opacity: 1;
+}
+
+/* 导航子菜单 - 可折叠的二级导航 */
+.nav-submenu-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.nav-submenu-toggle {
+    width: 60px;
+    overflow: visible;
+}
+
+.nav-submenu-toggle .submenu-arrow {
+    width: 10px;
+    height: 10px;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s var(--ease-out-expo);
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0.4;
+}
+
+.nav-submenu-group.open .submenu-arrow {
+    transform: translateX(-50%) rotate(180deg);
+    opacity: 0.6;
+}
+
+.nav-btn:hover .submenu-arrow {
+    opacity: 0.6;
+}
+
+.nav-btn.active .submenu-arrow {
+    opacity: 0.8;
+}
+
+.nav-submenu {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s var(--ease-out-expo);
+    opacity: 0;
+}
+
+.nav-submenu-group.open .nav-submenu {
+    max-height: 300px;
+    opacity: 1;
+}
+
+.nav-sub-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: color 0.25s var(--ease-out-expo), transform 0.2s var(--ease-out-expo);
+    font-size: 10px;
+    letter-spacing: 0.01em;
+    font-weight: 500;
+    width: 58px;
+    white-space: nowrap;
+    position: relative;
+}
+
+.nav-sub-btn::after {
+    content: '';
+    position: absolute;
+    inset: 1px 3px;
+    background: var(--accent);
+    opacity: 0;
+    border-radius: 7px;
+    transition: opacity 0.25s var(--ease-out-expo);
+    pointer-events: none;
+}
+
+.nav-sub-btn:hover::after {
+    opacity: 0.05;
+}
+
+.nav-sub-btn.active::after {
+    opacity: 0.08;
+}
+
+.nav-sub-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+
+.nav-sub-btn:hover {
+    color: var(--text-secondary);
+    transform: scale(1.06);
+}
+
+.nav-sub-btn:active {
+    transform: scale(0.94);
+}
+
+.nav-sub-btn.active {
+    color: var(--text-primary);
+}
+
+/* 内容区 - 主内容滚动容器 */
+.content-area {
+    flex: 1;
+    overflow: hidden;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    animation: pageIn 0.4s var(--ease-out-expo) 0.15s both;
+    will-change: transform, opacity;
+}
+
+.content-area.no-scroll {
+    overflow: hidden;
+    padding: 0;
+}
+
+.page.active {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+.page.active::-webkit-scrollbar {
+    width: 6px;
+}
+
+.page.active::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.page.active::-webkit-scrollbar-thumb {
+    background: var(--bg-active);
+    border-radius: 3px;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.page-header h2 {
+    font-size: 22px;
+    font-weight: 600;
+}
+
+.page-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* 首页英雄区 - 大标题、统计卡片、快速启动 */
+.home-hero {
+    background: linear-gradient(135deg, var(--bg-card-glass) 0%, var(--bg-card-glass) 100%);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border);
+}
+
+.hero-content {
+    max-width: 50%;
+}
+
+.hero-title {
+    font-size: 36px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+}
+
+.hero-subtitle {
+    font-size: 18px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.hero-desc {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.hero-stats {
+    display: flex;
+    gap: 20px;
+}
+
+.stat-card {
+    background: var(--bg-card-glass);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    padding: 16px 24px;
+    border-radius: var(--radius);
+    text-align: center;
+    border: 1px solid var(--border);
+    min-width: 100px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.stat-label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.home-quick-actions {
+    margin-bottom: 24px;
+}
+
+.home-launch-card {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 24px;
+}
+
+.home-launch-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.home-launch-right {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 通用卡片容器 - 玻璃拟态背景 */
+.card {
+    background: var(--bg-card-glass);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    border: 1px solid var(--border);
+    transition: transform 0.3s var(--ease-out-expo), box-shadow 0.3s var(--ease-out-expo), border-color 0.3s ease;
+    will-change: transform;
+}
+
+.card:hover {
+    border-color: var(--border);
+}
+
+.card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text-secondary);
+}
+
+.quick-launch {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* 新闻列表 - 版本动态条目 */
+.news-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.news-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.news-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.news-badge.release {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--green);
+}
+
+.news-badge.snapshot {
+    background: rgba(255, 152, 0, 0.15);
+    color: var(--orange);
+}
+
+/* 账户信息 - 头像、名称、类型展示 */
+.account-quick-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.account-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    background: var(--bg-active);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.account-avatar:has(.account-avatar-img) {
+    display: block;
+    font-size: 0;
+    line-height: 0;
+}
+
+/* 未登录时的灰色占位头像：纯灰底，无图标 */
+.account-avatar--empty {
+    background: var(--bg-active);
+}
+
+.account-avatar-img {
+    width: 64px;
+    height: 64px;
+    display: block;
+}
+
+.account-item .account-avatar-img {
+    width: 48px;
+    height: 48px;
+}
+
+.account-avatar-sm .account-avatar-img {
+    width: 28px;
+    height: 28px;
+}
+
+.account-avatar-text {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.account-avatar-sm {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: var(--bg-active);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.account-avatar-sm:has(.account-avatar-img) {
+    display: block;
+    font-size: 0;
+    line-height: 0;
+}
+
+.account-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.account-name {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.account-type {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 游戏运行态 - 运行时抑制装饰性动画以节省资源 */
+body.game-running .dot-pulse,
+body.game-running .spin,
+body.game-running [class*="pulse"],
+body.game-running [class*="shimmer"] {
+    animation: none !important;
+}

@@ -1,0 +1,886 @@
+<!-- index.html - VersePC 主入口界面 -->
+<!--
+  VersePC - Minecraft Launcher
+  Copyright (c) 2026 豆杰. All Rights Reserved.
+
+  AI TRAINING PROHIBITED: This code is protected by copyright law.
+  Unauthorized use for AI model training, machine learning datasets,
+  or any form of artificial intelligence training is strictly prohibited.
+
+  This software is proprietary and confidential.
+  Any unauthorized reproduction or distribution is prohibited.
+-->
+
+<!DOCTYPE html>
+<!-- ==========================================================================
+  VersePC - Minecraft 启动器 单页应用 (SPA)
+  ============================================================================
+  所有界面通过 CSS 的 .page.active 切换显示，每个 page 是一个功能模块。
+  
+  页面分区：
+  1. 标题栏 (.title-bar) - 自定义窗口标题栏 + 窗口控制按钮
+  2. 导航栏 (.sidebar) - 侧边栏功能导航 + 页面切换
+  3. 启动栏 (.launch-bar) - 首页游戏封面 + 启动按钮 + 版本选择
+  4. 页面容器 (.page-content) - 各功能页面内容
+  
+  页面列表：
+  - page-home       首页/启动
+  - page-versions   版本管理
+  - page-mods       模组管理
+  - page-modpacks   整合包
+  - page-settings   设置
+  - page-accounts   账户
+  - page-java       Java管理
+  - page-downloads  下载管理
+  
+  模态框：
+  - launch-modal      启动模态框（步骤式进度）
+  - deps-modal        依赖检查模态框
+  - install-modal     版本安装模态框
+  - mod-detail-modal  模组详情模态框
+  ========================================================================== -->
+<html lang="zh-CN" data-theme="light" data-no-glass>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VersePC2 - Minecraft Launcher</title>
+  <style>
+    body{background:#ffffff!important}[data-theme="dark"] body{background:#0a0a0a!important}[data-theme="custom"] body{background:var(--bg-primary,#0b1020)!important}
+    button,a,input,select,textarea{outline:none!important}
+    button{background:transparent;border:none;color:inherit;font:inherit;cursor:default}
+    a{color:inherit;text-decoration:none}
+    *:focus,*:focus-visible{outline:none!important}
+  </style>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/themes.css">
+  <link rel="stylesheet" href="css/splash.css">
+  <link rel="stylesheet" href="css/versions.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/launch.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/mods.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/settings.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="v-island/dynamic-island.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/file-browser.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/modal.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/private-server.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/server-host.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/redstone.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/sponsor.css" media="print" onload="this.media='all'">
+  <link rel="icon" type="image/svg+xml" href="img/icon.svg">
+  <link rel="icon" type="image/x-icon" href="img/icon.ico">
+</head>
+<body>
+  <!-- SVG 图标定义 -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <!-- 主页 - 房子 -->
+    <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </symbol>
+
+    <!-- 下载 - 向下箭头 -->
+    <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </symbol>
+
+    <!-- 资源 - 盒子 -->
+    <symbol id="icon-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </symbol>
+
+    <!-- 联机 - 地球 -->
+    <symbol id="icon-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="2" y1="12" x2="22" y2="12"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </symbol>
+
+    <!-- 工具箱 - 扳手 -->
+    <symbol id="icon-toolbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+    </symbol>
+
+    <!-- 账户 - 用户 -->
+    <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </symbol>
+
+    <!-- 设置 - 齿轮 -->
+    <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </symbol>
+
+    <!-- Java - 咖啡杯 -->
+    <symbol id="icon-java" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+      <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+      <line x1="6" y1="1" x2="6" y2="4"/>
+      <line x1="10" y1="1" x2="10" y2="4"/>
+      <line x1="14" y1="1" x2="14" y2="4"/>
+    </symbol>
+
+    <!-- 实验性 - 烧杯 -->
+    <symbol id="icon-explore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3h6v7.8L22 20a1 1 0 0 1-.8 1.6H2.8A1 1 0 0 1 2 20l7-9.2V3z"/>
+      <path d="M8.5 3h7"/>
+      <path d="M7 14h10"/>
+    </symbol>
+
+    <!-- 私人服务器 - 服务器 -->
+    <symbol id="icon-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+      <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+      <circle cx="6" cy="6" r="1" fill="currentColor"/>
+      <circle cx="6" cy="18" r="1" fill="currentColor"/>
+    </symbol>
+
+    <!-- 开服 - 启动主机 -->
+    <symbol id="icon-server-host" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <path d="M8 21h8"/>
+      <path d="M12 17v4"/>
+      <path d="M10 10l4 2-4 2v-4z" fill="currentColor" stroke="none"/>
+    </symbol>
+
+    <!-- 控制台 - 终端 -->
+    <symbol id="icon-console" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="4 17 10 11 4 5"/>
+      <line x1="12" y1="19" x2="20" y2="19"/>
+    </symbol>
+  </svg>
+
+  <!-- 启动画面 -->
+  <div id="splash-overlay" style="position:fixed;inset:0;z-index:999999;overflow:hidden;transition:opacity 0.3s ease,transform 0.3s ease;transform-origin:center center;background:var(--bg-primary, #ffffff);">
+    <div id="splash-content" style="position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;">
+      <div id="splash-logo" style="margin-bottom:20px;opacity:0;transform:translateY(20px) scale(0.95);">
+        <img src="img/icon.svg" alt="VersePC2" width="80" height="80"/>
+      </div>
+
+      <div id="splash-text" style="text-align:center;opacity:0;transform:translateY(10px);">
+        <div id="splash-title" style="font-size:28px;font-weight:800;letter-spacing:-0.03em;margin-bottom:6px;font-family:system-ui,-apple-system,sans-serif;">
+          Verse<span id="splash-title-accent">PC2</span>
+        </div>
+        <div id="splash-subtitle" style="font-size:13px;letter-spacing:0.15em;text-transform:uppercase;font-weight:500;">
+          Minecraft Launcher
+        </div>
+      </div>
+
+      <div id="splash-progress-container" style="margin-top:50px;width:200px;opacity:0;transform:translateY(10px);">
+        <div id="splash-track" style="position:relative;height:3px;border-radius:2px;overflow:hidden;">
+          <div id="splash-progress" style="position:absolute;top:0;left:0;height:100%;width:0%;border-radius:2px;transition:width 0.4s ease-out;"></div>
+        </div>
+        <div id="splash-status" style="margin-top:12px;font-size:11px;letter-spacing:0.05em;text-align:center;min-height:16px;">
+          正在初始化...
+        </div>
+      </div>
+    </div>
+
+    <div id="splash-version" style="position:absolute;bottom:20px;right:25px;font-size:10px;letter-spacing:0.1em;">
+      v1.3.3
+    </div>
+  </div>
+
+  <!-- 尽早显示窗口：不等 defer 脚本，强制 splash 可见并通知主进程 -->
+  <script>
+    (function(){
+      var ids = ['splash-logo','splash-text','splash-progress-container'];
+      for (var i=0;i<ids.length;i++){
+        var el = document.getElementById(ids[i]);
+        if (el){ el.style.opacity='1'; el.style.transform='none'; el.style.animation='none'; }
+      }
+      if (window.electronAPI && window.electronAPI.showWindowEarly) {
+        window.electronAPI.showWindowEarly();
+      }
+    })();
+  </script>
+
+
+  <div id="wallpaper-bg" style="position:fixed;inset:0;z-index:0;background:var(--bg-primary,#0a0a0a);"></div>
+  <div id="wallpaper-video-container" style="position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;display:none;"></div>
+  <canvas id="wallpaper-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;"></canvas>
+  <canvas id="wallpaper-canvas-gl" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;display:none;"></canvas>
+  <div id="wallpaper-overlay" style="position:fixed;inset:0;z-index:1;pointer-events:none;"></div>
+  <!-- 应用主容器 -->
+  <div id="app" style="position:relative;z-index:2;">
+    <!-- 标题栏 -->
+    <div class="title-bar">
+      <div class="title-bar-left">
+        <img src="img/icon.svg" alt="VersePC2" class="title-bar-icon">
+        <span class="title-bar-text">VersePC2</span>
+      </div>
+      <div class="title-bar-right">
+        <span id="status-indicator" class="status-dot"></span>
+        <span id="status-text" class="status-text">就绪</span>
+        <div class="window-controls" id="window-controls" style="display:none">
+          <button class="win-btn win-btn-minimize" id="win-btn-minimize" title="最小化">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
+          </button>
+          <button class="win-btn win-btn-maximize" id="win-btn-maximize" title="最大化">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          </button>
+          <button class="win-btn win-btn-restore" id="win-btn-restore" title="还原" style="display:none">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="3" y="0" width="9" height="9" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="0" y="3" width="9" height="9" stroke="currentColor" stroke-width="1.2" fill="var(--bg-secondary)"/></svg>
+          </button>
+          <button class="win-btn win-btn-close" id="win-btn-close" title="关闭">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+      <!-- 侧边导航栏 -->
+      <nav class="sidebar">
+        <div class="sidebar-nav">
+          <button class="nav-btn active" data-page="home" title="主页">
+            <svg class="nav-icon-svg"><use href="#icon-home"/></svg>
+            <span>主页</span>
+          </button>
+          <button class="nav-btn" data-page="versions" title="下载">
+            <svg class="nav-icon-svg"><use href="#icon-download"/></svg>
+            <span>下载</span>
+          </button>
+          <div class="nav-submenu-group">
+            <button class="nav-btn nav-submenu-toggle" title="资源">
+              <svg class="nav-icon-svg"><use href="#icon-package"/></svg>
+              <span>资源</span>
+              <svg class="submenu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M7 10L12 15L17 10"/></svg>
+            </button>
+            <div class="nav-submenu">
+              <button class="nav-sub-btn" data-page="mods">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/></svg>
+                模组
+              </button>
+              <button class="nav-sub-btn" data-page="modpacks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 2L21 7V17L12 22L3 17V7L12 2Z"/><path d="M12 8L16 10.5V15.5L12 18L8 15.5V10.5L12 8Z"/></svg>
+                整合包
+              </button>
+              <button class="nav-sub-btn" data-page="datapacks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="3" y="5" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="15" width="18" height="4"/><line x1="12" y1="5" x2="12" y2="9"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="15" x2="12" y2="19"/></svg>
+                数据包
+              </button>
+              <button class="nav-sub-btn" data-page="resourcepacks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="3" y="3" width="18" height="18"/><rect x="6" y="6" width="5" height="5"/><path d="M14 6H21V13"/><path d="M21 6L14 13"/><path d="M3 17L10 10"/></svg>
+                材质包
+              </button>
+              <button class="nav-sub-btn" data-page="shaders">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="4"/><path d="M12 2V5"/><path d="M12 19V22"/><path d="M2 12H5"/><path d="M19 12H22"/><path d="M4.93 4.93L7.05 7.05"/><path d="M16.95 16.95L19.07 19.07"/><path d="M4.93 19.07L7.05 16.95"/><path d="M16.95 7.05L19.07 4.93"/></svg>
+                光影包
+              </button>
+            </div>
+          </div>
+          <div class="nav-submenu-group" id="lan-submenu-group">
+            <button class="nav-btn nav-submenu-toggle" title="联机">
+              <svg class="nav-icon-svg"><use href="#icon-globe"/></svg>
+              <span>联机</span>
+              <svg class="submenu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M7 10L12 15L17 10"/></svg>
+            </button>
+            <div class="nav-submenu">
+              <button class="nav-sub-btn" data-page="lan-terracotta">
+                陶瓦联机
+              </button>
+              <button class="nav-sub-btn" data-page="lan-portmap">
+                红石联机
+              </button>
+            </div>
+          </div>
+          <button class="nav-btn" data-page="toolbox" title="工具箱">
+            <svg class="nav-icon-svg"><use href="#icon-toolbox"/></svg>
+            <span>工具箱</span>
+          </button>
+          <button class="nav-btn" data-page="accounts" title="账户">
+            <svg class="nav-icon-svg"><use href="#icon-user"/></svg>
+            <span>账户</span>
+          </button>
+          <div class="nav-submenu-group" id="settings-submenu-group">
+            <button class="nav-btn nav-submenu-toggle" title="设置">
+              <svg class="nav-icon-svg"><use href="#icon-settings"/></svg>
+              <span>设置</span>
+              <svg class="submenu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M7 10L12 15L17 10"/></svg>
+            </button>
+            <div class="nav-submenu">
+              <button class="nav-sub-btn" data-page="settings-launch">
+                启动
+              </button>
+              <button class="nav-sub-btn" data-page="settings-personalize">
+                个性化
+              </button>
+              <button class="nav-sub-btn" data-page="settings-other">
+                其他
+              </button>
+            </div>
+          </div>
+          <button class="nav-btn" data-page="java" title="Java管理">
+            <svg class="nav-icon-svg"><use href="#icon-java"/></svg>
+            <span>Java</span>
+          </button>
+          <button class="nav-btn nav-btn-experimental" data-page="explore" title="实验性" id="nav-explore-btn">
+            <span class="nav-btn-experimental-badge">实验</span>
+            <svg class="nav-icon-svg"><use href="#icon-explore"/></svg>
+            <span>实验性</span>
+          </button>
+          <button class="nav-btn nav-btn-experimental" data-page="private-server" title="一起玩">
+            <span class="nav-btn-experimental-badge">实验</span>
+            <svg class="nav-icon-svg"><use href="#icon-server"/></svg>
+            <span>一起玩</span>
+          </button>
+          <button class="nav-btn nav-btn-experimental" data-page="server-host" title="开服">
+            <span class="nav-btn-experimental-badge">实验</span>
+            <svg class="nav-icon-svg"><use href="#icon-server-host"/></svg>
+            <span>开服</span>
+          </button>
+        </div>
+        <div class="sidebar-footer">
+          <button class="nav-btn" data-page="console" title="控制台">
+            <svg class="nav-icon-svg"><use href="#icon-console"/></svg>
+            <span>日志</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="content-area">
+        <div id="page-home" class="page active">
+          <!-- Vue 渐进式改造：内容由 PageHome 组件渲染 -->
+        </div>
+
+        <div id="page-versions" class="page">
+          <!-- Vue 渐进式改造：内容由 PageVersions 组件渲染 -->
+        </div>
+
+      <div id="page-installed-versions" class="page">
+        <!-- Vue 渐进式改造：内容由 PageInstalledVersions 组件渲染 -->
+      </div>
+
+      <div id="page-version-detail" class="page">
+        <!-- Vue 渐进式改造：内容由 PageVersionDetail 组件渲染 -->
+      </div>
+
+      <div id="page-version-settings" class="page">
+        <!-- Vue 渐进式改造：内容由 PageVersionSettings 组件渲染 -->
+      </div>
+
+      <div id="page-mods" class="page">
+        <!-- Vue 渐进式改造：内容由 PageMods 组件渲染 -->
+      </div>
+
+        <div id="page-mod-detail" class="page">
+          <!-- Vue 渐进式改造：内容由 PageModDetail 组件渲染 -->
+        </div>
+
+        <div id="page-mod-favorites" class="page">
+          <!-- Vue 渐进式改造：内容由 PageModFavorites 组件渲染 -->
+        </div>
+
+        <div id="page-modpacks" class="page">
+          <!-- Vue 渐进式改造：内容由 PageModpacks 组件渲染 -->
+        </div>
+
+        <div id="page-datapacks" class="page">
+          <!-- Vue 渐进式改造：内容由 PageDatapacks 组件渲染 -->
+        </div>
+
+        <div id="page-resourcepacks" class="page">
+          <!-- Vue 渐进式改造：内容由 PageResourcepacks 组件渲染 -->
+        </div>
+
+        <div id="page-shaders" class="page">
+          <!-- Vue 渐进式改造：内容由 PageShaders 组件渲染 -->
+        </div>
+
+        <div id="page-lan-terracotta" class="page">
+          <!-- Vue 渐进式改造：内容由 PageLanTerracotta 组件渲染 -->
+        </div>
+
+        <div id="page-lan-portmap" class="page">
+          <!-- Vue 渐进式改造：内容由 PageLanPortmap 组件渲染 -->
+        </div>
+
+        <div id="page-explore" class="page">
+          <!-- Vue 渐进式改造：内容由 PageExplore 组件渲染 -->
+        </div>
+
+        <div id="page-private-server" class="page">
+          <!-- 私人服务器页面（开发中） -->
+        </div>
+
+        <div id="page-server-host" class="page">
+          <!-- 开服页面（实验性） -->
+        </div>
+
+        <div id="page-toolbox" class="page">
+          <!-- Vue 渐进式改造：内容由 PageToolbox 组件渲染 -->
+        </div>
+
+        <div id="page-accounts" class="page">
+          <!-- Vue 渐进式改造：内容由 PageAccounts 组件渲染 -->
+        </div>
+
+        <div id="game-launch-overlay" class="launch-overlay" style="display:none">
+          <button class="launch-back-btn" onclick="cancelLaunchFlow()" title="取消启动">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>返回</span>
+          </button>
+          <div class="launch-splash-content">
+            <div id="launch-splash-logo" class="launch-splash-logo">
+              <img src="img/icon.svg" alt="VersePC2" width="80" height="80"/>
+            </div>
+            <div class="launch-splash-progress-container">
+              <div id="launch-splash-track" class="launch-splash-track">
+                <div id="launch-splash-progress" class="launch-splash-progress"></div>
+              </div>
+              <div id="launch-splash-status" class="launch-splash-status">正在验证登录状态...</div>
+            </div>
+            <div class="launch-splash-error" id="launch-error-section" style="display:none">
+              <div class="launch-splash-error-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </div>
+              <div class="launch-splash-error-text">
+                <div class="launch-splash-error-title">启动失败</div>
+                <div class="launch-splash-error-msg" id="launch-error-msg">未知错误</div>
+                <button class="btn btn-secondary btn-sm" onclick="exportGameLog()" style="margin-top:8px;font-size:11px">导出日志</button>
+              </div>
+            </div>
+            <div class="launch-splash-repair" id="launch-repair-guide" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" width="20" height="20"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <span>游戏启动失败，可前往<strong>版本设置页面</strong>使用<strong>文件修复功能</strong>解决此问题</span>
+              <button class="btn btn-accent btn-sm" onclick="openVersionSettingsForRepair()">修复</button>
+            </div>
+            <div id="launch-log-section" style="display:none;margin-top:12px">
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">游戏日志</div>
+              <div id="launch-log-output" style="background:var(--bg-primary);border-radius:6px;padding:8px;max-height:150px;overflow-y:auto;font-family:monospace;font-size:11px;color:var(--text-secondary);white-space:pre-wrap;word-break:break-all"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 爱发电支持弹窗 -->
+        <div id="support-modal" class="modal" style="display:none">
+          <div class="modal-content support-modal-content">
+            <div class="support-modal-body">
+              <div class="support-modal-title">感谢你的支持！</div>
+              <div class="support-modal-subtitle">你已经使用 VersePC2 启动 <span class="support-modal-count" id="support-modal-count">0</span> 次了</div>
+              <div class="support-modal-desc">如果喜欢，可以去爱发电支持豆杰</div>
+              <div class="support-modal-actions">
+                <button class="btn btn-accent" onclick="openSupportPage()">
+                  去支持
+                </button>
+                <button class="btn btn-secondary" onclick="dismissSupportModal()">下次一定</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 更新公告弹窗 -->
+        <div id="announcement-modal" class="modal" style="display:none" data-no-close-on-backdrop>
+          <div class="modal-content announcement-modal-content">
+            <div class="modal-header">
+              <h3>更新公告</h3>
+              <button class="modal-close" onclick="dismissAnnouncementModal()">&times;</button>
+            </div>
+            <div class="modal-body announcement-modal-body">
+              <div class="announcement-version" id="announcement-version-badge"></div>
+              <div class="announcement-content" id="announcement-content">
+                <p>暂无公告内容</p>
+              </div>
+            </div>
+            <div class="modal-footer announcement-modal-footer">
+              <label class="checkbox-label announcement-checkbox">
+                <input type="checkbox" id="announcement-dismiss-check">
+                <span>下次启动不再弹出</span>
+              </label>
+              <div style="display:flex;gap:8px;margin-left:auto;">
+                <button class="modal-btn modal-btn--secondary" onclick="announcementGotoUpdateSettings()">更新设置</button>
+                <button class="modal-btn modal-btn--primary" onclick="dismissAnnouncementModal()">我已知晓</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="update-modal" class="modal" style="display:none">
+          <div class="modal-content announcement-modal-content" style="max-width:520px;">
+            <div class="modal-header">
+              <h3>发现新版本</h3>
+              <button class="modal-close" onclick="dismissUpdateModal()">&times;</button>
+            </div>
+            <div class="modal-body announcement-modal-body">
+              <div class="announcement-version" id="update-modal-version"></div>
+              <div class="announcement-content" id="update-modal-content">
+                <p>暂无更新内容</p>
+              </div>
+            </div>
+            <div class="modal-footer announcement-modal-footer" style="justify-content:flex-end;gap:10px;">
+              <button class="modal-btn modal-btn--primary" onclick="gotoUpdateSettings()">前往更新</button>
+              <button class="modal-btn modal-btn--secondary" onclick="downloadFromQuark()">夸克网盘更新</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="screenshot-modal" class="modal" style="display:none;">
+          <div class="modal-content" style="max-width:800px;">
+            <div class="modal-header">
+              <h3>游戏截图</h3>
+              <button class="modal-close" onclick="closeScreenshotModal()">&times;</button>
+            </div>
+            <div id="screenshot-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;max-height:60vh;overflow-y:auto;padding:12px;">
+            </div>
+          </div>
+        </div>
+
+        <div id="page-settings-launch" class="page">
+          <!-- Vue 渐进式改造：内容由 PageSettingsLaunch 组件渲染 -->
+        </div>
+
+        <div id="page-settings-personalize" class="page">
+          <!-- Vue 渐进式改造：内容由 PageSettingsPersonalize 组件渲染 -->
+        </div>
+
+        <div id="page-settings-other" class="page">
+          <!-- Vue 渐进式改造：内容由 PageSettingsOther 组件渲染 -->
+        </div>
+
+        <div id="page-java" class="page">
+          <!-- Vue 渐进式改造：内容由 PageJava 组件渲染 -->
+        </div>
+
+
+
+        <div id="page-downloads" class="page">
+          <!-- Vue 渐进式改造：内容由 PageDownloads 组件渲染 -->
+        </div>
+
+        <div id="page-console" class="page">
+          <!-- Vue 渐进式改造：内容由 PageConsole 组件渲染 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 启动栏 -->
+    <div class="launch-bar">
+      <div class="launch-bar-left">
+        <div class="custom-select" id="launch-version-select-wrapper">
+          <div class="custom-select-trigger" id="launch-version-select-trigger">
+            <span class="custom-select-value placeholder" id="launch-version-select-value">选择版本...</span>
+            <svg class="custom-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="custom-select-dropdown" id="launch-version-select-dropdown">
+            <div class="custom-select-options" id="launch-version-select-options"></div>
+          </div>
+        </div>
+        <div class="launch-account-info">
+          <div class="account-avatar-sm" id="launch-avatar"><img src="img/icon.png" alt="" class="account-avatar-img"></div>
+          <span id="launch-player-name">Player</span>
+        </div>
+      </div>
+      <div class="launch-bar-right">
+        <button id="launch-btn" class="btn btn-launch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>启动游戏</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="dl-fab" class="dl-fab" style="display:none" onclick="navigateToPage('downloads')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="dl-fab-badge" id="dl-fab-badge" style="display:none">0</span>
+    </div>
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- 前端脚本加载（三层架构）                                                 -->
+  <!--                                                                        -->
+  <!-- 1. js/utils.js / js/api.js  底层工具：API 封装、字符串处理             -->
+  <!-- 2. js/app/*.js             页面交互逻辑：响应点击、调 API、操作 DOM    -->
+  <!--    - 不写 HTML 模板（模板在 js/vue/ 里）                                -->
+  <!--    - 工具类：utils.js / ui-components.js / custom-select.js 等          -->
+  <!--    - 业务类：versions.js / launch.js / mod-browse.js 等                -->
+  <!-- 3. js/vue/*.js             页面结构层：Vue template 字符串              -->
+  <!--    - 只放 HTML 模板，逻辑全部调用 js/app/*.js 里的函数                 -->
+  <!--    - 新增页面一律走 vue/，不再在 app/ 里堆 HTML 字符串                  -->
+  <!-- ====================================================================== -->
+  <!-- Tauri 桥接层：在 Tauri 环境下创建 window.electronAPI，必须在所有业务 js 之前加载 -->
+  <script src="js/tauri-bridge.js" defer></script>
+  <script src="js/utils.js" defer></script>
+  <script src="js/api.js" defer></script>
+  <script src="js/wallpaper-engine.js" defer></script>
+
+  <!-- 页面交互逻辑层（js/app/）：响应点击、调 API、操作 DOM -->
+  <script src="js/app/lan.js" defer></script>
+  <script src="js/app/private-server.js" defer></script>
+  <script src="js/app/favorites.js" defer></script>
+  <script src="js/app/mod-detail.js" defer></script>
+  <script src="js/app/mod-install.js" defer></script>
+  <script src="js/app/accounts.js" defer></script>
+  <script src="js/app/launch.js" defer></script>
+  <script src="js/app/java.js" defer></script>
+  <script src="js/app/versions.js" defer></script>
+  <script src="js/app/mod-browse.js" defer></script>
+  <script src="js/app/sponsors.js" defer></script>
+  <script src="js/app/dino-game.js" defer></script>
+  <script src="js/app/custom-theme.js" defer></script>
+  <script src="js/app/personalize.js" defer></script>
+  <script src="js/app/other-settings.js" defer></script>
+  <script src="js/app/utils.js" defer></script>
+  <script src="js/app/custom-select.js" defer></script>
+  <script src="js/app/resource.js" defer></script>
+  <script src="js/app/version-settings.js" defer></script>
+  <script src="js/app/launch-settings.js" defer></script>
+  <script src="js/app/announcement.js" defer></script>
+  <script src="js/app/window-theme.js" defer></script>
+  <script src="js/app/settings-misc.js" defer></script>
+  <script src="js/app/ui-components.js" defer></script>
+  <script src="js/app/custom-download.js" defer></script>
+  <script src="js/app/java-mgr.js" defer></script>
+  <script src="js/app/console-log.js" defer></script>
+  <script src="js/app/settings-load-save.js" defer></script>
+  <script src="js/app/init-setup.js" defer></script>
+  <script src="js/app.js" defer></script>
+  <script src="js/mod-slug-map.js" defer></script>
+  <!-- mod-chinese-names.js 延迟加载 -->
+  <!-- file-browser.js 延迟加载 -->
+  <!-- crashAnalyzerUI.js 延迟加载 -->
+  <!-- v-island/dynamic-island.js 延迟加载 -->
+  <!-- modpack-import.js 延迟加载 -->
+  <!-- updater-ui.js 延迟加载 -->
+
+  <!-- 页面结构层（js/vue/）：Vue template 字符串，逻辑调用 js/app/*.js -->
+  <!-- 引入 Vue 3 运行时 -->
+  <script src="js/vue.global.prod.js" defer></script>
+  <script src="js/vue/page-home.js" defer></script>
+  <script src="js/vue/page-versions.js" defer></script>
+  <script src="js/vue/page-installed-versions.js" defer></script>
+  <script src="js/vue/page-version-detail.js" defer></script>
+  <script src="js/vue/page-version-settings.js" defer></script>
+  <script src="js/vue/page-mods.js" defer></script>
+  <script src="js/vue/page-mod-detail.js" defer></script>
+  <script src="js/vue/page-mod-favorites.js" defer></script>
+  <script src="js/vue/page-modpacks.js" defer></script>
+  <script src="js/vue/page-datapacks.js" defer></script>
+  <script src="js/vue/page-resourcepacks.js" defer></script>
+  <script src="js/vue/page-shaders.js" defer></script>
+  <script src="js/vue/page-lan-terracotta.js" defer></script>
+  <script src="js/vue/page-lan-portmap.js" defer></script>
+  <script src="js/vue/page-explore.js" defer></script>
+  <script src="js/vue/page-private-server.js" defer></script>
+  <script src="js/app/server-host.js" defer></script>
+  <script src="js/vue/page-server-host.js" defer></script>
+  <script src="js/vue/page-toolbox.js" defer></script>
+  <script src="js/vue/page-accounts.js" defer></script>
+  <script src="js/vue/page-settings-launch.js" defer></script>
+  <script src="js/vue/page-settings-personalize.js" defer></script>
+  <script src="js/vue/page-settings-other.js" defer></script>
+  <script src="js/vue/page-java.js" defer></script>
+  <script src="js/vue/page-downloads.js" defer></script>
+  <script src="js/vue/page-console.js" defer></script>
+  <script>
+    // 挂载 Vue 到所有页面容器（分批挂载，避免阻塞主线程导致窗口卡顿）
+    // 主页立即同步挂载（用户最先看到），其他页面用 requestIdleCallback 分批挂载
+    // 数据加载（loadAccounts 等）会等待 window._vueMountDone=true 后再执行，避免模板覆盖
+    window.addEventListener('DOMContentLoaded', function() {
+      if (!window.Vue || !window.VersePC) {
+        window._vueMountDone = true;
+        if (window._vueMountResolve) window._vueMountResolve();
+        return;
+      }
+
+      // 第一批：主页立即同步挂载，让首屏最快可见
+      if (window.VersePC.PageHome) Vue.createApp(PageHome).mount('#page-home');
+
+      // 其他页面列表（23 个），用 requestIdleCallback 分批挂载
+      var _otherPages = [
+        ['PageVersions', '#page-versions'],
+        ['PageInstalledVersions', '#page-installed-versions'],
+        ['PageVersionDetail', '#page-version-detail'],
+        ['PageVersionSettings', '#page-version-settings'],
+        ['PageMods', '#page-mods'],
+        ['PageModDetail', '#page-mod-detail'],
+        ['PageModFavorites', '#page-mod-favorites'],
+        ['PageModpacks', '#page-modpacks'],
+        ['PageDatapacks', '#page-datapacks'],
+        ['PageResourcepacks', '#page-resourcepacks'],
+        ['PageShaders', '#page-shaders'],
+        ['PageLanTerracotta', '#page-lan-terracotta'],
+        ['PageLanPortmap', '#page-lan-portmap'],
+        ['PageExplore', '#page-explore'],
+        ['PagePrivateServer', '#page-private-server'],
+        ['PageServerHost', '#page-server-host'],
+        ['PageToolbox', '#page-toolbox'],
+        ['PageAccounts', '#page-accounts'],
+        ['PageSettingsLaunch', '#page-settings-launch'],
+        ['PageSettingsPersonalize', '#page-settings-personalize'],
+        ['PageSettingsOther', '#page-settings-other'],
+        ['PageJava', '#page-java'],
+        ['PageDownloads', '#page-downloads'],
+        ['PageConsole', '#page-console']
+      ];
+
+      window._vueMountDone = false;
+      var _batchSize = 4;   // 每批挂载 4 个，留出主线程时间让 UI 响应
+      var _idx = 0;
+
+      function _mountBatch() {
+        var end = Math.min(_idx + _batchSize, _otherPages.length);
+        for (; _idx < end; _idx++) {
+          var name = _otherPages[_idx][0];
+          var sel = _otherPages[_idx][1];
+          try {
+            if (window.VersePC[name]) Vue.createApp(window.VersePC[name]).mount(sel);
+          } catch (e) { console.error('Vue mount failed:', name, e); }
+        }
+        if (_idx >= _otherPages.length) {
+          // 所有页面挂载完成，通知数据加载可以开始了
+          window._vueMountDone = true;
+          if (window._vueMountResolve) window._vueMountResolve();
+          return;
+        }
+        // 让出主线程，等下一次空闲再继续
+        (window.requestIdleCallback || function(cb){ return setTimeout(cb, 16); })(_mountBatch, { timeout: 100 });
+      }
+
+      // 用 setTimeout(0) 先让出一次主线程，让 splash 和主页有机会渲染
+      setTimeout(function() {
+        (window.requestIdleCallback || function(cb){ return setTimeout(cb, 16); })(_mountBatch, { timeout: 100 });
+      }, 0);
+    });
+  </script>
+
+  <!-- 非关键脚本懒加载：首屏渲染后再加载，避免阻塞启动 -->
+  <script>
+    (function() {
+      var _lazyScripts = [
+        'js/mod-chinese-names.js',
+        'js/file-browser.js',
+        'js/crashAnalyzerUI.js',
+        'js/modpack-import.js',
+        'js/updater-ui.js',
+        'v-island/dynamic-island.js'
+      ];
+      function _loadLazyScripts() {
+        _lazyScripts.forEach(function(src) {
+          var s = document.createElement('script');
+          s.src = src;
+          s.async = false;
+          document.head.appendChild(s);
+        });
+      }
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(_loadLazyScripts, 50);
+      } else {
+        window.addEventListener('DOMContentLoaded', function() {
+          setTimeout(_loadLazyScripts, 50);
+        });
+      }
+    })();
+  </script>
+
+  <div id="experimental-disclaimer-modal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width:440px;">
+      <div class="modal-header">
+        <h3>实验性内容声明</h3>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-secondary);line-height:1.7;font-size:13px;">
+          实验性页面中的功能尚处于<strong>开发测试阶段</strong>，无法保证可以正常使用。
+        </p>
+        <p style="color:var(--text-secondary);line-height:1.7;font-size:13px;margin-top:8px;">
+          若使用过程中出现问题（包括但不限于数据异常、启动失败、功能不可用等），<strong>豆杰概不负责</strong>。
+        </p>
+        <p style="color:var(--text-secondary);line-height:1.7;font-size:13px;margin-top:8px;">
+          继续使用即表示您已知晓并接受上述风险。
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="acceptExperimentalDisclaimer()">已知晓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模组汉化弹窗 -->
+  <div id="mod-translate-modal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width:560px;">
+      <div class="modal-header">
+        <h3>模组汉化</h3>
+        <button class="modal-close" onclick="hideModal('mod-translate-modal')">&times;</button>
+      </div>
+      <div class="modal-body" id="mod-translate-body">
+        <div id="mod-translate-loading" style="text-align:center;padding:30px 0;">
+          <div class="modal-spinner"></div>
+          <p style="color:var(--text-muted);margin-top:12px;">正在检查模组语言文件...</p>
+        </div>
+        <div id="mod-translate-content" style="display:none;">
+          <div id="mod-translate-info" style="margin-bottom:16px;padding:12px;background:var(--bg-secondary);border-radius:8px;">
+            <div style="font-weight:600;margin-bottom:4px;" id="mod-translate-modname"></div>
+            <div style="font-size:12px;color:var(--text-muted);" id="mod-translate-langinfo"></div>
+          </div>
+          <div id="mod-translate-tabs" style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border-color);">
+            <button class="mod-translate-tab active" data-tab="quick" onclick="switchTranslateTab('quick')">快速汉化</button>
+            <button class="mod-translate-tab" data-tab="auto" onclick="switchTranslateTab('auto')">AI 机翻</button>
+            <button class="mod-translate-tab" data-tab="manual" onclick="switchTranslateTab('manual')">手动汉化</button>
+          </div>
+          <div id="mod-translate-tab-quick" class="mod-translate-panel">
+            <p style="color:var(--text-secondary);font-size:13px;line-height:1.7;margin-bottom:12px;">
+              使用谷歌免费翻译接口，无需配置，速度快。翻译质量一般，适合快速体验。
+            </p>
+            <div id="mod-translate-quick-progress" style="display:none;margin-bottom:12px;">
+              <div style="height:6px;background:var(--bg-secondary);border-radius:3px;overflow:hidden;">
+                <div id="mod-translate-quick-progress-bar" style="height:100%;width:0%;background:var(--accent-color);transition:width 0.3s;"></div>
+              </div>
+              <p id="mod-translate-quick-progress-text" style="font-size:12px;color:var(--text-muted);margin-top:6px;">准备中...</p>
+            </div>
+            <div id="mod-translate-quick-result" style="display:none;padding:10px 12px;border-radius:6px;margin-bottom:12px;font-size:13px;"></div>
+            <button class="btn btn-primary" id="mod-translate-quick-btn" onclick="startQuickTranslate()">
+              开始快速汉化
+            </button>
+          </div>
+          <div id="mod-translate-tab-auto" class="mod-translate-panel" style="display:none;">
+            <p style="color:var(--text-secondary);font-size:13px;line-height:1.7;margin-bottom:12px;">
+              自动翻译模组中的英文文本为中文，适合快速体验。翻译质量取决于 AI 模型，专业术语可能不够准确。
+            </p>
+            <div id="mod-translate-ai-warning" style="display:none;padding:10px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;margin-bottom:12px;font-size:12px;color:#f59e0b;">
+              未配置 AI 供应商，请先在 V岛设置中配置 AI 对话功能。
+            </div>
+            <div id="mod-translate-progress" style="display:none;margin-bottom:12px;">
+              <div style="height:6px;background:var(--bg-secondary);border-radius:3px;overflow:hidden;">
+                <div id="mod-translate-progress-bar" style="height:100%;width:0%;background:var(--accent-color);transition:width 0.3s;"></div>
+              </div>
+              <p id="mod-translate-progress-text" style="font-size:12px;color:var(--text-muted);margin-top:6px;">准备中...</p>
+            </div>
+            <div id="mod-translate-result" style="display:none;padding:10px 12px;border-radius:6px;margin-bottom:12px;font-size:13px;"></div>
+            <button class="btn btn-primary" id="mod-translate-start-btn" onclick="startAutoTranslate()">
+              开始机翻
+            </button>
+          </div>
+          <div id="mod-translate-tab-manual" class="mod-translate-panel" style="display:none;">
+            <p style="color:var(--text-secondary);font-size:13px;line-height:1.7;margin-bottom:12px;">
+              手动汉化需要自己翻译文本，适合追求翻译质量的用户。
+            </p>
+            <div style="background:var(--bg-secondary);border-radius:8px;padding:14px 16px;margin-bottom:12px;">
+              <ol style="margin:0;padding-left:20px;color:var(--text-secondary);font-size:13px;line-height:2;">
+                <li>点击下方"导出语言文件"按钮，提取模组的英文语言文件</li>
+                <li>打开导出的 <code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:3px;">en_us.json</code> 文件</li>
+                <li>将每行英文翻译成中文（只翻译冒号右边的值）</li>
+                <li>保存文件名为 <code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:3px;">zh_cn.json</code></li>
+                <li>点击"导入中文语言文件"将翻译好的文件写回模组</li>
+              </ol>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-secondary" onclick="exportModLangFile()">导出语言文件</button>
+              <button class="btn btn-secondary" onclick="importModLangFile()">导入中文语言文件</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="mod-translate-file-input" style="display:none" accept=".json,.lang">
+
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "verse-tauri",
+  "version": "0.1.0",
+  "description": "VersePC Tauri 框架替换项目 - 第一步：UI 验证",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "node scripts/build-portable.mjs",
+    "build:setup": "tauri build --bundles nsis",
+    "build:portable": "node scripts/build-portable.mjs",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  },
+  "dependencies": {
+    "vue": "^3.5.40"
+  }
+}

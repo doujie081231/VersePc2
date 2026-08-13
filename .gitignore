@@ -1,0 +1,15 @@
+# Tauri
+src-tauri/target/
+src-tauri/false/
+node_modules/
+dist/
+frontend/installer-app/
+*.log
+logs/
+build-log.txt
+cargo-build-log.txt
+err_tauri_build.txt
+run_diag.ps1
+stderr.log
+stdout.log
+tauri-build-log.txt
