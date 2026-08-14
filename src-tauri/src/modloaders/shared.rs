@@ -896,18 +896,9 @@ pub async fn ensure_base_version_installed(
     Ok(())
 }
 
-/// 获取当前时间的 ISO 8601 字符串（简易实现，不依赖 chrono crate）
-#[allow(dead_code)]
+/// 获取当前时间的 ISO 8601 字符串（UTC）
 pub fn now_iso() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    // 简化实现：返回 Unix 时间戳格式的 ISO 字符串
-    // 完整的 ISO 8601 转换需要 chrono crate，这里用简化格式
-    format!("1970-01-01T00:00:{}Z", secs % 60)
+    crate::utils::now_iso()
 }
 
 /// 验证文件是否是合法 ZIP（检查 PK 头魔数）

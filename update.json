@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "releaseName": "v0.1.0",
+  "releaseDate": "2026-08-14",
+  "releaseNotes": "VersePC2 首个正式版（Tauri 框架重写）\n\n新增:\n- 陶瓦联机：完整移植 Electron 版联机流程，支持主机/客户端模式\n- 一键识别版本文件夹：跨磁盘自动扫描并添加版本目录（带加载动画）\n- 首次运行自动迁移旧版 Electron VersionPC 的个性化设置（自定义壁纸/账号等）\n- 自动检测 WebView2 内核，缺失时引导安装\n- 侧边栏滑入滑出动画、启动任务卡片动态显示\n\n修复:\n- 修复一键识别外部文件夹超时无响应问题\n- 修复已安装版本时间显示为 1970 的问题\n- 修复个性化设置重启后丢失的问题",
+  "files": {
+    "win-x64": {
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v0.1.0/VersePC2-0.1.0.exe",
+      "size": 71517184,
+      "sha256": "9BFC2698AE128AD563B10F6CB73F55AE054A236793C53860F10218F2565D98DE"
+    }
+  }
+}

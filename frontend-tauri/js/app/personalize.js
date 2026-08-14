@@ -107,6 +107,10 @@ async function pickCustomWallpaperFile() {
         if (result.cancelled) return;
 
         const filePath = result.path;
+        if (!filePath) {
+            if (typeof showToast === 'function') showToast('未获取到文件路径，请重新选择', 'error');
+            return;
+        }
         await _applyCustomWallpaperFile(filePath, isVideo);
     } catch (e) {
         console.error('[Wallpaper] Pick file error:', e);
@@ -114,6 +118,10 @@ async function pickCustomWallpaperFile() {
 }
 
 async function _applyCustomWallpaperFile(filePath, isVideo) {
+    if (!filePath) {
+        if (typeof showToast === 'function') showToast('未获取到文件路径，请重新选择', 'error');
+        return;
+    }
     document.getElementById('custom-wallpaper-file-name').textContent = filePath.split(/[\\/]/).pop();
 
     if (isVideo) {

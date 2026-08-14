@@ -3,6 +3,7 @@
 // 搬迁自 lib.rs，保持原接口不变
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex;
 
 use serde_json::{json, Value};
@@ -299,6 +300,131 @@ fn merge_version_settings(saved: &Value, version_id: &str) -> Value {
         }
     }
     result
+}
+
+// ============== 首次运行：检测 Electron 旧版数据并迁移 ==============
+// 旧版 Electron 版 VersePC 的数据目录默认在 ~/.versepc（或由 data-config.json 指定）。
+// 新版 Tauri 版首次运行时，若检测到旧版数据目录，则把其中的个性化设置
+// （settings / accounts / favorites / external-folders / app-store 的 versepc_* 键）
+// 迁移到新版数据目录，保证用户自定义图片、视频、账号等设置无缝衔接。
+
+/// 迁移标记用的 store key（避免每次启动都重复迁移/扫描）
+pub const MIGRATE_MARKER: &str = "versepc_legacy_migrated";
+
+/// 旧版数据目录候选（与旧版 paths.js 解析优先级一致）
+fn legacy_data_dir_candidates() -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    // 旧版默认用户目录 ~/.versepc
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".versepc"));
+    }
+    // 当前 exe 同目录 /data（用户若把新版放到旧版旁边，数据已就位）
+    candidates.push(resolve_data_dir());
+    // data-config.json 指定的 dataDir
+    let exe = std::env::current_exe().unwrap_or_default();
+    if let Some(app_dir) = exe.parent() {
+        let cfg = app_dir.join("data-config.json");
+        if let Ok(raw) = std::fs::read_to_string(&cfg) {
+            if let Ok(c) = serde_json::from_str::<Value>(raw.trim_start_matches('\u{FEFF}')) {
+                if let Some(d) = c.get("dataDir").and_then(|v| v.as_str()) {
+                    candidates.push(std::path::PathBuf::from(d));
+                }
+            }
+        }
+    }
+    candidates
+}
+
+/// 判断一个目录是否为"旧版 Electron 数据目录"
+fn looks_like_legacy_dir(dir: &std::path::Path) -> bool {
+    dir.join("app-store.json").exists() || dir.join("accounts.json").exists()
+}
+
+/// 迁移入口：每次启动调用。分两阶段：
+/// 1. 首次运行：把旧版的数据文件（settings/accounts/favorites/external-folders）
+///    复制到新版数据目录（若新版还没有）。
+/// 2. 每次启动：从旧版 app-store 补充缺失的 versepc_* 个性化键。
+///    这让即使之前迁移不全（如自定义图片/视频键缺失）也能在重启后自动补全，
+///    解决"个性化设置重启又没了"的问题。
+pub fn migrate_legacy_if_first_run(store: &Store) -> bool {
+    let data_dir = resolve_data_dir();
+    let mut migrated_any = false;
+
+    // 定位旧版数据目录（每次启动都找一次，来源可能变化）
+    let mut source: Option<std::path::PathBuf> = None;
+    for cand in legacy_data_dir_candidates() {
+        if cand == data_dir {
+            continue;
+        }
+        if cand.exists() && looks_like_legacy_dir(&cand) {
+            source = Some(cand);
+            break;
+        }
+    }
+    let src = match source {
+        Some(s) => s,
+        None => {
+            // 没有旧版来源：标记已完成，避免后续误判
+            let _ = store.set(MIGRATE_MARKER.into(), json!(true));
+            return false;
+        }
+    };
+
+    // 阶段 1：首次运行才复制数据文件（避免覆盖用户在新版里已有的设置）
+    if store.get(MIGRATE_MARKER).is_none() {
+        let has_data = data_dir.join("settings.json").exists()
+            || data_dir.join("accounts.json").exists()
+            || data_dir.join("favorites.json").exists();
+        if !has_data {
+            migrated_any |= copy_legacy_files(&src, &data_dir);
+        }
+    }
+
+    // 阶段 2：每次启动补充缺失的 versepc_* 个性化键
+    migrated_any |= merge_legacy_store_keys(&src, store);
+
+    // 标记完成
+    let _ = store.set(MIGRATE_MARKER.into(), json!(true));
+    migrated_any
+}
+
+/// 复制旧版的 JSON 数据文件到新版目录（仅当新版还没有对应文件）
+fn copy_legacy_files(src: &Path, dst: &Path) -> bool {
+    let _ = std::fs::create_dir_all(dst);
+    let mut any = false;
+    for fname in ["settings.json", "accounts.json", "favorites.json", "external-folders.json"] {
+        let s = src.join(fname);
+        let d = dst.join(fname);
+        if s.exists() && !d.exists() {
+            if std::fs::copy(&s, &d).is_ok() {
+                println!("[migrate] 已迁移 {fname}");
+                any = true;
+            }
+        }
+    }
+    any
+}
+
+/// 从旧版 app-store.json 合并缺失的 versepc_* 个性化键到新版 store
+fn merge_legacy_store_keys(src: &Path, store: &Store) -> bool {
+    let app_store_file = src.join("app-store.json");
+    let mut any = false;
+    if let Ok(content) = std::fs::read_to_string(&app_store_file) {
+        if let Ok(app_store) = serde_json::from_str::<Value>(&content) {
+            if let Some(obj) = app_store.as_object() {
+                for (k, v) in obj {
+                    if k.starts_with("versepc_") && store.get(k).is_none() {
+                        store.set(k.clone(), v.clone());
+                        any = true;
+                    }
+                }
+            }
+        }
+    }
+    if any {
+        println!("[migrate] 已补充缺失的个性化设置键");
+    }
+    any
 }
 
 // ============== store.json（通用 KV 存储，兼容 electron-store） ==============

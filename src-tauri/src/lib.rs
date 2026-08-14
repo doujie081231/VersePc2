@@ -21,6 +21,7 @@ mod private_server;
 mod redstone_online;
 mod server_host;
 mod storage;
+mod system;
 mod tts;
 mod updater;
 mod utils;
@@ -365,6 +366,15 @@ pub fn run() {
             println!("[store] 存储文件: {:?}", store.path);
             println!("[store] 加载条目数: {}", store.data.lock().unwrap().len());
 
+            // 首次运行：检测旧版 Electron VersePC 数据目录并迁移个性化设置
+            let migrated = storage::migrate_legacy_if_first_run(&store);
+            if migrated {
+                println!("[store] 已完成旧版 Electron 数据迁移");
+            }
+
+            // 首次运行/环境检查：WebView2 内核缺失则提示安装
+            crate::system::ensure_webview2();
+
             app.manage(store);
 
             // 初始化 theseus 事件系统：把 Tauri AppHandle 注入 theseus，
@@ -395,6 +405,7 @@ pub fn run() {
             dialog::dialog_open,
             dialog::select_folder,
             dialog::select_file,
+            filesystem::read_file_buffer,
             // 路径获取
             get_versions_dir,
             get_external_version_folders,
@@ -412,6 +423,8 @@ pub fn run() {
             open_devtools,
             // 系统工具
             open_external,
+            // 运行环境检查（WebView2）
+            system::check_webview2,
             // TTS 语音合成
             tts_speak,
             // 自动更新（便携版全量替换）
@@ -420,6 +433,7 @@ pub fn run() {
             updater::updater_install_update,
             updater::updater_skip_version,
             updater::updater_open_release_page,
+            updater::updater_get_pending_notice,
             // 私人服务器管理
             private_server::private_server_list,
             private_server::private_server_save,
@@ -428,6 +442,7 @@ pub fn run() {
             private_server::private_server_delete,
             private_server::private_server_check,
             private_server::private_server_copy_address,
+            private_server::private_server_icon,
             // 本地开服
             server_host::server_host_list,
             server_host::server_host_create,
@@ -448,8 +463,6 @@ pub fn run() {
             redstone_online::redstone_start,
             redstone_online::redstone_stop,
             redstone_online::redstone_status,
-            redstone_online::redstone_public_tunnels,
-            redstone_online::redstone_tunnel_mods,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用时出错");

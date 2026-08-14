@@ -555,6 +555,12 @@ async function navigateToPage(pageName) {
       setTimeout(() => redstoneInitPage(), 100);
     }
   }
+
+  // 切到账户页：等页面可见、尺寸稳定后，把账号轮播轨道定位到中间，避免闪到最左边
+  if (pageName === 'accounts' && typeof resetCarouselPosition === 'function') {
+    setTimeout(() => resetCarouselPosition(), 350);
+    setTimeout(() => resetCarouselPosition(), 700);
+  }
 }
 
 function acceptExperimentalDisclaimer() {
@@ -1153,6 +1159,10 @@ async function addExternalFolder() {
   document.getElementById('external-folder-preview').style.display = 'none';
   document.getElementById('external-folder-error').style.display = 'none';
   document.getElementById('external-folder-confirm-btn').disabled = true;
+  const detectEl = document.getElementById('external-folder-detect');
+  if (detectEl) detectEl.style.display = 'none';
+  const resultEl = document.getElementById('external-folder-detect-result');
+  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
   pendingExternalFolderPath = '';
   showModal('external-folder-modal');
 }
@@ -1160,6 +1170,79 @@ async function addExternalFolder() {
 function closeExternalFolderModal() {
   hideModal('external-folder-modal');
   pendingExternalFolderPath = '';
+}
+
+// 一键识别版本文件夹：跨驱动器深度扫描，自动把找到的 Minecraft 版本文件夹添加到外部文件夹
+let _detectingFolders = false;
+async function autoDetectExternalFolders() {
+  if (_detectingFolders) return;
+  _detectingFolders = true;
+
+  const detectEl = document.getElementById('external-folder-detect');
+  const resultEl = document.getElementById('external-folder-detect-result');
+  const errorEl = document.getElementById('external-folder-error');
+  if (errorEl) errorEl.style.display = 'none';
+  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
+
+  try {
+    // 显示跨盘搜索加载动画（rose-loader 会自动把 .spinner 升级为玫瑰曲线动画）
+    if (detectEl) detectEl.style.display = 'block';
+
+    const res = await API.autoDetectFolders();
+    const folders = (res && res.folders) || [];
+
+    if (folders.length === 0) {
+      if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px">未在磁盘上找到包含 versions 子目录的 Minecraft 版本文件夹。</div>';
+      }
+      return;
+    }
+
+    // 逐个添加找到的文件夹
+    let addedCount = 0;
+    const added = [];
+    const skipped = [];
+    for (const f of folders) {
+      try {
+        const r = await API.addExternalFolder(f.path, f.name || '');
+        if (r && r.success) { addedCount++; added.push(f); }
+        else { skipped.push({ path: f.path, reason: (r && r.error) || '添加失败' }); }
+      } catch (e) {
+        skipped.push({ path: f.path, reason: (e && e.message) || '添加失败' });
+      }
+    }
+
+    if (resultEl) {
+      let html = `<div style="font-size:13px;color:var(--text-primary);font-weight:600;margin-bottom:8px">一键识别完成：新增 ${added.length} 个版本文件夹</div>`;
+      if (added.length > 0) {
+        html += added.map(f =>
+          `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0">✓ ${escapeHtml(f.name)}（${escapeHtml(f.path)}）</div>`
+        ).join('');
+      }
+      if (skipped.length > 0) {
+        html += `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">${skipped.length} 个已存在或无效：${escapeHtml(skipped.map(s => s.reason).join('；'))}</div>`;
+      }
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = html;
+    }
+
+    if (addedCount > 0) {
+      // 刷新文件夹选择器与已安装版本列表
+      await populateFolderSelector();
+      await loadVersions(true);
+      const container = document.getElementById('installed-versions-list');
+      if (container) renderInstalledVersionsInto(container);
+    }
+  } catch (e) {
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<div style="color:#ff4d4d;font-size:13px">一键识别失败：' + escapeHtml((e && e.message) || e) + '</div>';
+    }
+  } finally {
+    if (detectEl) detectEl.style.display = 'none';
+    _detectingFolders = false;
+  }
 }
 
 async function selectExternalFolderPath() {

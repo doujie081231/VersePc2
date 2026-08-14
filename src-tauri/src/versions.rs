@@ -579,7 +579,18 @@ fn scan_versions_in_dir(versions_dir: &Path, is_external: bool, external_folder_
         let id = utils::get_str(&parsed, "id");
         let id = if id.is_empty() { name.clone() } else { id };
         let main_class = utils::get_str(&parsed, "mainClass");
-        let release_time = utils::get_str(&parsed, "releaseTime");
+        let mut release_time = utils::get_str(&parsed, "releaseTime");
+        // 兜底：releaseTime 缺失或为 1970 占位（旧版 now_iso 的 bug 产物）时，
+        // 用版本 JSON 的修改时间作为发布时间，避免界面显示 1970
+        if utils::is_invalid_release_time(&release_time) {
+            if let Ok(meta) = std::fs::metadata(&json_path) {
+                if let Ok(modified) = meta.modified() {
+                    if let Ok(dur) = modified.duration_since(std::time::UNIX_EPOCH) {
+                        release_time = utils::ts_to_iso(dur.as_secs());
+                    }
+                }
+            }
+        }
         let inherits_from = utils::get_str(&parsed, "inheritsFrom");
         let version_type = utils::get_str(&parsed, "type");
 
@@ -843,6 +854,188 @@ fn get_version_game_dir(version_id: &str, is_external: bool) -> PathBuf {
             PathBuf::from(game_dir)
         }
     }
+}
+
+/// 跨驱动器深度扫描，找出包含 versions 子目录的 Minecraft 版本文件夹
+/// （用于"一键识别版本文件夹"，返回候选列表供前端逐个添加）
+fn auto_detect_external_folders() -> Vec<Value> {
+    let mut found: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    // 常见默认位置直接检查（避免漏掉 AppData 深层目录，默认 .minecraft 在 %APPDATA%）
+    for var in ["APPDATA", "LOCALAPPDATA", "USERPROFILE"] {
+        if let Ok(base) = std::env::var(var) {
+            let p = PathBuf::from(&base).join(".minecraft");
+            if p.join("versions").is_dir() {
+                let s = p.to_string_lossy().to_string();
+                if seen.insert(s.clone()) {
+                    found.push(s);
+                }
+            }
+        }
+    }
+
+    // Windows 驱动器枚举 A:\..Z:\；其他平台扫描根目录
+    #[cfg(target_os = "windows")]
+    let roots: Vec<String> = (b'A'..=b'Z').map(|c| format!("{}:\\", c as char)).collect();
+    #[cfg(not(target_os = "windows"))]
+    let roots: Vec<String> = vec!["/".to_string()];
+
+    // 需要跳过的系统级/无关大目录，避免扫描过慢
+    fn is_skip(name: &str) -> bool {
+        let lower = name.to_lowercase();
+        lower == "windows"
+            || lower == "$recycle.bin"
+            || lower == "system volume information"
+            || lower == "program files"
+            || lower == "program files (x86)"
+            || lower == "programdata"
+            || lower == "appdata"
+            || lower == "node_modules"
+            || lower == ".git"
+            || lower == ".cache"
+            || lower == "recovery"
+            || lower == "perflogs"
+            || lower == "config.msi"
+            || lower == "msocache"
+            || lower == "intel"
+            || lower == "amd"
+            || lower == "nvidia"
+            || lower == "drivers"
+            || lower == "python"
+            || lower == "anaconda"
+            || lower == "miniconda"
+            || lower == "golang"
+            || lower == "rustup"
+            || lower == ".cargo"
+            || lower == ".npm"
+            || lower == ".yarn"
+            || lower == "tmp"
+            || lower == "temp"
+            || lower == "winnt"
+            || lower == "boot"
+            || lower == "sources"
+            || lower == "installer"
+            || lower == "msbuild"
+            || lower == "common files"
+            || lower == "dotnet"
+            || lower == "uninstall information"
+            || lower == "oracle"
+            || lower == "vmware"
+            || lower == "docker"
+            || lower == "xampp"
+            || lower == "wamp64"
+            || lower == "llvm"
+            || lower == "qt"
+            || lower == "cmake"
+            || lower == "vcpkg"
+            || lower == "nuget"
+            || lower == "packages"
+            || lower == "references"
+            || lower == "assemblies"
+            || lower == "microsoft"
+            || lower == "microsoft.net"
+            || lower == "microsoft shared"
+            || lower == "microsoft sdks"
+            || lower == "microsoft analysis services"
+            || lower == "adobe"
+            || lower == "google"
+            || lower == "mozilla"
+            || lower == "apple"
+            || lower == "steam"
+            || lower == "epic games"
+            || lower == "wps office"
+            || lower == "kingsoft"
+            || lower == "tencent"
+            || lower == "qq"
+            || lower == "wechat"
+            || lower == "baidu"
+            || lower == "aliyun"
+            || lower == "alibaba"
+            || lower == "jdk"
+            || lower == "jre"
+            || lower == "gradle"
+            || lower == "maven"
+            || lower == "ruby"
+            || lower == "perl"
+            || lower == ".thumbnails"
+            || lower == ".trash"
+            || lower == ".local"
+            || lower == ".config"
+            || lower == ".flatpak"
+            || lower == "snap"
+    }
+
+    // 在单个目录下做有限深度搜索：本目录含 versions 子目录即为命中，否则继续向下
+    fn scan(dir: &Path, depth: usize, max_depth: usize, found: &mut Vec<String>, skip_names: &[&str]) {
+        if depth > max_depth {
+            return;
+        }
+        if dir.join("versions").is_dir() {
+            found.push(dir.to_string_lossy().to_string());
+            return; // 命中后不再深入，避免嵌套游戏目录重复
+        }
+        // 检查目录名本身是否应跳过（根目录级）
+        let dir_name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if !dir_name.is_empty() && skip_names.contains(&dir_name) {
+            return;
+        }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let ft = match entry.file_type() {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                if !ft.is_dir() {
+                    continue;
+                }
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if is_skip(&name) {
+                    continue;
+                }
+                scan(&entry.path(), depth + 1, max_depth, found, skip_names);
+            }
+        }
+    }
+
+    // 根目录跳过列表（避免扫描整个系统盘根目录级大目录）
+    let root_skip: &[&str] = &[
+        "Windows", "Program Files", "Program Files (x86)", "ProgramData",
+        "System Volume Information", "$Recycle.Bin", "Recovery", "Boot",
+        "PerfLogs", "Documents and Settings", "DRIVERS", "Intel", "AMD",
+        "MSOCache", "Config.Msi", "Temp", "tmp",
+    ];
+
+    for root in roots {
+        let root_path = PathBuf::from(&root);
+        if !root_path.exists() {
+            continue;
+        }
+        // 跳过空驱动器（如软驱、光驱无盘）
+        if std::fs::read_dir(&root_path).is_err() {
+            continue;
+        }
+        scan(&root_path, 0, 3, &mut found, root_skip);
+    }
+
+    // 去重并转 JSON
+    let mut result: Vec<Value> = Vec::new();
+    for path_str in found {
+        let path = PathBuf::from(&path_str);
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("外部")
+            .to_string();
+        let version_count =
+            scan_versions_in_dir(&path.join("versions"), true, Some(&path)).len() as u64;
+        result.push(json!({
+            "path": path_str,
+            "name": name,
+            "versionCount": version_count
+        }));
+    }
+    result
 }
 
 /// api_proxy 路由处理：版本管理相关
@@ -1334,6 +1527,31 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
                 "success": false,
                 "cancelled": true,
                 "message": "请使用对话框命令选择文件夹"
+            })))
+        }
+
+        // ===== 一键识别版本文件夹（跨盘深度扫描） =====
+        "GET /api/version/auto-detect-folders" => {
+            // 阻塞扫描放到独立线程执行并加超时，避免阻塞 Tauri 异步运行时导致请求超时
+            let folders = match tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                tokio::task::spawn_blocking(auto_detect_external_folders),
+            )
+            .await
+            {
+                Ok(Ok(folders)) => folders,
+                Ok(Err(e)) => {
+                    eprintln!("[versions] auto-detect scan thread error: {}", e);
+                    return Some(ApiResult::err(500, "版本文件夹扫描失败"));
+                }
+                Err(_) => {
+                    eprintln!("[versions] auto-detect scan timed out");
+                    return Some(ApiResult::err(504, "版本文件夹扫描超时，请稍后再试"));
+                }
+            };
+            Some(ApiResult::ok(json!({
+                "success": true,
+                "folders": folders
             })))
         }
 

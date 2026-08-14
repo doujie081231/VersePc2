@@ -90,6 +90,26 @@ fn days_to_ymd(days: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// 把 Unix 秒数转成 ISO 8601 字符串（UTC），用于版本时间兜底
+pub fn ts_to_iso(secs: u64) -> String {
+    let days = secs / 86400;
+    let rem = secs % 86400;
+    let h = rem / 3600;
+    let m = (rem % 3600) / 60;
+    let s = rem % 60;
+    let (y, mo, d) = days_to_ymd(days as i64);
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, mo, d, h, m, s)
+}
+
+/// 判断一个 releaseTime 字符串是否"无效"（为空或 1970 年，说明是占位/错误值）
+pub fn is_invalid_release_time(rt: &str) -> bool {
+    if rt.is_empty() {
+        return true;
+    }
+    // 1970-01-01 开头的视为无效占位（旧版 now_iso 的 bug 产物）
+    rt.starts_with("1970-01-01")
+}
+
 /// 把字节数据编码成 base64 data URL（用于头像返回）
 /// 例如 data:image/png;base64,xxxx
 pub fn bytes_to_data_url(bytes: &[u8], mime: &str) -> String {
