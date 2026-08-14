@@ -30,6 +30,45 @@ mod versions;
 use serde_json::{json, Value};
 use tauri::{Emitter, Manager, PhysicalPosition, Position};
 
+// ============== Windows 内存压缩：EmptyWorkingSet ==============
+// 调用 Windows psapi.dll 的 EmptyWorkingSet，将进程不活跃的内存页交换出物理内存
+// 这就是 electron 项目"最小化后内存数字大幅下降"的核心手段
+#[cfg(target_os = "windows")]
+fn trim_working_set() {
+    use std::ffi::c_void;
+    #[link(name = "psapi")]
+    unsafe extern "system" {
+        fn EmptyWorkingSet(hProcess: *mut c_void) -> i32;
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> *mut c_void;
+    }
+    unsafe {
+        let handle = GetCurrentProcess();
+        if !handle.is_null() {
+            EmptyWorkingSet(handle);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn trim_working_set() {
+    // 非 Windows 平台不做处理
+}
+
+/// 执行一次完整的内存优化（对齐 electron 项目的 _doFullMemoryOptimize）
+/// 1. 提示前端做垃圾回收 + 壁纸挂起
+/// 2. 调用 EmptyWorkingSet 压缩工作集（任务管理器里可见的内存下降）
+fn do_full_memory_optimize(app_handle: &tauri::AppHandle) {
+    // 1. 通知前端执行内存清理（壁纸挂起、释放可选缓存、提示GC）
+    if let Some(win) = app_handle.get_webview_window("main") {
+        let _ = win.emit("memory-optimize-request", ());
+    }
+    // 2. Windows API 工作集压缩（这步让任务管理器里的数字明显变小）
+    trim_working_set();
+}
+
 // ============== 窗口控制 ==============
 
 #[tauri::command]
@@ -397,18 +436,72 @@ pub fn run() {
                 });
             }
 
-            // 后台轮询窗口最小化状态，状态变化时通知前端做内存整理
-            // （对齐 electron 最小化后压缩/释放内存的行为）
+            // 最小化/恢复内存优化（对齐 electron 项目行为）
+            // - 最小化：延迟 1.5s 后第一次优化，之后每 30s 循环执行
+            // - 恢复：立即停止循环，通知前端恢复壁纸
+            // - 空闲 3 分钟无操作：自动执行一次优化
             if let Some(main_win) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                let main_win_for_min = main_win.clone();
                 tauri::async_runtime::spawn(async move {
                     let mut last_min = false;
+                    let mut _minimize_timer: Option<tokio::task::JoinHandle<()>> = None;
+
                     loop {
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                        let min = main_win.is_minimized().unwrap_or(false);
+                        let Ok(min) = main_win_for_min.is_minimized() else { continue };
+
                         if min != last_min {
+                            // 状态变化：先通知前端（壁纸挂起/恢复）
                             let ev = if min { "window-minimized" } else { "window-restored" };
-                            let _ = main_win.emit(ev, ());
+                            let _ = main_win_for_min.emit(ev, ());
+
+                            if min {
+                                // ===== 最小化了：启动定时优化循环 =====
+                                // 取消上一次可能存在的定时器
+                                if let Some(t) = _minimize_timer.take() {
+                                    t.abort();
+                                }
+                                let ah = app_handle.clone();
+                                _minimize_timer = Some(tokio::task::spawn(async move {
+                                    // 第一次：延迟 1.5 秒
+                                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                                    do_full_memory_optimize(&ah);
+                                    // 之后每 30 秒循环
+                                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                                    loop {
+                                        interval.tick().await;
+                                        do_full_memory_optimize(&ah);
+                                    }
+                                }));
+                            } else {
+                                // ===== 恢复了：停止循环 =====
+                                if let Some(t) = _minimize_timer.take() {
+                                    t.abort();
+                                }
+                                // 恢复时也做一次轻量清理（移除不再需要的临时缓存）
+                                tokio::task::spawn(async move {
+                                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                                    trim_working_set();
+                                });
+                            }
+
                             last_min = min;
+                        }
+                    }
+                });
+
+                // ===== 空闲 5 分钟自动优化 =====
+                let main_win_for_idle = main_win.clone();
+                tauri::async_runtime::spawn(async move {
+                    // 每 5 分钟做一次轻量优化（不通知前端，只压缩工作集）
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+                    loop {
+                        interval.tick().await;
+                        // 如果此时正最小化（有单独的优化循环在跑），跳过
+                        let minimized = main_win_for_idle.is_minimized().unwrap_or(false);
+                        if !minimized {
+                            trim_working_set();
                         }
                     }
                 });

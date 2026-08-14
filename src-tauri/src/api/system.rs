@@ -127,10 +127,79 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         "POST /api/cleanup" => Some(handle_cleanup()),
 
-        "GET /api/cleanup/scan" => Some(handle_cleanup_scan()),
+        // 前端 cleanupScan 通过 POST 调用，保持与 GET 等价（Electron 端为 GET）
+        "GET /api/cleanup/scan" | "POST /api/cleanup/scan" => Some(handle_cleanup_scan()),
+
+        "POST /api/memory-optimize" => Some(handle_memory_optimize()),
 
         _ => None,
     }
+}
+
+// ============== 内存优化 ==============
+
+/// POST /api/memory-optimize — 执行内存优化
+/// 对齐 Electron 端 memory-optimize IPC 的行为：
+/// 遍历所有进程调用 EmptyWorkingSet，将不活跃内存页交换出物理内存，
+/// 达到"降低约 1/3 物理内存占用"的效果（与 UI 提示一致）。
+fn handle_memory_optimize() -> ApiResult {
+    let (_, before_avail) = get_system_memory_kb();
+    let before_mb = before_avail / 1024 / 1024;
+
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use std::ffi::c_void;
+        #[link(name = "psapi")]
+        unsafe extern "system" {
+            fn EnumProcesses(lpidProcess: *mut u32, cb: u32, lpcbNeeded: *mut u32) -> i32;
+            fn EmptyWorkingSet(hProcess: *mut c_void) -> i32;
+        }
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> *mut c_void;
+            fn CloseHandle(hObject: *mut c_void) -> i32;
+            fn GetCurrentProcess() -> *mut c_void;
+        }
+
+        // EmptyWorkingSet 需要查询信息 + 设置配额权限
+        const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+        const PROCESS_SET_QUOTA: u32 = 0x0100;
+        const ACCESS: u32 = PROCESS_QUERY_INFORMATION | PROCESS_SET_QUOTA;
+
+        let mut pids = [0u32; 1024];
+        let mut needed: u32 = 0;
+        let pid_size = std::mem::size_of::<u32>() as u32;
+
+        if EnumProcesses(pids.as_mut_ptr(), pids.len() as u32 * pid_size, &mut needed) != 0 {
+            let count = (needed / pid_size) as usize;
+            // 先压缩自身进程工作集
+            let self_handle = GetCurrentProcess();
+            EmptyWorkingSet(self_handle);
+            // 再遍历所有进程压缩工作集（无权限的进程自动跳过，不影响其它程序运行）
+            for i in 0..count.min(pids.len()) {
+                let pid = pids[i];
+                if pid == 0 {
+                    continue;
+                }
+                let handle = OpenProcess(ACCESS, 0, pid);
+                if !handle.is_null() {
+                    EmptyWorkingSet(handle);
+                    CloseHandle(handle);
+                }
+            }
+        }
+    }
+
+    let (_, after_avail) = get_system_memory_kb();
+    let after_mb = after_avail / 1024 / 1024;
+    let freed_mb = after_mb.saturating_sub(before_mb);
+
+    ApiResult::ok(json!({
+        "success": true,
+        "freedMB": freed_mb,
+        "beforeMB": before_mb,
+        "afterMB": after_mb
+    }))
 }
 
 // ============== 清理功能 ==============

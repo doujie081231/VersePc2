@@ -28,10 +28,39 @@
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use crate::storage;
 use crate::utils;
+
+/// 异步修复会话存储：sessionId -> 会话状态
+///
+/// 说明：
+/// - 前端"补全文件"调用 POST /api/version/repair-start 创建会话，返回 sessionId。
+/// - 后端 spawn 后台任务执行修复，边执行边更新会话进度。
+/// - 前端轮询 GET /api/version/repair-progress 获取进度，可 GET /api/version/repair-cancel 取消。
+/// - 会话结束（成功/失败/取消）后由后台任务清理，避免内存泄漏。
+static REPAIR_SESSIONS: LazyLock<Mutex<HashMap<String, RepairSession>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// 单个修复会话的状态
+#[derive(Clone)]
+struct RepairSession {
+    version_id: String,
+    status: String, // preparing | running | completed | failed | cancelled
+    progress: f64,
+    stage: String,
+    message: String,
+    checked_files: u32,
+    total_files: u32,
+    missing_files: u32,
+    repaired_files: u32,
+    current_file: String,
+    abort: Arc<AtomicBool>,
+    created_at: u64,
+}
 
 /// 远程版本清单 URL
 const MOJANG_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
@@ -386,6 +415,52 @@ fn scan_external_versions() -> Vec<Value> {
     }
 
     versions
+}
+
+/// 清洗外部版本标记 "xxx [外部N]" → "xxx"
+fn clean_external_marker(version_id: &str) -> String {
+    if let Some(idx) = version_id.find(" [外部") {
+        version_id[..idx].to_string()
+    } else if let Some(idx) = version_id.find("[外部") {
+        version_id[..idx].trim_end().to_string()
+    } else {
+        version_id.to_string()
+    }
+}
+
+/// 判断版本是否属于某个外部文件夹
+/// 对应原项目 server/versions/version-dir.js:resolveExternalVersionDir。
+/// 不依赖 " [外部N]" 后缀：只要该版本 ID 在 external-folders.json 的任一
+/// 外部文件夹下存在版本目录，就判定为外部版本。
+fn resolve_external_version_dir(version_id: &str) -> Option<String> {
+    let folders = storage::load_external_folders();
+    let clean_id = clean_external_marker(version_id);
+    for folder in &folders {
+        let path_str = utils::get_str(folder, "path");
+        if path_str.is_empty() {
+            continue;
+        }
+        let folder_path = PathBuf::from(&path_str);
+        if !folder_path.exists() {
+            continue;
+        }
+        // 检查 versions/<clean_id> 子目录
+        let ver_dir = folder_path.join("versions").join(&clean_id);
+        if ver_dir.is_dir() {
+            return Some(ver_dir.to_string_lossy().to_string());
+        }
+        // 检查直接以版本 ID 命名的子目录
+        let direct_dir = folder_path.join(&clean_id);
+        if direct_dir.is_dir() {
+            return Some(direct_dir.to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
+/// 是否外部版本（通过 external-folders 配置匹配，而非仅看 id 后缀）
+fn is_external_version(version_id: &str) -> bool {
+    resolve_external_version_dir(version_id).is_some()
 }
 
 /// 过滤版本列表可见性
@@ -1216,7 +1291,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
             // 判断是否外部版本
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(version_id).to_string()
             } else {
@@ -1244,7 +1319,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(version_id).to_string()
             } else {
@@ -1261,7 +1336,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
             } else {
@@ -1290,7 +1365,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
             } else {
@@ -1308,7 +1383,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
             } else {
@@ -1349,7 +1424,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
             } else {
@@ -1373,7 +1448,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
 
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(version_id).to_string()
             } else {
@@ -1414,7 +1489,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
             } else {
@@ -1432,7 +1507,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
             } else {
@@ -1452,7 +1527,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
 
-            let is_external = version_id.contains(" [外部");
+            let is_external = is_external_version(&version_id);
             let clean_id = if is_external {
                 version_id.split(" [外部").next().unwrap_or(version_id).to_string()
             } else {
@@ -1751,10 +1826,10 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
         // ===== 版本诊断 =====
         "GET /api/version/diagnose" => Some(handle_diagnose(params)),
 
-        // ===== 异步修复会话（TODO: 后续迁移完整流程） =====
-        "POST /api/version/repair-start" => Some(ApiResult::err(501, "异步修复会话正在迁移中，请使用同步修复 POST /api/version/repair")),
-        "GET /api/version/repair-progress" => Some(ApiResult::err(501, "异步修复进度正在迁移中")),
-        "GET /api/version/repair-cancel" => Some(ApiResult::err(501, "取消修复正在迁移中")),
+        // ===== 异步修复会话 =====
+        "POST /api/version/repair-start" => Some(handle_repair_start(body).await),
+        "GET /api/version/repair-progress" => Some(handle_repair_progress(params)),
+        "GET /api/version/repair-cancel" => Some(handle_repair_cancel(params).await),
 
         // ===== 导出启动脚本（.bat / .sh） =====
         "POST /api/version/export-script" => Some(handle_export_script(body).await),
@@ -1912,6 +1987,260 @@ async fn handle_repair(body: &Option<Value>) -> crate::api::ApiResult {
         "repaired": repaired,
         "missing": missing
     }))
+}
+
+/// POST /api/version/repair-start — 启动异步修复会话
+///
+/// 请求体：{ versionId }
+/// 返回：{ success, sessionId }
+///
+/// 后台 spawn 执行修复，边执行边把进度写入 REPAIR_SESSIONS，
+/// 前端通过 repair-progress 轮询、repair-cancel 取消。
+async fn handle_repair_start(body: &Option<Value>) -> crate::api::ApiResult {
+    use crate::api::ApiResult;
+
+    let data = body.clone().unwrap_or(Value::Null);
+    let version_id = utils::get_str(&data, "versionId");
+    if version_id.is_empty() {
+        return ApiResult::err(400, "Missing versionId");
+    }
+
+    let data_dir = storage::resolve_data_dir();
+    let versions_dir = data_dir.join("versions");
+    let version_dir = versions_dir.join(&version_id);
+
+    if !version_dir.exists() {
+        return ApiResult::err(404, "版本目录不存在");
+    }
+
+    let session_id = format!("repair_{}_{}", version_id, chrono_now_millis());
+    let abort = Arc::new(AtomicBool::new(false));
+
+    {
+        let mut guard = REPAIR_SESSIONS.lock().unwrap();
+        guard.insert(session_id.clone(), RepairSession {
+            version_id: version_id.clone(),
+            status: "preparing".to_string(),
+            progress: 0.0,
+            stage: "preparing".to_string(),
+            message: "准备修复...".to_string(),
+            checked_files: 0,
+            total_files: 0,
+            missing_files: 0,
+            repaired_files: 0,
+            current_file: String::new(),
+            abort: abort.clone(),
+            created_at: chrono_now_millis(),
+        });
+    }
+
+    // 后台执行修复
+    let sid = session_id.clone();
+    let vid = version_id.clone();
+    tokio::spawn(async move {
+        run_repair_session(&sid, &vid, abort).await;
+    });
+
+    ApiResult::ok(json!({ "success": true, "sessionId": session_id }))
+}
+
+/// GET /api/version/repair-progress — 查询修复进度
+///
+/// 查询参数：{ sessionId }
+/// 返回：{ status, progress, message, stage, checkedFiles, totalFiles, missingFiles, repairedFiles, currentFile }
+fn handle_repair_progress(params: &Option<Value>) -> crate::api::ApiResult {
+    use crate::api::ApiResult;
+
+    let params = params.as_ref().unwrap_or(&Value::Null);
+    let session_id = utils::get_str(&params, "sessionId");
+    if session_id.is_empty() {
+        return ApiResult::err(400, "Missing sessionId");
+    }
+
+    let guard = REPAIR_SESSIONS.lock().unwrap();
+    let Some(s) = guard.get(&session_id) else {
+        return ApiResult::err(404, "Invalid session");
+    };
+
+    ApiResult::ok(json!({
+        "status": s.status,
+        "progress": s.progress,
+        "message": s.message,
+        "stage": s.stage,
+        "checkedFiles": s.checked_files,
+        "totalFiles": s.total_files,
+        "missingFiles": s.missing_files,
+        "repairedFiles": s.repaired_files,
+        "currentFile": s.current_file
+    }))
+}
+
+/// GET /api/version/repair-cancel — 取消修复会话
+///
+/// 查询参数：{ sessionId }
+async fn handle_repair_cancel(params: &Option<Value>) -> crate::api::ApiResult {
+    use crate::api::ApiResult;
+
+    let params = params.as_ref().unwrap_or(&Value::Null);
+    let session_id = utils::get_str(&params, "sessionId");
+    if session_id.is_empty() {
+        return ApiResult::err(400, "Missing sessionId");
+    }
+
+    let guard = REPAIR_SESSIONS.lock().unwrap();
+    let Some(s) = guard.get(&session_id) else {
+        return ApiResult::err(404, "Invalid session");
+    };
+    s.abort.store(true, Ordering::SeqCst);
+    ApiResult::ok(json!({ "success": true }))
+}
+
+/// 后台执行一次修复会话，边执行边更新 REPAIR_SESSIONS 中的进度
+async fn run_repair_session(session_id: &str, version_id: &str, abort: Arc<AtomicBool>) {
+    let is_aborted = || abort.load(Ordering::SeqCst);
+
+    // 使用用户配置的下载源（默认 china-first）
+    let settings = storage::load_settings();
+    let configured_source = utils::get_str(&settings, "downloadSource");
+    let download_source = if configured_source.is_empty() {
+        "china-first".to_string()
+    } else {
+        configured_source
+    };
+
+    // 更新会话状态为 running
+    {
+        let mut guard = REPAIR_SESSIONS.lock().unwrap();
+        if let Some(s) = guard.get_mut(session_id) {
+            s.status = "running".to_string();
+            s.stage = "scanning".to_string();
+            s.message = "正在扫描缺失文件...".to_string();
+            s.progress = 5.0;
+        }
+    }
+
+    // 复用依赖检查，获取所有缺失文件
+    let dep_result = crate::launch::dep_check::check_dependencies(version_id, &settings, None);
+
+    let missing_files: Vec<_> = dep_result
+        .missing_files
+        .iter()
+        .filter(|f| !f.url.is_empty())
+        .cloned()
+        .collect();
+    let total = missing_files.len();
+
+    {
+        let mut guard = REPAIR_SESSIONS.lock().unwrap();
+        if let Some(s) = guard.get_mut(session_id) {
+            s.total_files = total as u32;
+            s.missing_files = total as u32;
+            s.message = format!("正在修复 {} 个缺失文件...", total);
+        }
+    }
+
+    if is_aborted() {
+        finalize_repair_session(session_id, "cancelled", "修复已取消");
+        schedule_repair_cleanup(session_id);
+        return;
+    }
+
+    let mut repaired: u32 = 0;
+    for (idx, file) in missing_files.iter().enumerate() {
+        if is_aborted() {
+            finalize_repair_session(session_id, "cancelled", "修复已取消");
+            schedule_repair_cleanup(session_id);
+            return;
+        }
+
+        let checked = (idx + 1) as u32;
+        let progress = 5.0 + (checked as f64 / total.max(1) as f64) * 90.0;
+
+        {
+            let mut guard = REPAIR_SESSIONS.lock().unwrap();
+            if let Some(s) = guard.get_mut(session_id) {
+                s.checked_files = checked;
+                s.progress = progress;
+                s.current_file = file.name.clone();
+                s.message = format!("正在修复: {}", file.name);
+            }
+        }
+
+        let dest = std::path::PathBuf::from(&file.path);
+        if let Some(parent) = dest.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("[repair] 创建目录失败 {}: {}", parent.display(), e);
+                continue;
+            }
+        }
+
+        let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.as_str()) };
+        let size = if file.size > 0 { Some(file.size) } else { None };
+
+        match crate::download::download_with_mirror(
+            &file.url,
+            &dest,
+            sha1,
+            size,
+            &download_source,
+            120,
+            None,
+        ).await {
+            Ok(()) => {
+                repaired += 1;
+                let mut guard = REPAIR_SESSIONS.lock().unwrap();
+                if let Some(s) = guard.get_mut(session_id) {
+                    s.repaired_files = repaired;
+                }
+            }
+            Err(e) => {
+                eprintln!("[repair] 下载失败 {}: {}", file.name, e);
+            }
+        }
+    }
+
+    let remaining = total as u32 - repaired;
+    if is_aborted() {
+        finalize_repair_session(session_id, "cancelled", "修复已取消");
+    } else if remaining == 0 {
+        finalize_repair_session(session_id, "completed", "文件修复完成！");
+    } else {
+        finalize_repair_session(
+            session_id,
+            if repaired > 0 { "completed" } else { "failed" },
+            &format!("修复完成，{} 个文件修复失败", remaining),
+        );
+    }
+    schedule_repair_cleanup(session_id);
+}
+
+/// 结束会话并写最终状态
+fn finalize_repair_session(session_id: &str, status: &str, message: &str) {
+    let mut guard = REPAIR_SESSIONS.lock().unwrap();
+    if let Some(s) = guard.get_mut(session_id) {
+        s.status = status.to_string();
+        s.stage = status.to_string();
+        s.message = message.to_string();
+        s.progress = if status == "completed" { 100.0 } else { s.progress };
+    }
+}
+
+/// 会话结束后延迟清理，避免长期累积未完成会话占用内存
+fn schedule_repair_cleanup(session_id: &str) {
+    let sid = session_id.to_string();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        REPAIR_SESSIONS.lock().unwrap().remove(&sid);
+    });
+}
+
+/// 当前时间戳（毫秒），用于生成唯一会话 ID
+fn chrono_now_millis() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// GET /api/version/diagnose — 诊断版本完整性
@@ -2087,7 +2416,7 @@ async fn handle_export_script(body: &Option<Value>) -> crate::api::ApiResult {
         return ApiResult::err(400, "Missing versionId");
     }
 
-    let is_external = version_id.contains(" [外部");
+    let is_external = is_external_version(&version_id);
     let clean_id = if is_external {
         version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
     } else {
@@ -2219,7 +2548,7 @@ fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResult {
         return ApiResult::err(400, "Missing versionId");
     }
 
-    let is_external = version_id.contains(" [外部");
+    let is_external = is_external_version(&version_id);
     let clean_id = if is_external {
         version_id.split(" [外部").next().unwrap_or(&version_id).to_string()
     } else {
@@ -2360,7 +2689,7 @@ fn handle_version_icon(params: &Option<Value>) -> crate::api::ApiResult {
         .map(|s| s == "true" || s == "1")
         .unwrap_or(false);
 
-    let is_external = version_id.contains(" [外部");
+    let is_external = is_external_version(&version_id);
     let clean_id = if is_external {
         version_id.split(" [外部").next().unwrap_or(version_id).to_string()
     } else {

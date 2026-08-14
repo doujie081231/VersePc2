@@ -113,6 +113,9 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         // HMCL 运行时
         let hmcl_rt = PathBuf::from(appdata).join(".hmcl").join("runtime");
         scan_java_subdirs_depth(&hmcl_rt, 3, &mut paths, &mut found, add);
+        // HMCL Java 目录
+        let hmcl_java = PathBuf::from(appdata).join(".hmcl").join("java");
+        scan_java_subdirs_depth(&hmcl_java, 3, &mut paths, &mut found, add);
         // Prism Launcher 运行时
         let prism_java = PathBuf::from(appdata).join("PrismLauncher").join("java");
         scan_java_subdirs_depth(&prism_java, 3, &mut paths, &mut found, add);
@@ -122,9 +125,14 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         // ATLauncher 运行时
         let at_launcher = PathBuf::from(appdata).join("ATLauncher").join("runtimes").join("minecraft");
         scan_java_subdirs_depth(&at_launcher, 3, &mut paths, &mut found, add);
-        // CurseForge 运行时
+        // CurseForge 运行时（AppData 目录）
         let curseforge = PathBuf::from(appdata).join("curseforge").join("minecraft").join("Install").join("runtime");
         scan_java_subdirs_depth(&curseforge, 3, &mut paths, &mut found, add);
+    }
+    if let Some(ref userprofile) = userprofile {
+        // CurseForge 运行时（用户目录）
+        let curseforge_user = PathBuf::from(userprofile).join("curseforge").join("minecraft").join("Install").join("runtime");
+        scan_java_subdirs_depth(&curseforge_user, 3, &mut paths, &mut found, add);
     }
     if let Some(ref localappdata) = localappdata {
         // BakaXL 运行时
@@ -318,92 +326,267 @@ fn scan_java_subdirs_depth(
     }
 }
 
-/// 读取 <javaHome>/release 文件中的 JAVA_VERSION
-/// 比执行 java -version 快得多
+/// 读取 <javaHome>/release 文件中的 JAVA_VERSION 与 OS_ARCH
+/// 比执行 java -version 快得多；OS_ARCH 用于判断 64 位
 fn read_release_version(java_home: &Path) -> Option<(String, u32, bool)> {
     let release_file = java_home.join("release");
     let content = std::fs::read_to_string(&release_file).ok()?;
+    let mut version_str: Option<String> = None;
+    let mut is64 = true; // 默认 64 位，仅当 OS_ARCH 明确为 32 位时才为 false
     for line in content.lines() {
         if line.starts_with("JAVA_VERSION=") {
-            // JAVA_VERSION="17.0.1"
             let v = line.trim_start_matches("JAVA_VERSION=").trim_matches('"');
-            let (major, _, is64) = parse_version(v);
-            return Some((v.to_string(), major, is64));
-        }
-        if line.starts_with("OS_ARCH=") {
-            let arch = line.trim_start_matches("OS_ARCH=").trim_matches('"');
-            let is64 = arch.contains("64");
-            // 这里只是占位，最终版本还得从 JAVA_VERSION 行取
-            let _ = is64;
+            version_str = Some(v.to_string());
+        } else if line.starts_with("OS_ARCH=") {
+            let arch = line.trim_start_matches("OS_ARCH=").trim_matches('"').to_lowercase();
+            // x86_64 / amd64 / aarch64 / arm64 均为 64 位
+            is64 = arch.contains("64") || arch.contains("arm") || arch.contains("aarch");
         }
     }
-    None
+    let version = version_str?;
+    let major = parse_version_major(&version);
+    Some((version, major, is64))
 }
 
-/// 解析版本字符串："17.0.1" → (full, major, is64)
-/// 注意：is64 默认 true，只有执行 java -version 才能确认
-fn parse_version(version: &str) -> (u32, String, bool) {
-    // 1.8 → 8, 17.0.1 → 17
-    let major: u32 = if let Some(first) = version.split('.').next() {
+/// 解析版本字符串的主版本号："1.8.0_301" → 8，"17.0.1" → 17
+fn parse_version_major(version: &str) -> u32 {
+    if let Some(first) = version.split('.').next() {
         if first == "1" {
-            // 1.8 → 8
+            // 旧式版本号 1.8.0_301 → 8
             version.split('.').nth(1).and_then(|s| s.parse().ok()).unwrap_or(8)
         } else {
             first.parse().unwrap_or(0)
         }
     } else {
         0
-    };
-    let full = version.to_string();
-    // is64 默认 true（现代 Java 都是 64 位）
-    (major, full, true)
+    }
+}
+
+/// 从 java 输出中提取版本号并规范化为 4 段："17.0.1" → (17, 0, 1, 0)
+/// 规则：
+///   - 取 version "..." 引号内内容（或 openjdk N 前缀）
+///   - 把 _ 与 + 替换为 .
+///   - 截断到 - 之前（如 "1.8.0_301-b09"）
+///   - 去除开头的 1.（旧式版本号）
+///   - 补齐 4 段
+fn normalize_version_string(raw: &str) -> Option<String> {
+    let mut v = raw.replace('_', ".").replace('+', ".");
+    if let Some(idx) = v.find('-') {
+        v.truncate(idx);
+    }
+    if v.starts_with("1.") {
+        v = v[2..].to_string();
+    }
+    let mut segs: Vec<&str> = v.split('.').collect();
+    if segs.is_empty() || segs[0].is_empty() {
+        return None;
+    }
+    while segs.len() < 4 {
+        segs.push("0");
+    }
+    let major = segs[0].parse::<u32>().ok()?;
+    // 主版本 4 及以下或 100 及以上视为解析异常
+    if major <= 4 || major >= 100 {
+        return None;
+    }
+    Some(segs[..4].join("."))
 }
 
 /// 执行 java -version 解析版本和架构
+/// 参照 PCL 的 CheckAsync 逻辑：优先运行 -XshowSettings:properties -version 获取完整信息，
+/// 包括版本号、64 位检测、file.encoding 等；失败时回退到 -version 仅解析版本号
 pub fn inspect_java(java_exe: &Path) -> Option<(String, u32, bool)> {
-    // 先试读 release 文件
-    let java_home = java_exe.parent().and_then(|p| p.parent())?;
-    if let Some((v, m, is64)) = read_release_version(java_home) {
-        return Some((v, m, is64));
+    if !java_exe.exists() {
+        return None;
     }
-    // 回退：执行 java -version
+    // 先试读 release 文件（不执行 java，速度快）
+    if let Some(java_home) = java_exe.parent().and_then(|p| p.parent()) {
+        if let Some((v, m, is64)) = read_release_version(java_home) {
+            return Some((v, m, is64));
+        }
+    }
+
+    // 尝试运行 java -XshowSettings:properties -version 获取完整信息
+    let mut cmd = Command::new(java_exe);
+    cmd.args(["-XshowSettings:properties", "-version"]);
     #[cfg(target_os = "windows")]
-    let mut cmd = {
+    {
         use std::os::windows::process::CommandExt;
-        let mut c = Command::new(java_exe);
-        c.arg("-version");
-        c.creation_flags(0x08000000);
-        c
-    };
-    #[cfg(not(target_os = "windows"))]
-    let mut cmd = {
-        let mut c = Command::new(java_exe);
-        c.arg("-version");
-        c
-    };
+        cmd.creation_flags(0x08000000);
+    }
+    if let Ok(out) = cmd.output() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let combined = format!("{}\n{}", stderr, stdout);
+
+        // 检查是否包含致命错误（参照 PCL 对此类错误的检测）
+        if combined.contains("/lib/ext exists") {
+            return None;
+        }
+        if combined.contains("a fatal error") || combined.contains("error: ") {
+            return None;
+        }
+
+        // 提取版本号
+        if let Some(version) = extract_version_from_output(&combined) {
+            if let Some(normalized) = normalize_version_string(&version) {
+                let major = parse_version_major(&normalized);
+                // 检查 64 位
+                let is64 = combined.contains("os.arch = x86_64")
+                    || combined.contains("os.arch = amd64")
+                    || combined.contains("64-Bit")
+                    || combined.contains("64-bit");
+                return Some((normalized, major, is64));
+            }
+        }
+    }
+
+    // 回退：仅运行 java -version 解析版本号
+    let mut cmd = Command::new(java_exe);
+    cmd.arg("-version");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
     let out = cmd.output().ok()?;
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let combined = format!("{}\n{}", stderr, stdout);
 
-    // 解析 version "x.y.z"
-    let mut version = String::new();
-    for line in combined.lines() {
-        if line.contains("version") {
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line[start + 1..].find('"') {
-                    version = line[start + 1..start + 1 + end].to_string();
-                    break;
-                }
-            }
+    if let Some(version) = extract_version_from_output(&combined) {
+        if let Some(normalized) = normalize_version_string(&version) {
+            let major = parse_version_major(&normalized);
+            let is64 = combined.contains("64-Bit") || combined.contains("64-bit");
+            return Some((normalized, major, is64));
         }
     }
-    if version.is_empty() {
-        return None;
+    None
+}
+
+/// 从 java -version 输出中提取版本字符串
+fn extract_version_from_output(output: &str) -> Option<String> {
+    // 匹配 version "1.8.0_301" 或 version "17.0.1"（引号可选）
+    let re = regex::Regex::new(r#"version\s+"?([^"\s]+)"?"#).ok()?;
+    if let Some(cap) = re.captures(output) {
+        return Some(cap[1].to_string());
     }
-    let is64 = combined.contains("64-Bit") || combined.contains("64-bit");
-    let (major, _, _) = parse_version(&version);
-    Some((version, major, is64))
+    // 回退匹配 openjdk <number>
+    let re2 = regex::Regex::new(r"(?i)(?<=openjdk )\d+").ok()?;
+    if let Some(m) = re2.find(output) {
+        return Some(m.as_str().to_string());
+    }
+    None
+}
+
+/// 候选文件夹列表：包含完整 Java 的常见目录，扫描到其中的 Java 会获得更高排序优先级
+fn candidate_folders() -> Vec<String> {
+    let mut folders: Vec<String> = Vec::new();
+    let mut push = |p: Option<String>| {
+        if let Some(s) = p {
+            if !s.is_empty() {
+                folders.push(s);
+            }
+        }
+    };
+
+    let appdata = std::env::var("APPDATA").ok();
+    let localappdata = std::env::var("LOCALAPPDATA").ok();
+    let userprofile = std::env::var("USERPROFILE").ok();
+    let pf = std::env::var("ProgramFiles").ok();
+    let pf86 = std::env::var("ProgramFiles(x86)").ok();
+    let documents = std::env::var("USERPROFILE").ok().map(|h| format!("{}\\Documents", h));
+
+    push(appdata.as_ref().map(|a| format!("{}\\.minecraft\\runtime\\", a)));
+    push(appdata.as_ref().map(|a| format!("{}\\.hmcl\\java\\", a)));
+    push(appdata.as_ref().map(|a| format!("{}\\ATLauncher\\runtimes\\minecraft\\", a)));
+    push(appdata.as_ref().map(|a| format!("{}\\ModrinthApp\\meta\\java_versions\\", a)));
+    push(appdata.as_ref().map(|a| format!("{}\\PrismLauncher\\java\\", a)));
+    push(userprofile.as_ref().map(|u| format!("{}\\curseforge\\minecraft\\Install\\runtime\\", u)));
+    push(userprofile.as_ref().map(|u| format!("{}\\.jdks\\", u)));
+    push(userprofile.as_ref().map(|u| format!("{}\\.sdkman\\candidates\\java\\", u)));
+    push(localappdata.as_ref().map(|l| format!("{}\\.ftba\\bin\\runtime\\", l)));
+    push(localappdata.as_ref().map(|l| {
+        format!(
+            "{}\\Packages\\Microsoft.4297127D64EC6_8wekyb3d8bbwe\\LocalCache\\Local\\runtime\\",
+            l
+        )
+    }));
+    push(pf86.as_ref().map(|p| format!("{}\\Minecraft Launcher\\runtime\\", p)));
+    push(pf86.as_ref().map(|p| format!("{}\\Minecraft\\runtime\\", p)));
+    push(documents.as_ref().map(|d| format!("{}\\Curse\\Minecraft\\Install\\runtime\\", d)));
+    push(pf.as_ref().map(|p| format!("{}\\Java\\", p)));
+    push(pf.as_ref().map(|p| format!("{}\\Eclipse Adoptium\\", p)));
+    push(pf.as_ref().map(|p| format!("{}\\Amazon Corretto\\", p)));
+    push(pf.as_ref().map(|p| format!("{}\\Zulu\\", p)));
+
+    folders
+}
+
+/// 判断 java 可执行文件所在目录是否属于候选文件夹（父目录前缀匹配）
+fn is_in_candidate_folder(java_exe: &Path, candidates: &[String]) -> bool {
+    let java_folder = java_exe
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/").to_lowercase())
+        .unwrap_or_default();
+    candidates.iter().any(|f| {
+        let f = f.replace('\\', "/").to_lowercase();
+        java_folder.starts_with(&f)
+    })
+}
+
+/// 排序 Java 列表（对应 PCL 的 SortAsync）：
+/// 1. 候选文件夹中的 Java 优先
+/// 2. 其次主版本号接近 21 的 Java 优先
+fn sort_java_list(list: &mut Vec<Value>) {
+    let candidates = candidate_folders();
+    list.sort_by(|a, b| {
+        let pa = a.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let pb = b.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let ia = is_in_candidate_folder(Path::new(pa), &candidates);
+        let ib = is_in_candidate_folder(Path::new(pb), &candidates);
+        if ia != ib {
+            return ib.cmp(&ia);
+        }
+        let ma = a.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
+        let mb = b.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
+        let da = (ma - 21).abs();
+        let db = (mb - 21).abs();
+        da.cmp(&db)
+    });
+}
+
+/// 检查路径是否包含重解析点（符号链接 / junction）
+/// 对应 PCL 对含重解析点 Java 的筛除；.minecraft\runtime 目录不受此限制
+fn has_reparse_point(java_exe: &Path) -> bool {
+    let lower = java_exe.to_string_lossy().to_lowercase();
+    if lower.contains(".minecraft\\runtime") || lower.contains(".minecraft/runtime") {
+        return false;
+    }
+    // 从 java.exe 所在目录向上逐级检查是否为符号链接
+    let mut cur = java_exe.parent().map(|p| p.to_path_buf());
+    while let Some(dir) = cur {
+        match std::fs::symlink_metadata(&dir) {
+            Ok(md) => {
+                if md.file_type().is_symlink() {
+                    return true;
+                }
+            }
+            Err(_) => return false,
+        }
+        cur = dir.parent().map(|p| p.to_path_buf());
+    }
+    false
+}
+
+/// 检查路径是否为特殊路径（Java 8 自动更新链接 / system32 等）
+/// 对应 PCL 对此类路径的筛除
+fn is_special_path(java_exe: &Path) -> bool {
+    let lower = java_exe.to_string_lossy().to_lowercase();
+    lower.contains("java8path_target_")
+        || lower.contains("javapath_target_")
+        || lower.contains("javatmp")
+        || lower.contains("\\system32\\")
 }
 
 /// 执行完整 Java 检测（带缓存）
@@ -429,8 +612,17 @@ pub fn detect_all() -> Vec<Value> {
         if path_str.contains("finalshell") || path_str.contains("paranoia") {
             continue;
         }
+        // 排除重解析点与特殊路径（对应 PCL 的筛除逻辑）
+        if has_reparse_point(&java_exe) || is_special_path(&java_exe) {
+            continue;
+        }
 
         if let Some((version, major, is64)) = inspect_java(&java_exe) {
+            // 只接受 64 位 Java（对应 PCL 的 64 位检查）
+            if !is64 {
+                println!("[java]   跳过 32 位 Java: {}", java_exe.display());
+                continue;
+            }
             let java_home = java_exe
                 .parent()
                 .and_then(|p| p.parent())
@@ -458,6 +650,9 @@ pub fn detect_all() -> Vec<Value> {
             java_list.push(entry.clone());
         }
     }
+
+    // 排序（候选文件夹优先，其次接近 21 优先）
+    sort_java_list(&mut java_list);
 
     // 写缓存
     let now = std::time::SystemTime::now()
@@ -1446,5 +1641,74 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
         }
 
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_version_various_formats() {
+        // 新式版本号
+        assert_eq!(normalize_version_string("17.0.1"), Some("17.0.1.0".to_string()));
+        assert_eq!(normalize_version_string("21.0.7"), Some("21.0.7.0".to_string()));
+        // 旧式版本号 1.8.0_301 → 8.0.301.0
+        assert_eq!(normalize_version_string("1.8.0_301"), Some("8.0.301.0".to_string()));
+        // 带构建号 1.8.0_301-b09
+        assert_eq!(normalize_version_string("1.8.0_301-b09"), Some("8.0.301.0".to_string()));
+        // 带 + 号（+ 替换为 . 后成为第 4 段）
+        assert_eq!(normalize_version_string("17.0.1+12"), Some("17.0.1.12".to_string()));
+        // 四段版本
+        assert_eq!(normalize_version_string("17.0.1.12"), Some("17.0.1.12".to_string()));
+        // 无效版本（主版本过低：1.4.0 去 1. 前缀后主版本 4）
+        assert_eq!(normalize_version_string("1.4.0"), None);
+        // 无效版本（主版本过高）
+        assert_eq!(normalize_version_string("100.0.0"), None);
+        // 无法解析
+        assert_eq!(normalize_version_string(""), None);
+    }
+
+    #[test]
+    fn parse_version_major_formats() {
+        assert_eq!(parse_version_major("1.8.0_301"), 8);
+        assert_eq!(parse_version_major("17.0.1"), 17);
+        assert_eq!(parse_version_major("21.0.7"), 21);
+        assert_eq!(parse_version_major("26.1.2"), 26);
+    }
+
+    #[test]
+    fn extract_version_from_output_variants() {
+        // 标准 java -version 输出
+        let out = "java version \"1.8.0_301\"\nJava(TM) SE Runtime Environment (build 1.8.0_301-b09)";
+        assert_eq!(extract_version_from_output(out).as_deref(), Some("1.8.0_301"));
+        // OpenJDK 输出
+        let out2 = "openjdk version \"17.0.1\" 2021-10-19\nOpenJDK Runtime Environment";
+        assert_eq!(extract_version_from_output(out2).as_deref(), Some("17.0.1"));
+        // 无版本信息
+        assert_eq!(extract_version_from_output("nothing here"), None);
+    }
+
+    #[test]
+    fn special_path_detection() {
+        // Java 8 自动更新重定向目录
+        assert!(is_special_path(Path::new(r"C:\ProgramData\Oracle\Java\javapath_target_1.8.0\java.exe")));
+        assert!(is_special_path(Path::new(r"C:\Windows\System32\java.exe")));
+        assert!(is_special_path(Path::new(r"C:\ProgramData\javatmp\bin\java.exe")));
+        assert!(!is_special_path(Path::new(r"C:\Program Files\Java\jdk-17\bin\java.exe")));
+    }
+
+    #[test]
+    fn sort_java_list_prefers_near_21() {
+        let mut list = vec![
+            json!({"path": r"C:\x\jdk-8\bin\java.exe", "majorVersion": 8}),
+            json!({"path": r"C:\x\jdk-25\bin\java.exe", "majorVersion": 25}),
+            json!({"path": r"C:\x\jdk-21\bin\java.exe", "majorVersion": 21}),
+            json!({"path": r"C:\x\jdk-17\bin\java.exe", "majorVersion": 17}),
+        ];
+        sort_java_list(&mut list);
+        // 排序后第一个应是接近 21 的 Java 21
+        let first = list[0].get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0);
+        assert_eq!(first, 21);
     }
 }

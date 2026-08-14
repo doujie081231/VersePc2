@@ -301,6 +301,7 @@ pub async fn updater_check_for_updates(app: AppHandle) -> Result<Value, String> 
 
     emit(&app, "update-available", &json!({
         "version": release.tag_ver,
+        "currentVersion": env!("CARGO_PKG_VERSION"),
         "releaseDate": release.published_at,
         "releaseName": release.tag,
         "releaseNotes": release.body,

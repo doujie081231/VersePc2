@@ -473,6 +473,28 @@ async function navigateToPage(pageName) {
     target.scrollTop = 0;
     target.style.animation = 'pageIn 0.18s var(--ease-out-expo) backwards';
   }
+
+  // ===== 页面切换完成后：恢复该页面之前被内存清理清掉的图片 src =====
+  (function restorePageImages(pageEl) {
+    try {
+      setTimeout(function () {
+        const imgs = pageEl.querySelectorAll('img[data-_cached-src]');
+        imgs.forEach(function (img) {
+          if (!img.src || img.src === '' || img.getAttribute('src') === '') {
+            img.src = img.dataset._cachedSrc;
+          }
+          delete img.dataset._cachedSrc;
+        });
+        const videos = pageEl.querySelectorAll('video');
+        videos.forEach(function (v) {
+          if (v._cachedSrcObj && !v.srcObject) {
+            v.srcObject = v._cachedSrcObj;
+            v._cachedSrcObj = null;
+          }
+        });
+      }, 30);
+    } catch (e) {}
+  })(target);
   
   if (isDetailPage) {
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));

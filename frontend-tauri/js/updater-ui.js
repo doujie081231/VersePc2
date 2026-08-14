@@ -15,7 +15,9 @@
                 return;
             }
             const result = await api.updater.getVersion();
-            el.textContent = '当前版本：v' + result.version;
+            // Tauri 端 get_app_version 直接返回版本字符串（如 "0.3.0"），Electron 端返回 { version }
+            const verText = (result && typeof result === 'object' && result.version) ? result.version : result;
+            el.textContent = '当前版本：v' + verText;
         } catch (e) {
             const el = document.getElementById('updater-version-info');
             if (el) el.textContent = '当前版本：未知';

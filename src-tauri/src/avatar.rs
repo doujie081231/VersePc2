@@ -110,8 +110,124 @@ async fn fetch_skin_from_server(server_url: &str, username: &str) -> Option<Vec<
     if server_url.is_empty() || username.is_empty() {
         return None;
     }
-    let url = format!("{}/skin/{}.png", server_url.trim_end_matches('/'), username);
+    let url = format!("{}/skin/{}.png", clean_server_url(server_url), username);
     fetch_url_bytes(&url).await
+}
+
+/// 清理服务器 URL：去掉 @@@/@@ 分隔后缀、尾部斜杠、以及 /api/yggdrasil 前缀
+fn clean_server_url(url: &str) -> String {
+    let mut s = url.split("@@@").next().unwrap_or(url).to_string();
+    s = s.split("@@").next().unwrap_or(&s).to_string();
+    let mut s = s.trim_end_matches('/').to_string();
+    if s.ends_with("/api/yggdrasil") {
+        s.truncate(s.len() - "/api/yggdrasil".len());
+        s = s.trim_end_matches('/').to_string();
+    }
+    s
+}
+
+/// 把 32 位无横杠 UUID 转成带横杠格式
+fn dashed_uuid(uuid: &str) -> String {
+    let c = uuid.replace('-', "");
+    if c.len() == 32 {
+        format!(
+            "{}-{}-{}-{}-{}",
+            &c[0..8],
+            &c[8..12],
+            &c[12..16],
+            &c[16..20],
+            &c[20..32]
+        )
+    } else {
+        uuid.to_string()
+    }
+}
+
+/// 从 Session Server 的 profile 接口解析出皮肤纹理 URL（现代 Yggdrasil 皮肤站标准方式）
+/// 请求 {server}/sessionserver/session/minecraft/profile/{uuid}，解析 textures 的 base64
+async fn fetch_skin_url_from_session(uuid: &str, server_url: &str) -> Option<String> {
+    if server_url.is_empty() {
+        return None;
+    }
+    let clean = clean_server_url(server_url);
+    let url = format!(
+        "{}/sessionserver/session/minecraft/profile/{}",
+        clean,
+        dashed_uuid(uuid)
+    );
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .user_agent("VersePC-Tauri/1.0")
+        .build()
+        .ok()?;
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let v: Value = resp.json().await.ok()?;
+    let props = v.get("properties")?.as_array()?;
+    let textures_val = props
+        .iter()
+        .find(|p| p.get("name").and_then(|x| x.as_str()) == Some("textures"))?
+        .get("value")?
+        .as_str()?;
+    use base64::Engine;
+    let dec = base64::engine::general_purpose::STANDARD
+        .decode(textures_val)
+        .ok()?;
+    let tv: Value = serde_json::from_slice(&dec).ok()?;
+    tv.get("textures")?
+        .get("SKIN")?
+        .get("url")?
+        .as_str()
+        .map(String::from)
+}
+
+/// 从 CSL（统一通行证）API 拉皮肤：{server}/csl/{username}.json → /textures/{hash}
+async fn fetch_skin_from_csl(server_url: &str, username: &str) -> Option<Vec<u8>> {
+    if server_url.is_empty() || username.is_empty() {
+        return None;
+    }
+    let clean = clean_server_url(server_url);
+    let csl_url = format!("{}/csl/{}.json", clean, username);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .user_agent("VersePC-Tauri/1.0")
+        .build()
+        .ok()?;
+    let resp = client.get(&csl_url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let v: Value = resp.json().await.ok()?;
+    let skins = v.get("skins")?;
+    // 对象格式：{ slim: hash, default: hash, steve: hash }
+    let skin_hash = if let Some(o) = skins.as_object() {
+        o.get("slim")
+            .or_else(|| o.get("default"))
+            .or_else(|| o.get("steve"))
+            .and_then(|x| x.as_str())
+            .map(String::from)
+    } else if let Some(arr) = skins.as_array() {
+        // 数组格式：找 type 为 skin/default 的项，取 hash 或 url
+        arr.iter()
+            .find(|s| {
+                s.get("type")
+                    .and_then(|x| x.as_str())
+                    .map(|t| t == "skin" || t == "default")
+                    .unwrap_or(false)
+            })
+            .and_then(|s| {
+                s.get("hash")
+                    .or_else(|| s.get("id"))
+                    .and_then(|x| x.as_str())
+                    .map(String::from)
+            })
+    } else {
+        None
+    }?;
+    let tex_url = format!("{}/textures/{}", clean, skin_hash);
+    fetch_url_bytes(&tex_url).await
 }
 
 /// 头像返回结果
@@ -222,24 +338,55 @@ pub async fn get_avatar(
                 "is_full_skin": true
             });
         }
-        // 失败继续尝试公共服务
+        // 失败继续尝试其他数据源
     }
 
-    // 4. 尝试公共 Avatar 服务（拿 64x64 头像）
-    println!("[avatar] trying public avatar services");
-    if let Some(avatar_bytes) = fetch_avatar_from_services(&clean_uuid).await {
-        println!("[avatar] public avatar fetch success, bytes={}", avatar_bytes.len());
-        let mime = if avatar_bytes.starts_with(PNG_MAGIC) {
-            "image/png"
-        } else {
-            "image/jpeg"
-        };
-        let data_url = crate::utils::bytes_to_data_url(&avatar_bytes, mime);
-        return json!({
-            "success": true,
-            "data_url": data_url,
-            "is_full_skin": false
-        });
+    // 3.5 外置服务器 CSL API：{server}/csl/{username}.json → /textures/{hash}
+    if !server_url.is_empty() && !username.is_empty() {
+        println!("[avatar] trying CSL API");
+        if let Some(skin_bytes) = fetch_skin_from_csl(&server_url, &username).await {
+            let data_url = crate::utils::bytes_to_data_url(&skin_bytes, "image/png");
+            return json!({
+                "success": true,
+                "data_url": data_url,
+                "is_full_skin": true
+            });
+        }
+    }
+
+    // 3.6 外置服务器 Session Server（Yggdrasil 标准）：解析 profile 里的 textures 皮肤 URL
+    if !server_url.is_empty() {
+        println!("[avatar] trying session server");
+        if let Some(skin_texture_url) = fetch_skin_url_from_session(&uuid, &server_url).await {
+            if let Some(skin_bytes) = fetch_url_bytes(&skin_texture_url).await {
+                let data_url = crate::utils::bytes_to_data_url(&skin_bytes, "image/png");
+                return json!({
+                    "success": true,
+                    "data_url": data_url,
+                    "is_full_skin": true
+                });
+            }
+        }
+    }
+
+    // 4. 无外置服务器时，尝试公共 Avatar 服务（拿 64x64 头像）
+    //    第三方皮肤站的 uuid 在 Mojang 公共服务里查不到，故仅在无 serverUrl 时才尝试
+    if server_url.is_empty() {
+        println!("[avatar] trying public avatar services");
+        if let Some(avatar_bytes) = fetch_avatar_from_services(&clean_uuid).await {
+            println!("[avatar] public avatar fetch success, bytes={}", avatar_bytes.len());
+            let mime = if avatar_bytes.starts_with(PNG_MAGIC) {
+                "image/png"
+            } else {
+                "image/jpeg"
+            };
+            let data_url = crate::utils::bytes_to_data_url(&avatar_bytes, mime);
+            return json!({
+                "success": true,
+                "data_url": data_url,
+                "is_full_skin": false
+            });
+        }
     }
 
     // 5. 全部失败，回退 Steve
@@ -332,24 +479,44 @@ pub async fn get_skin_texture(
 
     // 2. 外置服务器：从 /skin/{username}.png 拉取
     if !server_url.is_empty() && !username.is_empty() {
-        let url = format!("{}/skin/{}.png", server_url.trim_end_matches('/'), username);
+        let url = format!("{}/skin/{}.png", clean_server_url(&server_url), username);
         if let Some(bytes) = fetch_url_bytes(&url).await {
             let data_url = utils::bytes_to_data_url(&bytes, "image/png");
             return SkinTextureResult { data_url, model: "default".to_string(), success: true };
         }
     }
 
-    // 3. 公共皮肤服务（整皮）
-    let skin_services: &[&str] = &[
-        "https://mc-heads.net/skin/{uuid}",
-        "https://crafatar.com/skins/{uuid}",
-        "https://minotar.net/skin/{uuid}",
-    ];
-    for tmpl in skin_services {
-        let url = tmpl.replace("{uuid}", &clean_uuid);
-        if let Some(bytes) = fetch_url_bytes(&url).await {
+    // 2.5 外置服务器 CSL API
+    if !server_url.is_empty() && !username.is_empty() {
+        if let Some(bytes) = fetch_skin_from_csl(&server_url, &username).await {
             let data_url = utils::bytes_to_data_url(&bytes, "image/png");
             return SkinTextureResult { data_url, model: "default".to_string(), success: true };
+        }
+    }
+
+    // 2.6 外置服务器 Session Server（Yggdrasil 标准）
+    if !server_url.is_empty() {
+        if let Some(skin_texture_url) = fetch_skin_url_from_session(&uuid, &server_url).await {
+            if let Some(bytes) = fetch_url_bytes(&skin_texture_url).await {
+                let data_url = utils::bytes_to_data_url(&bytes, "image/png");
+                return SkinTextureResult { data_url, model: "default".to_string(), success: true };
+            }
+        }
+    }
+
+    // 3. 无外置服务器时，公共皮肤服务（整皮）
+    if server_url.is_empty() {
+        let skin_services: &[&str] = &[
+            "https://mc-heads.net/skin/{uuid}",
+            "https://crafatar.com/skins/{uuid}",
+            "https://minotar.net/skin/{uuid}",
+        ];
+        for tmpl in skin_services {
+            let url = tmpl.replace("{uuid}", &clean_uuid);
+            if let Some(bytes) = fetch_url_bytes(&url).await {
+                let data_url = utils::bytes_to_data_url(&bytes, "image/png");
+                return SkinTextureResult { data_url, model: "default".to_string(), success: true };
+            }
         }
     }
 

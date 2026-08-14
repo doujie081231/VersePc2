@@ -1677,30 +1677,31 @@ function cropSkinHeadCanvas(imgElement, outputSize = 64) {
     canvas.width = outputSize;
     canvas.height = outputSize;
     ctx.imageSmoothingEnabled = false;
-    const headX = Math.round(8 * scale), headY = Math.round(8 * scale), headDim = Math.round(8 * scale);
-    ctx.drawImage(imgElement, headX, headY, headDim, headDim, 0, 0, outputSize, outputSize);
+    // PCL 风格双图层：脸部放大约 0.75，帽子层放大约 0.875（帽子比脸大，完整显示帽子像素块，不被脸的正方形裁剪）
+    const faceSize = Math.round(outputSize * 0.75);
+    const hatSize = Math.round(outputSize * 0.875);
+    const faceOffset = Math.round((outputSize - faceSize) / 2);
+    const hatOffset = Math.round((outputSize - hatSize) / 2);
+    // 脸部（居中背景）
+    ctx.drawImage(imgElement, 8 * scale, 8 * scale, 8 * scale, 8 * scale, faceOffset, faceOffset, faceSize, faceSize);
+    // 帽子层（更大、居中前景，透明像素露出脸部）
     if (sh >= 64) {
-      const hatX = Math.round(40 * scale), hatY = Math.round(8 * scale);
       const hatCanvas = document.createElement('canvas');
       hatCanvas.width = outputSize;
       hatCanvas.height = outputSize;
       const hatCtx = hatCanvas.getContext('2d');
       hatCtx.imageSmoothingEnabled = false;
-      hatCtx.drawImage(imgElement, hatX, hatY, headDim, headDim, 0, 0, outputSize, outputSize);
+      hatCtx.drawImage(imgElement, 40 * scale, 8 * scale, 8 * scale, 8 * scale, hatOffset, hatOffset, hatSize, hatSize);
       const hatData = hatCtx.getImageData(0, 0, outputSize, outputSize);
       const faceData = ctx.getImageData(0, 0, outputSize, outputSize);
       for (let i = 0; i < hatData.data.length; i += 4) {
-        const ha = hatData.data[i + 3] / 255;
+        const ha = hatData.data[i + 3];
         if (ha > 0) {
-          const fa = faceData.data[i + 3] / 255;
-          const outA = ha + fa * (1 - ha);
-          if (outA > 0) {
-            const invA = 1 / outA;
-            faceData.data[i]     = Math.round((hatData.data[i] * ha + faceData.data[i] * fa * (1 - ha)) * invA);
-            faceData.data[i + 1] = Math.round((hatData.data[i+1] * ha + faceData.data[i+1] * fa * (1 - ha)) * invA);
-            faceData.data[i + 2] = Math.round((hatData.data[i+2] * ha + faceData.data[i+2] * fa * (1 - ha)) * invA);
-            faceData.data[i + 3] = Math.round(outA * 255);
-          }
+          // 帽子不透明像素直接覆盖脸部，透明像素保留脸部
+          faceData.data[i] = hatData.data[i];
+          faceData.data[i + 1] = hatData.data[i + 1];
+          faceData.data[i + 2] = hatData.data[i + 2];
+          faceData.data[i + 3] = ha;
         }
       }
       ctx.putImageData(faceData, 0, 0);

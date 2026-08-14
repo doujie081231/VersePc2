@@ -280,18 +280,21 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
         .unwrap_or_else(|_| reqwest::Client::new());
 
     let mut all_hits: Vec<Value> = Vec::new();
+    let mut total_hits: u64 = 0;
 
     // Modrinth 源
     if source == "any" || source == "modrinth" {
-        if let Ok(hits) = search_modrinth_mods(&client, &query, &loader, &mc_version, &category, &sort, limit, offset).await {
+        if let Ok((hits, total)) = search_modrinth_mods(&client, &query, &loader, &mc_version, &category, &sort, limit, offset).await {
             all_hits.extend(hits);
+            total_hits = total_hits.max(total);
         }
     }
 
     // CurseForge 源
     if source == "any" || source == "curseforge" {
-        if let Ok(hits) = search_curseforge_mods(&client, &query, &loader, &mc_version, &sort, limit, offset).await {
+        if let Ok((hits, total)) = search_curseforge_mods(&client, &query, &loader, &mc_version, &sort, limit, offset).await {
             all_hits.extend(hits);
+            total_hits = total_hits.max(total);
         }
     }
 
@@ -307,7 +310,7 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
 
     ApiResult::ok(json!({
         "hits": all_hits,
-        "total": all_hits.len(),
+        "total": total_hits,
         "offset": offset
     }))
 }
@@ -322,7 +325,7 @@ async fn search_modrinth_mods(
     sort: &str,
     limit: usize,
     offset: usize,
-) -> Result<Vec<Value>, String> {
+) -> Result<(Vec<Value>, u64), String> {
     let mut facets: Vec<Vec<String>> = vec![vec!["project_type:mod".to_string()]];
     if !loader.is_empty() {
         facets.push(vec![format!("categories:{}", loader)]);
@@ -392,7 +395,8 @@ async fn search_modrinth_mods(
         })
         .unwrap_or_default();
 
-    Ok(hits)
+    let total_hits = result.get("total_hits").and_then(|v| v.as_u64()).unwrap_or(0);
+    Ok((hits, total_hits))
 }
 
 /// CurseForge 搜索模组
@@ -404,7 +408,7 @@ async fn search_curseforge_mods(
     sort: &str,
     limit: usize,
     offset: usize,
-) -> Result<Vec<Value>, String> {
+) -> Result<(Vec<Value>, u64), String> {
     let settings = storage::load_settings();
     let cf_api_key = settings
         .get("curseforgeApiKey")
@@ -505,7 +509,8 @@ async fn search_curseforge_mods(
         })
         .unwrap_or_default();
 
-    Ok(hits)
+    let total_hits = result.pointer("/pagination/totalCount").and_then(|v| v.as_u64()).unwrap_or(0);
+    Ok((hits, total_hits))
 }
 
 // ============== 详情路由 ==============
@@ -930,41 +935,55 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
 
     // 拉取版本信息
     let (download_url, file_name, file_size, expected_sha1) = if source == "modrinth" {
-        let version_url = format!("{}/project/{}/version", MODRINTH_API, project_id);
-
-        // 三级查询策略
-        let versions: Vec<Value> = if !version_id.is_empty() {
-            // 指定版本 ID
+        // 获取版本信息：优先按 version_id，否则按 projectId + loader/mc_version 过滤
+        let version_data: Option<Value> = if !version_id.is_empty() {
+            // 指定版本 ID：Modrinth /version/{id} 返回单个对象（不是数组）
             let url = format!("{}/version/{}", MODRINTH_API, version_id);
             match client.get(&url).send().await {
-                Ok(r) if r.status().is_success() => r.json().await.unwrap_or_default(),
-                _ => Vec::new(),
-            }
-        } else if !loader.is_empty() && !mc_version.is_empty() {
-            let url = format!("{}?loaders=[\"{}\"]&game_versions=[\"{}\"]", version_url, loader, mc_version);
-            match client.get(&url).send().await {
-                Ok(r) if r.status().is_success() => r.json().await.unwrap_or_default(),
-                _ => Vec::new(),
-            }
-        } else if !mc_version.is_empty() {
-            let url = format!("{}?game_versions=[\"{}\"]", version_url, mc_version);
-            match client.get(&url).send().await {
-                Ok(r) if r.status().is_success() => r.json().await.unwrap_or_default(),
-                _ => Vec::new(),
+                Ok(r) if r.status().is_success() => r.json().await.ok(),
+                _ => None,
             }
         } else {
-            let url = format!("{}?limit=10", version_url);
-            match client.get(&url).send().await {
+            // 按 loader / mc_version 过滤查询版本列表
+            let version_url = format!("{}/project/{}/version", MODRINTH_API, project_id);
+            let url = if !loader.is_empty() && !mc_version.is_empty() {
+                format!("{}?loaders=[\"{}\"]&game_versions=[\"{}\"]", version_url, loader, mc_version)
+            } else if !loader.is_empty() {
+                format!("{}?loaders=[\"{}\"]", version_url, loader)
+            } else if !mc_version.is_empty() {
+                format!("{}?game_versions=[\"{}\"]", version_url, mc_version)
+            } else {
+                format!("{}?limit=1", version_url)
+            };
+            let versions: Vec<Value> = match client.get(&url).send().await {
                 Ok(r) if r.status().is_success() => r.json().await.unwrap_or_default(),
                 _ => Vec::new(),
+            };
+            // 客户端二次过滤：确保 MC 版本和 loader 都匹配，过滤为空时回退到第一个
+            if !mc_version.is_empty() || !loader.is_empty() {
+                versions
+                    .iter()
+                    .find(|v| {
+                        let gv: Vec<String> = v.get("game_versions").and_then(|g| g.as_array())
+                            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                        let lds: Vec<String> = v.get("loaders").and_then(|g| g.as_array())
+                            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_lowercase())).collect()).unwrap_or_default();
+                        let mut ok = true;
+                        if !mc_version.is_empty() && !gv.contains(&mc_version) { ok = false; }
+                        if !loader.is_empty() && !lds.contains(&loader.to_lowercase()) { ok = false; }
+                        ok
+                    })
+                    .cloned()
+                    .or_else(|| versions.first().cloned())
+            } else {
+                versions.first().cloned()
             }
         };
 
-        if versions.is_empty() {
-            return ApiResult::err(502, "未找到可用版本");
-        }
-
-        let first = &versions[0];
+        let first = match version_data {
+            Some(v) => v,
+            None => return ApiResult::err(502, "未找到可用版本"),
+        };
         let files = first.get("files").and_then(|f| f.as_array());
         let primary_file = files
             .and_then(|arr| arr.iter().find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false)))
