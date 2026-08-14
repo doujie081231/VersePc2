@@ -1,7 +1,8 @@
 {
   "name": "verse-tauri",
   "version": "0.1.0",
-  "description": "VersePC Tauri 框架替换项目 - 第一步：UI 验证",
+  "description": "VersePC2 - 基于 Tauri 的 Minecraft 启动器",
+  "license": "GPL-3.0",
   "private": true,
   "scripts": {
     "dev": "tauri dev",
