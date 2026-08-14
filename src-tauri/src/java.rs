@@ -179,10 +179,18 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         }
     }
 
-    // 7. 其他常见根目录
-    for drive in &["C:", "D:", "E:", "F:"] {
-        let java_dir = PathBuf::from(format!("{}\\Java", drive));
-        scan_java_subdirs(&java_dir.to_string_lossy(), &mut paths, &mut found, add);
+    // 7. 其他常见根目录（用户直接解压到盘根目录的情况）
+    // 只检查固定的目录名（C:\Java、C:\JDK 等），不做递归深度扫描，
+    // 否则每次启动会遍历整个盘根目录两层，导致启动卡死（黑屏）
+    for drive in &["C:", "D:", "E:", "F:", "G:", "H:"] {
+        for dir_name in &[
+            "Java", "JDK", "JRE", "OpenJDK", "jdk", "jre",
+            ".jdks", ".jre", ".java", "Temurin", "Corretto", "Zulu",
+            "Microsoft", "GraalVM", "Liberica", "Dragonwell",
+        ] {
+            let p = PathBuf::from(format!("{}\\{}", drive, dir_name));
+            scan_java_subdirs(&p.to_string_lossy(), &mut paths, &mut found, add);
+        }
     }
     // ProgramData\Oracle\Java
     let oracle = PathBuf::from("C:\\ProgramData\\Oracle\\Java");
@@ -229,9 +237,16 @@ fn scan_java_subdirs(
     if !dir_path.exists() {
         return;
     }
+    // 关键点：如果 dir 本身就是 Java Home（C:\Java\bin\java.exe 存在），直接匹配，
+    // 这样用户把 JDK 解压成单层 C:\Java 的情况也能识别（对齐初代启动器）
+    let self_java = dir_path.join("bin").join("java.exe");
+    if self_java.exists() {
+        add(paths, found, self_java);
+    }
     let keywords = [
         "java", "jdk", "jre", "adopt", "temurin", "corretto", "zulu", "amazon",
         "microsoft", "sapmachine", "bellsoft", "graalvm", "dragonwell", "openjdk",
+        "liberica", "jbr", "jetbrains",
     ];
 
     let entries = match std::fs::read_dir(&dir_path) {
@@ -279,6 +294,11 @@ fn scan_java_subdirs_depth(
 ) {
     if depth == 0 || !dir.exists() {
         return;
+    }
+    // 先检查 dir 本身是不是 Java Home（用户直接解压到盘根目录的单层 Java Home）
+    let self_java = dir.join("bin").join("java.exe");
+    if self_java.exists() {
+        add(paths, found, self_java);
     }
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,

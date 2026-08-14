@@ -8,6 +8,9 @@ async function init() {
   const startTime = Date.now();
   const MIN_SPLASH_DURATION = 100;
 
+  // 最小化/恢复时做内存整理（对齐 electron：最小化会压缩/释放内存）
+  setupWindowMemoryEvents();
+
   try {
     const earlyTheme = await window.electronAPI.store.get('versepc_theme');
     if (earlyTheme) {
@@ -120,15 +123,15 @@ async function init() {
     ]);
   } catch (e) { console.error('后台数据加载失败:', e); }
 
-  // 阶段3：加载模组与资源数据（仍在 splash 覆盖下，确保进页面即有内容）
+  // 阶段3：加载模组与资源数据（后台异步加载，不阻塞 splash）
+  // 原因：热门模组/模组分类需要联网请求境外 API（Modrinth/CurseForge），国内网络访问慢，
+  // 若 await 会拖住启动画面停在"加载模组"。改为后台加载，用户先进界面、数据稍后到位。
   setProgress(82, '正在加载模组...');
-  try {
-    await Promise.allSettled([
-      loadModFilterOptions(),
-      loadInstalledMods(),
-      loadFeaturedMods()
-    ]);
-  } catch (e) { console.error('模组数据加载失败:', e); }
+  Promise.allSettled([
+    loadModFilterOptions(),
+    loadInstalledMods(),
+    loadFeaturedMods()
+  ]).catch(() => {});
 
   // 阶段4：初始化壁纸与界面元素（仍在 splash 覆盖下）
   setProgress(90, '正在初始化壁纸...');
@@ -176,6 +179,41 @@ async function init() {
   setTimeout(() => {
     try { triggerJvmPreheat(); } catch (e) {}
   }, 2000);
+}
+
+/**
+ * 监听窗口最小化/恢复事件，做内存整理（对齐 electron 最小化后压缩/释放内存的行为）
+ * 最小化：暂停壁纸渲染循环 + 暂停视频 + 主动触发 JS 垃圾回收
+ * 恢复：恢复壁纸渲染
+ */
+function setupWindowMemoryEvents() {
+  try {
+    if (!window.__TAURI__ || !window.__TAURI__.event) return;
+    const ta = window.__TAURI__.event;
+
+    // 壁纸引擎挂起/恢复（若已加载）
+    function suspendWallpaper() {
+      try {
+        const w = window.wallpaperEngine;
+        if (w && typeof w.suspend === 'function') w.suspend();
+      } catch (e) {}
+    }
+    function resumeWallpaper() {
+      try {
+        const w = window.wallpaperEngine;
+        if (w && typeof w.resume === 'function') w.resume();
+      } catch (e) {}
+    }
+
+    ta.listen('window-minimized', function () {
+      suspendWallpaper();
+      // 主动触发垃圾回收释放内存（依赖 --expose-gc 启动参数）
+      try { if (window.gc) window.gc(); } catch (e) {}
+    });
+    ta.listen('window-restored', function () {
+      resumeWallpaper();
+    });
+  } catch (e) {}
 }
 
 function loadWallpaperSettings() {

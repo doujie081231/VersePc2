@@ -27,7 +27,7 @@ const PageHome = {
   template: `
     <div class="home-page">
       <!-- 标题：放在原本标题栏位置的中间（最顶部居中，不占内容空间） -->
-      <div class="home-page-title topbar-title" @click="goHome">
+      <div class="home-page-title topbar-title" data-tauri-drag-region @click="goHome">
         Verse<span class="home-page-title-accent">PC2</span>
       </div>
 

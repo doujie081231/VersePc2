@@ -24,6 +24,10 @@ use super::state::{self, EasyTierMode};
 static CHILD: Mutex<Option<Child>> = Mutex::new(None);
 /// 后台状态轮询任务句柄
 static POLLER: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::new(None);
+/// 用户手动停止标志：true 时 poller 不会触发崩溃自动恢复
+static MANUAL_STOP: Mutex<bool> = Mutex::new(false);
+/// 崩溃恢复运行中标志：防止恢复过程中 poller 重复触发
+static RECOVERING: Mutex<bool> = Mutex::new(false);
 
 /// Terracotta 版本（对应 electron 项目 ctx.network.TERRACOTTA_VERSION）
 const TERRACOTTA_VERSION: &str = "0.4.2";
@@ -105,26 +109,46 @@ pub async fn http_get(http_port: u16, path: &str) -> Result<Value, String> {
 async fn http_get_raw(http_port: u16, path: &str) -> Result<Value, String> {
     let url = format!("http://127.0.0.1:{}{}", http_port, path);
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        // 对齐 electron：terracotta 刚启动时虚拟网卡初始化较慢，10 秒超时 + 最多 5 次重试（共 6 次尝试）
+        .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("HTTP 请求失败: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+    let retries: u32 = 5;
+    let mut last_err: Option<String> = None;
+    for attempt in 0..=retries {
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let code = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    let preview: String = body.chars().take(200).collect();
+                    last_err = Some(format!("HTTP {}: {}", code, preview));
+                    if attempt < retries {
+                        tokio::time::sleep(Duration::from_millis(800)).await;
+                        continue;
+                    }
+                    return Err(last_err.unwrap());
+                }
+                let text = resp.text().await.unwrap_or_default();
+                if text.trim().is_empty() {
+                    return Ok(json!({ "ok": true, "empty": true }));
+                }
+                return match serde_json::from_str::<Value>(&text) {
+                    Ok(v) => Ok(v),
+                    Err(_) => Ok(json!({ "text": text })),
+                };
+            }
+            Err(e) => {
+                last_err = Some(format!("HTTP 请求失败: {}", e));
+                if attempt < retries {
+                    tokio::time::sleep(Duration::from_millis(800)).await;
+                    continue;
+                }
+            }
+        }
     }
-
-    let text = resp.text().await.unwrap_or_default();
-    if let Ok(v) = serde_json::from_str::<Value>(&text) {
-        Ok(v)
-    } else {
-        Ok(json!({ "text": text }))
-    }
+    Err(last_err.unwrap_or_else(|| "未知错误".into()))
 }
 
 /// 递归收集目录下所有文件
@@ -298,7 +322,9 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
         download().await.map_err(|e| format!("陶瓦联机内核下载失败: {}", e))?;
     }
 
-    stop().await;
+    // 内部启动前先停旧进程：不要清 saved_*，不要设 MANUAL_STOP
+    stop_internal(false).await;
+    *MANUAL_STOP.lock().unwrap() = false;
 
     let bin_path = state::get_binary_path();
     let port_file = std::env::temp_dir().join(format!("versepc-terracotta-{}.http", std::process::id()));
@@ -338,11 +364,19 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
         s.player_name = player_name.to_string();
         s.error_type = None;
         s.error_message = None;
+        // 保存成功配置（对齐 electron _terracottaSaved*）
+        s.saved_mode = Some(EasyTierMode::Host);
+        s.saved_game_port = game_port;
+        s.saved_room_code.clear();
+        s.saved_player_name = player_name.to_string();
+        s.crash_count = 0;
     });
 
     // 拉取公共节点并开始扫描局域网游戏
     let nodes = fetch_public_nodes(false).await;
     let mut q = format!("player={}", urlencoding::encode(player_name));
+    // 主机 scanning 模式也要传 game 端口（对齐 electron 原项目扫描参数）
+    q.push_str(&format!("&game={}", game_port));
     for n in &nodes {
         q.push_str(&format!("&public_nodes={}", urlencoding::encode(n)));
     }
@@ -359,6 +393,10 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
                 last_err = e;
                 eprintln!("[terracotta] /state/scanning 第{}次失败: {}", attempt + 1, last_err);
                 if attempt == 2 {
+                    state::update_status(|s| {
+                        s.error_type = Some("scanning_failed".into());
+                        s.error_message = Some(last_err.clone());
+                    });
                     let _ = stop().await;
                     return Err(format!("陶瓦联机初始化失败: {}", last_err));
                 }
@@ -387,7 +425,9 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
         download().await.map_err(|e| format!("陶瓦联机内核下载失败: {}", e))?;
     }
 
-    stop().await;
+    // 内部启动前先停旧进程：不要清 saved_*，不要设 MANUAL_STOP
+    stop_internal(false).await;
+    *MANUAL_STOP.lock().unwrap() = false;
 
     let bin_path = state::get_binary_path();
     let port_file = std::env::temp_dir().join(format!("versepc-terracotta-{}.http", std::process::id()));
@@ -427,6 +467,12 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
         s.player_name = player_name.to_string();
         s.error_type = None;
         s.error_message = None;
+        // 保存成功配置（对齐 electron _terracottaSaved*）
+        s.saved_mode = Some(EasyTierMode::Guest);
+        s.saved_room_code = room_code.to_string();
+        s.saved_game_port = 0;
+        s.saved_player_name = player_name.to_string();
+        s.crash_count = 0;
     });
 
     // 拉取公共节点并加入房间
@@ -448,6 +494,10 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
                 last_err = e;
                 eprintln!("[terracotta] /state/guesting 第{}次失败: {}", attempt + 1, last_err);
                 if attempt == 2 {
+                    state::update_status(|s| {
+                        s.error_type = Some("guesting_failed".into());
+                        s.error_message = Some(last_err.clone());
+                    });
                     let _ = stop().await;
                     return Err(format!("陶瓦联机初始化失败: {}", last_err));
                 }
@@ -463,8 +513,20 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
     }))
 }
 
-/// 停止陶瓦联机
+/// 停止陶瓦联机（用户手动点击"停止"）
+/// 手动停止会清 saved_* 配置（不再自动恢复）并把 MANUAL_STOP 置 true
 pub async fn stop() {
+    stop_internal(true).await;
+}
+
+/// 停止陶瓦联机（内部用）
+/// manual=true：用户主动停止 → 设 MANUAL_STOP=true、清掉 saved_* 配置、清 crash_count
+/// manual=false：启动流程里清理旧进程 → 不设 MANUAL_STOP、保留 saved_*（后续 start 会覆盖）
+async fn stop_internal(manual: bool) {
+    if manual {
+        *MANUAL_STOP.lock().unwrap() = true;
+    }
+
     // 停止轮询
     {
         let mut g = POLLER.lock().unwrap();
@@ -483,9 +545,20 @@ pub async fn stop() {
     }
 
     state::reset_to_idle();
+    if manual {
+        // 用户手动停止：清崩溃恢复配置，不要自动拉起
+        state::update_status(|s| {
+            s.saved_mode = None;
+            s.saved_room_code.clear();
+            s.saved_game_port = 0;
+            s.saved_player_name.clear();
+            s.crash_count = 0;
+        });
+    }
 }
 
 /// 启动后台状态轮询：每 500ms 拉取 /state 更新全局状态
+/// 同时负责崩溃检测 + 自动恢复（对齐 electron startTerracottaDaemon）
 fn start_poller(http_port: u16) {
     {
         let mut g = POLLER.lock().unwrap();
@@ -496,16 +569,125 @@ fn start_poller(http_port: u16) {
     let handle = tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(500)).await;
-            if !state::is_running() {
+
+            // ====== 崩溃检测：child 还在 running，但 /state 访问不了 ======
+            let child_dead = {
+                let cg = CHILD.lock().unwrap();
+                match cg.as_ref() {
+                    Some(c) => {
+                        // try_wait: None 表示还在跑，Some(exit) 表示已退出
+                        let mut cc = c;
+                        // 安全起见：拷贝一个 Child 出来 try_wait 需要 &mut，但我们不能破坏全局句柄
+                        // 这里改成通过 status 字段 + http 响应判断
+                        let _ = &mut cc;
+                        false
+                    }
+                    None => true,
+                }
+            };
+
+            let state_http_ok = match http_get_raw(http_port, "/state").await {
+                Ok(v) => {
+                    update_state_from_api(v);
+                    true
+                }
+                Err(_) => false,
+            };
+
+            // 如果 HTTP 连续不通 / child 已经没了，但 saved_mode 还在且用户没手动点停止 → 尝试恢复
+            if !state_http_ok || child_dead {
+                let manual = *MANUAL_STOP.lock().unwrap();
+                if manual {
+                    break;
+                }
+                // 还在 running 状态但 HTTP 不通：算崩溃（进程死了 / 虚拟网卡异常）
+                let should_recover = {
+                    let st = state::get_status();
+                    let saved_mode_exists = st.get("savedMode").and_then(|x| x.as_str()).is_some();
+                    let crash_cnt = st.get("crashCount").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                    saved_mode_exists && crash_cnt < state::MAX_CRASH_RECOVERY
+                };
+                if should_recover {
+                    let mut rec = RECOVERING.lock().unwrap();
+                    if !*rec {
+                        *rec = true;
+                        drop(rec);
+                        eprintln!("[terracotta] 检测到联机异常，尝试自动恢复...");
+                        state::update_status(|s| s.crash_count = s.crash_count.saturating_add(1));
+                        // spawn 恢复任务（不阻塞 poller）
+                        tokio::spawn(async {
+                            match try_recover_saved().await {
+                                Ok(_) => eprintln!("[terracotta] 自动恢复成功"),
+                                Err(e) => {
+                                    eprintln!("[terracotta] 自动恢复失败: {}", e);
+                                    state::update_status(|s| {
+                                        s.error_type = Some("crash_recovery_failed".into());
+                                        s.error_message = Some(e);
+                                    });
+                                }
+                            }
+                            *RECOVERING.lock().unwrap() = false;
+                        });
+                    }
+                } else if !state::is_running() {
+                    // 没配置恢复且没 running → 直接跳出 poll
+                    break;
+                }
+            } else if !state::is_running() {
                 break;
-            }
-            if let Ok(v) = http_get_raw(http_port, "/state").await {
-                update_state_from_api(v);
             }
         }
     });
     let mut g = POLLER.lock().unwrap();
     *g = Some(handle);
+}
+
+/// 根据 saved_mode / saved_room_code / saved_game_port 重新建立联机（崩溃后恢复）
+async fn try_recover_saved() -> Result<(), String> {
+    use state::EasyTierMode;
+    // 读取上次成功的配置
+    let (mode, port, room, player) = {
+        let s_json = state::get_status();
+        let mode_str = s_json.get("savedMode").and_then(|x| x.as_str()).unwrap_or("");
+        let mode = match mode_str {
+            "host" => Some(EasyTierMode::Host),
+            "guest" => Some(EasyTierMode::Guest),
+            _ => None,
+        };
+        let port = s_json.get("gamePort").and_then(|x| x.as_u64()).unwrap_or(0) as u16;
+        let room = s_json.get("roomCode").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let player = s_json.get("playerName").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        (mode, port, room, player)
+    };
+    let mode = mode.ok_or_else(|| "无已保存的联机配置".to_string())?;
+
+    // 先确保旧进程停了，但不要触发 MANUAL_STOP / 清 saved_*
+    {
+        let child_opt = {
+            let mut g = CHILD.lock().unwrap();
+            g.take()
+        };
+        if let Some(mut c) = child_opt {
+            let _ = c.kill().await;
+            let _ = c.wait().await;
+        }
+    }
+
+    match mode {
+        EasyTierMode::Host => {
+            let gp = if port == 0 { 25565 } else { port };
+            let pname = if player.is_empty() { "Player" } else { player.as_str() };
+            start_host(gp, pname).await.map(|_| ())
+        }
+        EasyTierMode::Guest => {
+            if room.is_empty() {
+                return Err("无保存的房间号".into());
+            }
+            let pname = if player.is_empty() { "Player" } else { player.as_str() };
+            start_guest(&room, pname).await.map(|_| ())
+        }
+        EasyTierMode::Idle => Err("已处于空闲状态".into()),
+    }
 }
 
 /// 解析 /state 响应并写入全局状态

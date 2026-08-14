@@ -6,6 +6,9 @@ use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
+/// 最大连续崩溃自动恢复次数（对齐 electron：超过这个阈值就停止自动拉起，避免死循环）
+pub const MAX_CRASH_RECOVERY: u32 = 5;
+
 /// 陶瓦联机运行模式
 #[derive(Clone, Debug, PartialEq)]
 pub enum EasyTierMode {
@@ -42,6 +45,13 @@ pub struct EasyTierStatus {
     pub state: Option<Value>,
     /// 原始 /state 的 index 字段
     pub state_index: i64,
+    /// 崩溃恢复需要的"上次成功配置"（对齐 electron _terracottaSaved*）
+    pub saved_mode: Option<EasyTierMode>,
+    pub saved_room_code: String,
+    pub saved_game_port: u16,
+    pub saved_player_name: String,
+    /// 崩溃计数（连续崩溃超过阈值则停止自动恢复）
+    pub crash_count: u32,
 }
 
 impl Default for EasyTierStatus {
@@ -60,6 +70,11 @@ impl Default for EasyTierStatus {
             error_message: None,
             state: None,
             state_index: -1,
+            saved_mode: None,
+            saved_room_code: String::new(),
+            saved_game_port: 0,
+            saved_player_name: String::new(),
+            crash_count: 0,
         }
     }
 }
@@ -80,7 +95,9 @@ impl EasyTierStatus {
             "errorType": self.error_type,
             "errorMessage": self.error_message,
             "state": self.state,
-            "stateIndex": self.state_index
+            "stateIndex": self.state_index,
+            "savedMode": self.saved_mode.as_ref().map(|m| m.as_str()),
+            "crashCount": self.crash_count,
         })
     }
 }
@@ -132,13 +149,23 @@ pub fn update_status(updater: impl FnOnce(&mut EasyTierStatus)) {
     }
 }
 
-/// 重置为空闲状态（保留安装状态）
+/// 重置为空闲状态（保留安装状态 + 崩溃恢复配置）
 pub fn reset_to_idle() {
     init_status();
     let mut g = STATUS.lock().unwrap();
     if let Some(s) = g.as_mut() {
-        // 保留 http_port 递增状态无需保留，全部重置
+        // 崩溃恢复所需字段（对齐 electron：saved_mode / saved_room / saved_port / saved_player / crash_count）
+        let saved_mode = s.saved_mode.clone();
+        let saved_room = std::mem::take(&mut s.saved_room_code);
+        let saved_port = s.saved_game_port;
+        let saved_player = std::mem::take(&mut s.saved_player_name);
+        let crash_count = s.crash_count;
         *s = EasyTierStatus::default();
+        s.saved_mode = saved_mode;
+        s.saved_room_code = saved_room;
+        s.saved_game_port = saved_port;
+        s.saved_player_name = saved_player;
+        s.crash_count = crash_count;
     }
 }
 

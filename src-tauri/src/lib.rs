@@ -48,6 +48,15 @@ fn window_maximize(window: tauri::WebviewWindow) {
     }
 }
 
+/// 显示主窗口（前端 splash 首屏渲染完成后调用，避免启动时"黑屏闪一下"）
+#[tauri::command]
+fn window_show(window: tauri::WebviewWindow) {
+    if !window.is_visible().unwrap_or(false) {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[tauri::command]
 async fn window_close(window: tauri::WebviewWindow) {
     // 关闭前触发前端 CSS 关闭动画
@@ -377,6 +386,34 @@ pub fn run() {
 
             app.manage(store);
 
+            // 窗口默认隐藏（visible:false），等前端 splash 首屏渲染后调用 window_show 显示，避免启动黑屏闪一下。
+            // 兜底：若前端因脚本异常始终未调用 show，延迟强制显示，确保窗口不会一直不出现。
+            if let Some(main_win) = app.get_webview_window("main") {
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+                    if !main_win.is_visible().unwrap_or(false) {
+                        let _ = main_win.show();
+                    }
+                });
+            }
+
+            // 后台轮询窗口最小化状态，状态变化时通知前端做内存整理
+            // （对齐 electron 最小化后压缩/释放内存的行为）
+            if let Some(main_win) = app.get_webview_window("main") {
+                tauri::async_runtime::spawn(async move {
+                    let mut last_min = false;
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        let min = main_win.is_minimized().unwrap_or(false);
+                        if min != last_min {
+                            let ev = if min { "window-minimized" } else { "window-restored" };
+                            let _ = main_win.emit(ev, ());
+                            last_min = min;
+                        }
+                    }
+                });
+            }
+
             // 初始化 theseus 事件系统：把 Tauri AppHandle 注入 theseus，
             // 这样 theseus 内部的 emit_install_job / emit_loading 才能向前端推送事件
             let app_handle = app.handle().clone();
@@ -388,6 +425,7 @@ pub fn run() {
             // 窗口控制
             window_minimize,
             window_maximize,
+            window_show,
             window_close,
             window_destroy,
             window_is_maximized,

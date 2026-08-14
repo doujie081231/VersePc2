@@ -1,13 +1,13 @@
 {
-  "version": "0.2.0",
-  "releaseName": "v0.2.0",
+  "version": "0.3.0",
+  "releaseName": "v0.3.0",
   "releaseDate": "2026-08-14",
-  "releaseNotes": "VersePC2 v0.2.0\n\n新增:\n- 开源协议更新为 GPL-3.0，新增项目 README 文档\n\n修复与优化:\n- 修复陶瓦联机初始化超时问题\n- 修复一键识别外部文件夹超时无响应问题\n- 修复已安装版本时间显示为 1970 的问题\n- 修复个性化设置重启后丢失的问题",
+  "releaseNotes": "VersePC2 v0.3.0\n\n修复:\n- 修复启动黑屏/黑框问题\n- 修复窗口无法拖动问题\n- 修复 Java 检测不到盘根目录 Java 文件夹的问题\n- 修复陶瓦联机无法加入房间的问题\n- 修复启动游戏补全依赖超时问题\n- 修复数据目录位置无法更改的问题\n- 修复用户个性化数据加载失败的问题\n\n优化:\n- 优化启动速度（模组等数据改为后台加载，不再卡启动画面）\n- 最小化启动器时自动释放内存",
   "files": {
     "win-x64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v0.2.0/VersePC2-0.2.0.exe",
-      "size": 71517184,
-      "sha256": "678E497EEFB79AEF7DA95882C8B5FE2E6BFB0BD6AF7CFF51E6A03E8E66D7F2B5"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v0.3.0/VersePC2-0.3.0.exe",
+      "size": 71629824,
+      "sha256": "66AC20F7E4192278AD54F234EC8624C2F83C13ADEE552F60084A33319CDCA62F"
     }
   }
 }

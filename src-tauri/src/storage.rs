@@ -346,11 +346,20 @@ fn looks_like_legacy_dir(dir: &std::path::Path) -> bool {
 /// 2. 每次启动：从旧版 app-store 补充缺失的 versepc_* 个性化键。
 ///    这让即使之前迁移不全（如自定义图片/视频键缺失）也能在重启后自动补全，
 ///    解决"个性化设置重启又没了"的问题。
+/// 迁移入口：仅在首次启动（或 marker 不存在时）执行。
+/// 1. 把旧版的数据文件（settings/accounts/favorites/external-folders）复制到新版数据目录（若新版还没有）。
+/// 2. 从旧版 app-store 合并缺失的 versepc_* 个性化键。
+/// 之后每次启动直接返回，避免无谓的磁盘 IO 扫描导致"启动黑屏/黑框"。
 pub fn migrate_legacy_if_first_run(store: &Store) -> bool {
+    // 已经做过迁移：完全跳过，不碰旧目录、不读 data-config，避免启动时磁盘 IO 抖动
+    if store.get(MIGRATE_MARKER).is_some() {
+        return false;
+    }
+
     let data_dir = resolve_data_dir();
     let mut migrated_any = false;
 
-    // 定位旧版数据目录（每次启动都找一次，来源可能变化）
+    // 定位旧版数据目录
     let mut source: Option<std::path::PathBuf> = None;
     for cand in legacy_data_dir_candidates() {
         if cand == data_dir {
@@ -361,29 +370,30 @@ pub fn migrate_legacy_if_first_run(store: &Store) -> bool {
             break;
         }
     }
-    let src = match source {
+    let src_path = match source {
         Some(s) => s,
         None => {
-            // 没有旧版来源：标记已完成，避免后续误判
+            // 没有旧版来源：也打上 marker，下次启动不再扫描
             let _ = store.set(MIGRATE_MARKER.into(), json!(true));
             return false;
         }
     };
+    let src = &src_path;
 
-    // 阶段 1：首次运行才复制数据文件（避免覆盖用户在新版里已有的设置）
-    if store.get(MIGRATE_MARKER).is_none() {
+    // 阶段 1：首次运行复制数据文件（不覆盖新版已有的文件）
+    {
         let has_data = data_dir.join("settings.json").exists()
             || data_dir.join("accounts.json").exists()
             || data_dir.join("favorites.json").exists();
         if !has_data {
-            migrated_any |= copy_legacy_files(&src, &data_dir);
+            migrated_any |= copy_legacy_files(src, &data_dir);
         }
     }
 
-    // 阶段 2：每次启动补充缺失的 versepc_* 个性化键
-    migrated_any |= merge_legacy_store_keys(&src, store);
+    // 阶段 2：首次运行补充缺失的 versepc_* 个性化键（之后不再执行）
+    migrated_any |= merge_legacy_store_keys(src, store);
 
-    // 标记完成
+    // 标记完成（以后每次启动都快速跳过）
     let _ = store.set(MIGRATE_MARKER.into(), json!(true));
     migrated_any
 }
@@ -451,9 +461,98 @@ impl Store {
             HashMap::new()
         };
 
-        Self {
+        let mut store = Self {
             data: Mutex::new(initial_data),
             path: store_path,
+        };
+
+        // 迁移后一次性"补键"兜底：
+        // 若 migration marker 存在但个性化核心键仍缺（比如之前迁移跑在错误目录、
+        // 用户换了 data-dir、或用户手动丢了 store.json），从旧版 app-store.json
+        // 补一次 versepc_* 键，并打 LAZY_MERGE_DONE 标记，以后永远跳过。
+        store.try_lazy_merge_personalize_keys();
+
+        store
+    }
+
+    /// 一次性懒补个性化键：仅 migration 已跑过 + LAZY_MERGE_DONE 没打 + 核心键至少缺一个时才会读旧目录
+    fn try_lazy_merge_personalize_keys(&mut self) {
+        pub const LAZY_MERGE_DONE: &str = "versepc_lazy_merge_done_v1";
+
+        // 已经做过懒补：直接跳过
+        {
+            let data = self.data.lock().unwrap();
+            if data.get(LAZY_MERGE_DONE).is_some() {
+                return;
+            }
+            // 连迁移标记都不存在：说明还没到"迁移后"的状态，首次迁移流程会处理
+            if data.get(MIGRATE_MARKER).is_none() {
+                return;
+            }
+            // 关键个性化键已经全有：无需懒补
+            const CORE_KEYS: &[&str] = &[
+                "versepc_personalize_settings",
+                "versepc_launch_settings",
+                "versepc_other_settings",
+                "versepc_theme",
+            ];
+            let any_missing = CORE_KEYS.iter().any(|k| data.get(*k).is_none());
+            if !any_missing {
+                // 打标记，下次直接跳过
+                drop(data);
+                let _ = self.set(LAZY_MERGE_DONE.into(), json!(true));
+                return;
+            }
+        }
+
+        // 尝试定位旧版 app-store.json（按 legacy 候选找一遍）
+        let mut legacy_store_src: Option<std::path::PathBuf> = None;
+        let current_data_dir = resolve_data_dir();
+        for cand in legacy_data_dir_candidates() {
+            if cand == current_data_dir {
+                continue;
+            }
+            let f = cand.join("app-store.json");
+            if f.exists() {
+                legacy_store_src = Some(f);
+                break;
+            }
+        }
+        let legacy_src = match legacy_store_src {
+            Some(p) => p,
+            None => {
+                // 没找到旧源也打个标记，免得下次继续找
+                let _ = self.set(LAZY_MERGE_DONE.into(), json!(true));
+                return;
+            }
+        };
+
+        // 读取旧 app-store.json，补充缺失的 verspc_* 键
+        if let Ok(content) = std::fs::read_to_string(&legacy_src) {
+            if let Ok(app_store) = serde_json::from_str::<Value>(&content) {
+                if let Some(obj) = app_store.as_object() {
+                    let mut wrote_any = false;
+                    let mut data = self.data.lock().unwrap();
+                    for (k, v) in obj {
+                        if k.starts_with("versepc_") && data.get(k).is_none() {
+                            data.insert(k.clone(), v.clone());
+                            wrote_any = true;
+                        }
+                    }
+                    // 不管补没补到，都打 done
+                    data.insert(LAZY_MERGE_DONE.into(), json!(true));
+                    drop(data);
+                    if wrote_any {
+                        // 立即写盘
+                        if let Ok(json) = serde_json::to_string_pretty(
+                            &*self.data.lock().unwrap()
+                        ) {
+                            let _ = std::fs::write(&self.path, json);
+                        }
+                        println!("[store] 懒补个性化键完成");
+                    }
+                }
+            }
         }
     }
 

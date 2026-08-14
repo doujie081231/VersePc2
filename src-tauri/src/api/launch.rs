@@ -18,8 +18,9 @@
 //   - GET /api/launch/session-status 保留占位，前端改为监听事件
 
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tauri::AppHandle;
 
@@ -27,6 +28,66 @@ use crate::api::ApiResult;
 use crate::launch::{self, dep_check};
 use crate::storage;
 use crate::utils;
+
+use serde::{Deserialize, Serialize};
+
+// ============== 启动/下载会话：launchSessions ==============
+// 对齐原 electron 项目 ctx.sessions.launchSessions
+// 支持前端轮询 GET /api/launch/session-status，避免 download-deps HTTP 超时
+#[derive(Default, Clone)]
+struct LaunchSession {
+    status: String,           // downloading / completed / failed / launched / launch_failed
+    progress: u32,            // 0~100
+    message: String,
+    total_files: u32,
+    completed_files: u32,
+    current_file: String,
+    errors: Vec<String>,
+    version_id: String,
+    last_activity: u64,       // unix ms
+    speed: u64,               // 预估 B/s（简化版留 0）
+    completed: u32,           // 成功数
+    failed: u32,              // 失败数
+    queued: u32,
+    concurrent_downloads: u32,
+    failed_files: Vec<String>,
+    active_downloads: Vec<String>,
+    launch_result: Option<Value>,
+}
+
+impl LaunchSession {
+    fn to_json(&self) -> Value {
+        json!({
+            "status": self.status,
+            "progress": self.progress,
+            "message": self.message,
+            "currentFile": self.current_file,
+            "totalFiles": self.total_files,
+            "completedFiles": self.completed_files,
+            "errors": self.errors,
+            "launchResult": self.launch_result,
+            "activeDownloads": self.active_downloads,
+            "completed": self.completed,
+            "failed": self.failed,
+            "speed": self.speed,
+            "queued": self.queued,
+            "concurrentDownloads": self.concurrent_downloads,
+            "failedFiles": self.failed_files,
+        })
+    }
+}
+
+static LAUNCH_SESSIONS: OnceLock<Mutex<HashMap<String, LaunchSession>>> = OnceLock::new();
+
+fn sessions() -> std::sync::MutexGuard<'static, HashMap<String, LaunchSession>> {
+    let mutex = LAUNCH_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    mutex.lock().unwrap()
+}
+
+fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
 
 /// 启动锁：防止重复点击导致启动多个游戏实例
 /// 30 秒后自动释放（与原项目行为一致）
@@ -97,12 +158,45 @@ pub async fn handle(
         // ===== POST /api/launch/download-deps — 下载缺失依赖文件 =====
         "POST /api/launch/download-deps" => Some(handle_download_deps(app, body).await),
 
-        // ===== GET /api/launch/session-status — 查询下载会话状态（已改用事件推送） =====
-        "GET /api/launch/session-status" => Some(ApiResult::ok(json!({
-            "status": "unknown",
-            "progress": 0,
-            "message": "请监听 launch-download-progress 事件获取进度"
-        }))),
+        // ===== GET /api/launch/session-status — 查询下载/启动会话进度 ==============
+        "GET /api/launch/session-status" => {
+            let sid = params
+                .as_ref()
+                .and_then(|p| p.get("sessionId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if sid.is_empty() {
+                return Some(ApiResult::ok(json!({
+                    "status": "unknown",
+                    "progress": 0,
+                    "message": ""
+                })));
+            }
+            let sess = {
+                let s = sessions();
+                s.get(sid).cloned()
+            };
+            match sess {
+                Some(s) => {
+                    let status_end = matches!(s.status.as_str(), "launched" | "launch_failed" | "failed" | "completed");
+                    // 已结束的会话 60 秒后清理（对齐 electron）
+                    if status_end {
+                        let sid_owned = sid.to_string();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_secs(60));
+                            let mut s = sessions();
+                            let _ = s.remove(&sid_owned);
+                        });
+                    }
+                    Some(ApiResult::ok(s.to_json()))
+                }
+                None => Some(ApiResult::ok(json!({
+                    "status": "unknown",
+                    "progress": 0,
+                    "message": ""
+                }))),
+            }
+        }
 
         // ===== GET /api/launch/diagnose — 诊断启动配置（简化版） =====
         "GET /api/launch/diagnose" => Some(handle_diagnose(params)),
@@ -699,6 +793,13 @@ fn record_launch_time(version_id: &str) {
 /// 4. 返回 { success, completed, failed, failedFiles }
 ///
 /// 简化策略：同步下载，不并发（原项目支持并发下载，此处先做可用版本）
+/// POST /api/launch/download-deps — 下载缺失依赖文件（对齐 electron 异步会话版）
+///
+/// 请求体：{ versionId, sessionId? }
+///
+/// 返回：{ success: true, sessionId, missingCount }（立即返回，不等待下载）
+/// 之后前端通过 GET /api/launch/session-status?sessionId=X 轮询进度。
+/// 同时也会通过 Tauri 事件 launch-download-progress 推送进度（保留向后兼容）。
 async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     use tauri::Emitter;
 
@@ -715,7 +816,7 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
 
     // 1. 检查缺失依赖
     let dep_result = dep_check::check_dependencies(&clean_id, &settings, external_path.as_deref());
-    let missing_files = &dep_result.missing_files;
+    let missing_files = dep_result.missing_files;
 
     if missing_files.is_empty() {
         return ApiResult::ok(json!({
@@ -726,104 +827,185 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
         }));
     }
 
-    let total = missing_files.len();
-    let mut completed: u32 = 0;
-    let mut failed: u32 = 0;
-    let mut failed_files: Vec<String> = Vec::new();
+    // 2. 创建下载会话（若已存在相同 sessionId 则复用）
+    let input_sid = utils::get_str(&data, "sessionId");
+    let dl_session_id = if !input_sid.is_empty() {
+        input_sid
+    } else {
+        format!("launch-{}", now_ms())
+    };
 
-    eprintln!("[launch/download-deps] 开始下载 {} 个缺失文件", total);
+    {
+        let mut s = sessions();
+        if !s.contains_key(&dl_session_id) {
+            let total = missing_files.len() as u32;
+            s.insert(dl_session_id.clone(), LaunchSession {
+                status: "downloading".into(),
+                progress: 0,
+                message: format!("正在下载 {} 个缺失文件..", total),
+                total_files: total,
+                completed_files: 0,
+                current_file: String::new(),
+                errors: Vec::new(),
+                version_id: version_id.clone(),
+                last_activity: now_ms(),
+                speed: 0,
+                completed: 0,
+                failed: 0,
+                queued: total,
+                concurrent_downloads: 1,
+                failed_files: Vec::new(),
+                active_downloads: Vec::new(),
+                launch_result: None,
+            });
+        }
+    }
 
-    // 2. 逐个下载
-    for (i, file) in missing_files.iter().enumerate() {
-        let progress = (i as u32 * 100) / total as u32;
-        let _ = app.emit(
-            "launch-download-progress",
-            json!({
-                "status": "downloading",
-                "progress": progress,
-                "message": format!("下载文件 ({}/{}): {}", i + 1, total, file.name),
-                "currentFile": file.name,
-                "completed": completed,
-                "failed": failed,
-                "total": total
-            }),
-        );
+    // 3. 立即返回，不等待下载完成（解决 HTTP 超时问题，对齐 electron）
+    let missing_count = missing_files.len() as u32;
+    let response = ApiResult::ok(json!({
+        "success": true,
+        "sessionId": dl_session_id,
+        "missingCount": missing_count
+    }));
 
-        // 创建父目录
-        let dest = std::path::PathBuf::from(&file.path);
-        if let Some(parent) = dest.parent() {
-            if !parent.exists() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("[launch/download-deps] 创建目录失败 {}: {}", parent.display(), e);
+    // 4. spawn 后台任务跑下载（进度写入 session map，并推送事件）
+    let app_cloned = app.clone();
+    let sid = dl_session_id.clone();
+    let configured_source = utils::get_str(&settings, "downloadSource");
+    let download_source: String = if configured_source.is_empty() {
+        "china-first".into()
+    } else {
+        configured_source
+    };
+
+    tauri::async_runtime::spawn(async move {
+        let total = missing_files.len() as u32;
+        let mut completed: u32 = 0;
+        let mut failed: u32 = 0;
+        let mut failed_files: Vec<String> = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+
+        eprintln!("[launch/download-deps] 后台开始下载 {} 个缺失文件 (session={})", total, sid);
+
+        for (i, file) in missing_files.iter().enumerate() {
+            // 更新会话状态
+            {
+                let mut s = sessions();
+                if let Some(sess) = s.get_mut(&sid) {
+                    let progress = (i as u32 * 100) / total.max(1);
+                    sess.status = "downloading".into();
+                    sess.progress = progress;
+                    sess.message = format!("下载文件 ({}/{}): {}", i + 1, total, file.name);
+                    sess.current_file = file.name.clone();
+                    sess.completed_files = completed;
+                    sess.completed = completed;
+                    sess.failed = failed;
+                    sess.queued = total - i as u32;
+                    sess.concurrent_downloads = 1;
+                    sess.active_downloads = vec![file.name.clone()];
+                    sess.failed_files = failed_files.clone();
+                    sess.last_activity = now_ms();
+                }
+            }
+            let progress = (i as u32 * 100) / total.max(1);
+            let _ = app_cloned.emit(
+                "launch-download-progress",
+                json!({
+                    "sessionId": sid,
+                    "status": "downloading",
+                    "progress": progress,
+                    "message": format!("下载文件 ({}/{}): {}", i + 1, total, file.name),
+                    "currentFile": file.name,
+                    "completed": completed,
+                    "failed": failed,
+                    "total": total
+                }),
+            );
+
+            // 创建父目录
+            let dest = std::path::PathBuf::from(&file.path);
+            if let Some(parent) = dest.parent() {
+                if !parent.exists() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        eprintln!("[launch/download-deps] 创建目录失败 {}: {}", parent.display(), e);
+                        errors.push(format!("创建目录失败: {}", e));
+                        failed += 1;
+                        failed_files.push(file.name.clone());
+                        continue;
+                    }
+                }
+            }
+
+            // 跳过 java 类型（用户自行安装）
+            if file.kind == "java" {
+                eprintln!("[launch/download-deps] 跳过 Java 依赖: {}", file.name);
+                continue;
+            }
+
+            // 调用统一下载器（用户选择的镜像源，默认 china-first 走国内 BMCLAPI）
+            let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.as_str()) };
+            let size = if file.size > 0 { Some(file.size) } else { None };
+            match crate::download::download_with_mirror(
+                &file.url,
+                &dest,
+                sha1,
+                size,
+                &download_source,
+                120,
+                None,
+            ).await {
+                Ok(()) => {
+                    completed += 1;
+                    eprintln!("[launch/download-deps] 下载成功: {}", file.name);
+                }
+                Err(e) => {
                     failed += 1;
                     failed_files.push(file.name.clone());
-                    continue;
+                    errors.push(format!("{}: {}", file.name, e));
+                    eprintln!("[launch/download-deps] 下载失败 {}: {}", file.name, e);
                 }
             }
         }
 
-        // 跳过 java 类型（由用户自行安装）
-        if file.kind == "java" {
-            eprintln!("[launch/download-deps] 跳过 Java 依赖: {}", file.name);
-            continue;
-        }
-
-        // 调用统一下载器
-        let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.as_str()) };
-        let size = if file.size > 0 { Some(file.size) } else { None };
-        // 使用用户配置的下载源（默认 china-first），而非硬编码 mojang。
-        // Mojang 官方库/资源服务器在国内直连极慢甚至超时，若不挂镜像会导致补全失败。
-        let configured_source = utils::get_str(&settings, "downloadSource");
-        let download_source = if configured_source.is_empty() {
-            "china-first"
-        } else {
-            configured_source.as_str()
-        };
-
-        match crate::download::download_with_mirror(
-            &file.url,
-            &dest,
-            sha1,
-            size,
-            download_source,
-            120,
-            None,
-        ).await {
-            Ok(()) => {
-                completed += 1;
-                eprintln!("[launch/download-deps] 下载成功: {}", file.name);
-            }
-            Err(e) => {
-                failed += 1;
-                failed_files.push(file.name.clone());
-                eprintln!("[launch/download-deps] 下载失败 {}: {}", file.name, e);
+        // 完成：写入 session
+        let final_status: &str = if failed > 0 && completed == 0 { "failed" } else { "completed" };
+        {
+            let mut s = sessions();
+            if let Some(sess) = s.get_mut(&sid) {
+                sess.status = final_status.into();
+                sess.progress = 100;
+                sess.message = format!("下载完成: {} 个成功, {} 个失败", completed, failed);
+                sess.completed_files = completed;
+                sess.completed = completed;
+                sess.failed = failed;
+                sess.queued = 0;
+                sess.concurrent_downloads = 0;
+                sess.failed_files = failed_files.clone();
+                sess.errors = errors;
+                sess.active_downloads = Vec::new();
+                sess.current_file = String::new();
+                sess.last_activity = now_ms();
             }
         }
-    }
 
-    // 3. 推送完成事件
-    let _ = app.emit(
-        "launch-download-progress",
-        json!({
-            "status": if failed > 0 && completed == 0 { "failed" } else { "completed" },
-            "progress": 100,
-            "message": format!("下载完成: {} 个成功, {} 个失败", completed, failed),
-            "completed": completed,
-            "failed": failed,
-            "total": total,
-            "failedFiles": failed_files
-        }),
-    );
+        let _ = app_cloned.emit(
+            "launch-download-progress",
+            json!({
+                "sessionId": sid,
+                "status": final_status,
+                "progress": 100,
+                "message": format!("下载完成: {} 个成功, {} 个失败", completed, failed),
+                "completed": completed,
+                "failed": failed,
+                "total": total,
+                "failedFiles": failed_files
+            }),
+        );
 
-    eprintln!(
-        "[launch/download-deps] 完成: 成功 {} / 失败 {} / 总 {}",
-        completed, failed, total
-    );
+        // 刷新 dep-check 缓存（java 版没迁移但留占位）
+        eprintln!("[launch/download-deps] 完成: 成功 {} / 失败 {} / 总 {}", completed, failed, total);
+    });
 
-    ApiResult::ok(json!({
-        "success": failed == 0,
-        "completed": completed,
-        "failed": failed,
-        "failedFiles": failed_files
-    }))
+    response
 }

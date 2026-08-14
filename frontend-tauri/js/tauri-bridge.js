@@ -136,7 +136,8 @@
     windowMinimize: function () { invoke('window_minimize'); },
     windowRestore: function () { invoke('window_restore'); },
     showWindowEarly: function () {
-      // Tauri 中窗口构建时即显示，无需额外操作
+      // 窗口默认隐藏（visible:false），splash 首屏渲染后调用此命令显示，避免启动黑屏闪一下
+      invoke('window_show').catch(function () {});
     },
     openDevtools: function () { invoke('open_devtools'); }
   };
