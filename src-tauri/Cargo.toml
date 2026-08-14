@@ -1,6 +1,6 @@
 [package]
 name = "verse-tauri"
-version = "0.1.0"
+version = "0.2.0"
 description = "VersePC Tauri 框架替换项目"
 edition = "2024"
 # 通过 rust-version 说明需要较新的编译器；let-chains 语法在 2024 edition 下可用
@@ -37,6 +37,7 @@ zip = "2"
 urlencoding = "2"
 if-addrs = "0.13"
 flate2 = "1"
+http = "1"
 tokio-tungstenite = { version = "0.21", features = ["rustls"] }
 
 # theseus 整合包下载生态依赖
