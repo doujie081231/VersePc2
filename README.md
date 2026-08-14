@@ -62,23 +62,11 @@
 - 自定义头像、皮肤展示
 - WebView2 环境自动检测
 
-## 技术栈
-
-| 层 | 技术 |
-|----|------|
-| 桌面框架 | [Tauri 2](https://tauri.app/) |
-| 后端语言 | Rust（tokio 异步运行时） |
-| 前端 | HTML / CSS / JavaScript + Vue 3（CDN 引入） |
-| HTTP 客户端 | reqwest（rustls TLS） |
-| 加密 | AES-CBC、SHA-1、SHA-256、MD5 |
-| 压缩 | zip、flate2、async_zip |
-| 联机 | tokio-tungstenite（WebSocket）、UPnP、EasyTier / Terracotta |
-| 系统信息 | sysinfo |
 
 ## 目录结构
 
 ```
-verse框架替换项目/
+verse
 ├── frontend/            # 前端源码（HTML / CSS / JS）
 │   ├── index.html       # 主页面
 │   ├── css/             # 样式（按功能拆分）
