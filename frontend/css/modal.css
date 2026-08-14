@@ -97,6 +97,11 @@
     opacity: 1;
 }
 
+/* 支持弹窗：层级高于全屏启动遮罩层(10000)，确保启动后始终可点击 */
+#support-modal.modal-visible {
+    z-index: 10001;
+}
+
 /* Content focus outline */
 .modal-content:focus {
     outline: none;
@@ -317,21 +322,14 @@
 /* Loading spinner */
 
 @keyframes modal-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
 }
 
 .modal-spinner {
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    border-top-color: var(--primary);
-    animation: modal-spin 0.6s linear infinite;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-block;
+    color: var(--primary);
 }
 
 /* Exit animation */

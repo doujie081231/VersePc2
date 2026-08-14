@@ -445,3 +445,15 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
         _ => None,
     }
 }
+
+/// 读取指定文件的原始字节（返回 ArrayBuffer）
+/// 用于壁纸等本地图片加载：Tauri 的 WebView 无法直接加载本地文件路径，
+/// 前端读取字节后转 blob URL 即可显示。
+#[tauri::command]
+pub async fn read_file_buffer(_app: tauri::AppHandle, path: String) -> Result<Vec<u8>, String> {
+    let path_buf = std::path::Path::new(&path);
+    if !path_buf.is_file() {
+        return Err("文件不存在".to_string());
+    }
+    std::fs::read(&path).map_err(|e| e.to_string())
+}

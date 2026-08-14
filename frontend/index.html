@@ -39,7 +39,7 @@
   - install-modal     版本安装模态框
   - mod-detail-modal  模组详情模态框
   ========================================================================== -->
-<html lang="zh-CN" data-theme="light" data-no-glass>
+<html lang="zh-CN" data-theme="light" data-no-glass data-liquid-glass>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -71,6 +71,16 @@
   <link rel="icon" type="image/x-icon" href="img/icon.ico">
 </head>
 <body>
+  <!-- SVG 液态玻璃折射滤镜（苹果 Liquid Glass 效果）：让透过玻璃的背景内容产生有机折射弯曲 -->
+  <svg width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <defs>
+      <filter id="liquid-lens" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.003 0.007" numOctaves="1" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
+
   <!-- SVG 图标定义 -->
   <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
     <!-- 主页 - 房子 -->
@@ -208,36 +218,33 @@
   <canvas id="wallpaper-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;"></canvas>
   <canvas id="wallpaper-canvas-gl" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;display:none;"></canvas>
   <div id="wallpaper-overlay" style="position:fixed;inset:0;z-index:1;pointer-events:none;"></div>
+  <!-- 浮动窗口控制栏：最顶层，不占空间，右上角 -->
+  <div class="floating-window-bar">
+    <div class="floating-window-controls" id="window-controls" style="display:none">
+      <button class="win-btn win-btn-minimize" id="win-btn-minimize" title="最小化">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
+      </button>
+      <button class="win-btn win-btn-maximize" id="win-btn-maximize" title="最大化">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+      </button>
+      <button class="win-btn win-btn-restore" id="win-btn-restore" title="还原" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="3" y="0" width="9" height="9" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="0" y="3" width="9" height="9" stroke="currentColor" stroke-width="1.2" fill="var(--bg-secondary)"/></svg>
+      </button>
+      <button class="win-btn win-btn-close" id="win-btn-close" title="关闭">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 浮动侧边栏展开按钮：圆形，固定在内容区左上角 -->
+  <button class="sidebar-toggle-fab" id="sidebar-toggle-btn" title="展开/收起侧边栏">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+
   <!-- 应用主容器 -->
   <div id="app" style="position:relative;z-index:2;">
-    <!-- 标题栏 -->
-    <div class="title-bar">
-      <div class="title-bar-left">
-        <img src="img/icon.svg" alt="VersePC2" class="title-bar-icon">
-        <span class="title-bar-text">VersePC2</span>
-      </div>
-      <div class="title-bar-right">
-        <span id="status-indicator" class="status-dot"></span>
-        <span id="status-text" class="status-text">就绪</span>
-        <div class="window-controls" id="window-controls" style="display:none">
-          <button class="win-btn win-btn-minimize" id="win-btn-minimize" title="最小化">
-            <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
-          </button>
-          <button class="win-btn win-btn-maximize" id="win-btn-maximize" title="最大化">
-            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
-          </button>
-          <button class="win-btn win-btn-restore" id="win-btn-restore" title="还原" style="display:none">
-            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="3" y="0" width="9" height="9" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="0" y="3" width="9" height="9" stroke="currentColor" stroke-width="1.2" fill="var(--bg-secondary)"/></svg>
-          </button>
-          <button class="win-btn win-btn-close" id="win-btn-close" title="关闭">
-            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- 主容器 -->
-    <div class="main-container">
+    <div class="main-container no-titlebar">
       <!-- 侧边导航栏 -->
       <nav class="sidebar">
         <div class="sidebar-nav">
@@ -291,6 +298,9 @@
               <button class="nav-sub-btn" data-page="lan-portmap">
                 红石联机
               </button>
+              <button class="nav-sub-btn" data-page="private-server">
+                一起玩
+              </button>
             </div>
           </div>
           <button class="nav-btn" data-page="toolbox" title="工具箱">
@@ -327,16 +337,6 @@
             <span class="nav-btn-experimental-badge">实验</span>
             <svg class="nav-icon-svg"><use href="#icon-explore"/></svg>
             <span>实验性</span>
-          </button>
-          <button class="nav-btn nav-btn-experimental" data-page="private-server" title="一起玩">
-            <span class="nav-btn-experimental-badge">实验</span>
-            <svg class="nav-icon-svg"><use href="#icon-server"/></svg>
-            <span>一起玩</span>
-          </button>
-          <button class="nav-btn nav-btn-experimental" data-page="server-host" title="开服">
-            <span class="nav-btn-experimental-badge">实验</span>
-            <svg class="nav-icon-svg"><use href="#icon-server-host"/></svg>
-            <span>开服</span>
           </button>
         </div>
         <div class="sidebar-footer">
@@ -406,14 +406,19 @@
 
         <div id="page-explore" class="page">
           <!-- Vue 渐进式改造：内容由 PageExplore 组件渲染 -->
+          <div id="explore-mask" class="explore-mask">
+            <div class="explore-mask-card">
+              <div class="explore-mask-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"/></svg>
+              </div>
+              <h3>本地一键开服功能正在重新调整</h3>
+              <p>请期待后续更新</p>
+            </div>
+          </div>
         </div>
 
         <div id="page-private-server" class="page">
-          <!-- 私人服务器页面（开发中） -->
-        </div>
-
-        <div id="page-server-host" class="page">
-          <!-- 开服页面（实验性） -->
+          <!-- 私人服务器页面（一起玩，已归入联机子菜单） -->
         </div>
 
         <div id="page-toolbox" class="page">
@@ -431,7 +436,7 @@
           </button>
           <div class="launch-splash-content">
             <div id="launch-splash-logo" class="launch-splash-logo">
-              <img src="img/icon.svg" alt="VersePC2" width="80" height="80"/>
+              <div class="spinner" style="width:120px;height:120px;color:var(--accent,#4a9eff)" role="status"></div>
             </div>
             <div class="launch-splash-progress-container">
               <div id="launch-splash-track" class="launch-splash-track">
@@ -507,7 +512,7 @@
         <div id="update-modal" class="modal" style="display:none">
           <div class="modal-content announcement-modal-content" style="max-width:520px;">
             <div class="modal-header">
-              <h3>发现新版本</h3>
+              <h3 id="update-modal-title">发现新版本</h3>
               <button class="modal-close" onclick="dismissUpdateModal()">&times;</button>
             </div>
             <div class="modal-body announcement-modal-body">
@@ -517,8 +522,9 @@
               </div>
             </div>
             <div class="modal-footer announcement-modal-footer" style="justify-content:flex-end;gap:10px;">
-              <button class="modal-btn modal-btn--primary" onclick="gotoUpdateSettings()">前往更新</button>
-              <button class="modal-btn modal-btn--secondary" onclick="downloadFromQuark()">夸克网盘更新</button>
+              <button class="modal-btn modal-btn--primary" id="update-modal-goto-btn" onclick="gotoUpdateSettings()">前往更新</button>
+              <button class="modal-btn modal-btn--secondary" id="update-modal-quark-btn" onclick="downloadFromQuark()">夸克网盘更新</button>
+              <button class="modal-btn modal-btn--primary" id="update-modal-acknowledge-btn" onclick="dismissUpdateModal()" style="display:none;">我已知晓</button>
             </div>
           </div>
         </div>
@@ -611,6 +617,7 @@
   <script src="js/utils.js" defer></script>
   <script src="js/api.js" defer></script>
   <script src="js/wallpaper-engine.js" defer></script>
+  <script src="js/rose-loader.js" defer></script>
 
   <!-- 页面交互逻辑层（js/app/）：响应点击、调 API、操作 DOM -->
   <script src="js/app/lan.js" defer></script>
@@ -711,7 +718,6 @@
         ['PageLanPortmap', '#page-lan-portmap'],
         ['PageExplore', '#page-explore'],
         ['PagePrivateServer', '#page-private-server'],
-        ['PageServerHost', '#page-server-host'],
         ['PageToolbox', '#page-toolbox'],
         ['PageAccounts', '#page-accounts'],
         ['PageSettingsLaunch', '#page-settings-launch'],

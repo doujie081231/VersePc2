@@ -10,6 +10,20 @@ const PageSettingsOther = {
             <h2>其他设置</h2>
           </div>
           <div class="settings-container">
+            <div class="card">
+              <h3>V 岛</h3>
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="vIsland">
+                  <span>启用 V 岛</span>
+                </label>
+                <span class="form-hint">开启后下载任务以顶部灵动岛形式展示</span>
+              </div>
+              <div class="form-group">
+                <p class="form-hint" style="margin-bottom:12px">首次开启 V 岛时显示引导页，也可手动重新播放</p>
+                <button class="btn btn-ghost btn-sm" id="v-island-replay-onboarding">重新播放引导</button>
+              </div>
+            </div>
             <details class="card sponsor-card" id="sponsor-card" style="position:relative;">
               <summary class="sponsor-header" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;">
                 <svg class="chevron-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 12 15 18 9"/></svg>

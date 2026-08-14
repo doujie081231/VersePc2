@@ -93,6 +93,24 @@ function setupWindowControls() {
   }
   if (windowControls && !isMac) windowControls.style.display = 'flex';
 
+  // 侧边栏展开/收起按钮
+  const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+  if (sidebarToggleBtn) {
+    sidebarToggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('sidebar-collapsed');
+      const collapsed = document.body.classList.contains('sidebar-collapsed');
+      try { localStorage.setItem('versepc_sidebar_collapsed', collapsed ? '1' : '0'); } catch(e) {}
+      // 触发 resize，让 Vue 组件（网格、卡片等依赖宽度的布局）随内容区宽度重新适配
+      window.dispatchEvent(new Event('resize'));
+    });
+    // 恢复上次的收起状态
+    try {
+      if (localStorage.getItem('versepc_sidebar_collapsed') === '1') {
+        document.body.classList.add('sidebar-collapsed');
+      }
+    } catch(e) {}
+  }
+
   const winBtnMinimize = document.getElementById('win-btn-minimize');
   if (winBtnMinimize) winBtnMinimize.addEventListener('click', () => {
     window.electronAPI.minimize();
@@ -259,4 +277,11 @@ function switchPage(pageName) {
   }
 
   previousPage = currentPage?.id?.replace('page-', '') || null;
+
+  // 切到账户页后，等页面动画/hidden→visible 完成、尺寸稳定，再把轮播轨道定位到中间，
+  // 避免首次进入时卡片闪到最左边
+  if (pageName === 'accounts' && typeof resetCarouselPosition === 'function') {
+    setTimeout(() => resetCarouselPosition(), 450);
+    setTimeout(() => resetCarouselPosition(), 900);
+  }
 }

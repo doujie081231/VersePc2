@@ -165,9 +165,9 @@
       }).then(function (result) {
         // 转换为前端期望的格式：兼容 { canceled, filePaths } 和 { cancelled, path } 两种格式
         if (result && result.cancelled === false && result.path) {
-          return { canceled: false, filePaths: [result.path], path: result.path };
+          return { canceled: false, cancelled: false, filePaths: [result.path], path: result.path };
         }
-        return { canceled: true, filePaths: [], path: undefined };
+        return { canceled: true, cancelled: true, filePaths: [], path: undefined };
       });
     },
     // 选择文件夹
@@ -179,9 +179,9 @@
       }).then(function (result) {
         // 兼容 { canceled, filePaths } 和 { cancelled, path } 两种格式
         if (result && result.cancelled === false && result.path) {
-          return { canceled: false, filePaths: [result.path], path: result.path };
+          return { canceled: false, cancelled: false, filePaths: [result.path], path: result.path };
         }
-        return { canceled: true, filePaths: [], path: undefined };
+        return { canceled: true, cancelled: true, filePaths: [], path: undefined };
       });
     },
     // 选择保存文件夹（前端 api.js 中 selectSaveFolder 使用）
@@ -289,15 +289,8 @@
       return file ? (file.path || file.name || '') : '';
     },
     readFileBuffer: function (filePath) {
-      // 通过 api_proxy 读取文件
-      return invoke('api_proxy', {
-        method: 'GET',
-        path: '/api/filesystem/read-file',
-        params: { path: filePath },
-        body: null
-      }).then(function (result) {
-        return result && result.body;
-      });
+      // 读取本地文件原始字节（返回 ArrayBuffer），前端转 blob URL 即可显示
+      return invoke('read_file_buffer', { path: filePath });
     },
     getAuroraVideoPath: function () {
       // 极光视频壁纸 — Tauri 暂不支持，回退
@@ -315,33 +308,48 @@
       });
     },
     checkForUpdates: function () {
-      console.log('[tauri-bridge] updater.checkForUpdates stub');
-      return Promise.resolve({ status: 'not-available' });
+      return invoke('updater_check_for_updates').catch(function (e) {
+        console.warn('[tauri-bridge] updater.checkForUpdates error:', e);
+        return { status: 'not-available', error: String(e) };
+      });
     },
     downloadUpdate: function () {
-      console.log('[tauri-bridge] updater.downloadUpdate stub');
-      return Promise.resolve();
+      return invoke('updater_download_update').catch(function (e) {
+        console.warn('[tauri-bridge] updater.downloadUpdate error:', e);
+        return { success: false, error: String(e) };
+      });
     },
     installUpdate: function () {
-      console.log('[tauri-bridge] updater.installUpdate stub');
-      return Promise.resolve();
+      return invoke('updater_install_update').catch(function (e) {
+        console.warn('[tauri-bridge] updater.installUpdate error:', e);
+        return { success: false, error: String(e) };
+      });
     },
     skipVersion: function (version) {
-      console.log('[tauri-bridge] updater.skipVersion stub:', version);
-      return Promise.resolve();
+      return invoke('updater_skip_version', { version: version }).catch(function (e) {
+        console.warn('[tauri-bridge] updater.skipVersion error:', e);
+        return {};
+      });
     },
     openReleasePage: function () {
-      console.log('[tauri-bridge] updater.openReleasePage stub');
-      return Promise.resolve();
+      return invoke('updater_open_release_page').catch(function () {});
+    },
+    getPendingNotice: function () {
+      // 自更新重启后的一次性"已更新"提示
+      return invoke('updater_get_pending_notice').catch(function () {
+        return null;
+      });
     },
     onStatusChanged: function (callback) {
-      // 更新器状态监听 stub：不触发任何状态，只保留接口
-      console.log('[tauri-bridge] updater.onStatusChanged stub (no-op)');
-      // 返回一个空函数作为取消监听器
-      return function () {};
+      // 订阅 Rust 端 updater:status 事件，payload 为 { channel, data }
+      return onTauriEvent('updater:status', function (payload) {
+        if (payload && typeof payload === 'object' && payload.channel) {
+          callback({ channel: payload.channel, data: payload.data || {} });
+        }
+      });
     },
     removeStatusListener: function () {
-      console.log('[tauri-bridge] updater.removeStatusListener stub');
+      // 由 onStatusChanged 返回的取消函数管理
     }
   };
 
@@ -387,7 +395,8 @@
     update: function (server) { return invoke('private_server_update', { server: server }); },
     delete: function (id) { return invoke('private_server_delete', { id: id }); },
     check: function (address) { return invoke('private_server_check', { address: address }); },
-    copyAddress: function (address) { return invoke('private_server_copy_address', { address: address }); }
+    copyAddress: function (address) { return invoke('private_server_copy_address', { address: address }); },
+    getIcon: function (icon) { return invoke('private_server_icon', { icon: icon }); }
   };
 
   // ── 本地开服（11 个命令 + 2 个事件） ──
@@ -464,17 +473,6 @@
     start: function (params) { return invoke('redstone_start', { params: params }); },
     stop: function () { return invoke('redstone_stop'); },
     getStatus: function () { return invoke('redstone_status'); },
-    listPublicTunnels: function (params) {
-      params = params || {};
-      return invoke('redstone_public_tunnels', { serverAddress: params.serverAddress });
-    },
-    getTunnelMods: function (params) {
-      params = params || {};
-      return invoke('redstone_tunnel_mods', {
-        serverAddress: params.serverAddress,
-        tunnelId: params.tunnelId
-      });
-    },
     onLog: function (callback) {
       var unsub = onTauriEvent('redstone:log', callback, function (payload) {
         if (typeof payload === 'string') return payload;

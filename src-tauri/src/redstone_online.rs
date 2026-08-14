@@ -23,6 +23,7 @@ const HTTP_PORT: u16 = 3000;
 const TCP_PORT: u16 = 7000;
 const APIKEY_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const RECONNECT_MAX_ATTEMPTS: u32 = 5;
+const DEFAULT_MAX_PLAYERS: u64 = 8;
 
 // ============== 运行时状态 ==============
 
@@ -31,10 +32,7 @@ struct TunnelInfo {
     listen_port: u16,
     server_address: String,
     address: String,
-    title: String,
-    description: String,
-    public_access: bool,
-    allow_offline: bool,
+    max_players: u32,
 }
 
 struct RedstoneState {
@@ -229,30 +227,15 @@ async fn send_create_tunnel(
 async fn create_tunnel(
     server_address: &str,
     apikey: &str,
-    title: &str,
-    description: &str,
-    public_access: bool,
-    allow_offline: bool,
-) -> Result<(u16, u64), String> {
+    max_players: u32,
+) -> Result<(u16, String), String> {
     let url = format!(
-        "http://{}:{}/tunnels?publicAccess={}",
-        server_address,
-        HTTP_PORT,
-        if public_access { 1 } else { 0 }
+        "http://{}:{}/tunnels?maxPlayers={}",
+        server_address, HTTP_PORT, max_players
     );
     let client = http_client(10);
 
-    let body_opt = if public_access {
-        Some(json!({
-            "title": title.chars().take(8).collect::<String>(),
-            "description": description.chars().take(100).collect::<String>(),
-            "online": !allow_offline
-        }))
-    } else {
-        None
-    };
-
-    let resp = send_create_tunnel(&client, &url, apikey, &body_opt)
+    let resp = send_create_tunnel(&client, &url, apikey, &None)
         .await
         .map_err(|e| e.to_string())?;
     let status = resp.status().as_u16();
@@ -262,13 +245,17 @@ async fn create_tunnel(
             .get("listenPort")
             .and_then(|v| v.as_u64())
             .ok_or("missing listenPort")? as u16;
-        let tunnel_id = obj.get("tunnelId").and_then(|v| v.as_u64()).unwrap_or(0);
+        let tunnel_id = obj
+            .get("tunnelId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         return Ok((listen_port, tunnel_id));
     }
     // 429：已有隧道 → 先 DELETE 再重试一次
     if status == 429 {
         let _ = close_tunnel_api(server_address, apikey).await;
-        let resp2 = send_create_tunnel(&client, &url, apikey, &body_opt)
+        let resp2 = send_create_tunnel(&client, &url, apikey, &None)
             .await
             .map_err(|e| e.to_string())?;
         let status2 = resp2.status().as_u16();
@@ -278,7 +265,11 @@ async fn create_tunnel(
                 .get("listenPort")
                 .and_then(|v| v.as_u64())
                 .ok_or("missing listenPort")? as u16;
-            let tunnel_id = obj.get("tunnelId").and_then(|v| v.as_u64()).unwrap_or(0);
+            let tunnel_id = obj
+                .get("tunnelId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             return Ok((listen_port, tunnel_id));
         }
         let body = resp2.text().await.unwrap_or_default();
@@ -301,110 +292,6 @@ async fn close_tunnel_api(server_address: &str, apikey: &str) -> Result<(u16, St
     let status = resp.status().as_u16();
     let body = resp.text().await.unwrap_or_default();
     Ok((status, body))
-}
-
-// 拉取公开房间列表
-async fn list_public_tunnels(server_address: &str, offset: u32, apikey: &str) -> Result<Value, String> {
-    let client = http_client(8);
-    let mut last_err = String::new();
-
-    // 尝试 1: 不带 apikey，参数名 offset / from 都试一次
-    for param_name in &["offset", "from"] {
-        let url = format!(
-            "http://{}:{}/tunnels/list?{}={}",
-            server_address, HTTP_PORT, param_name, offset
-        );
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                if let Ok(obj) = resp.json::<Value>().await {
-                    write_debug(&format!("[listPublicTunnels] OK with ?{}={}", param_name, offset));
-                    return Ok(obj);
-                }
-            }
-            Ok(resp) => {
-                last_err = format!("list tunnels failed: {}", resp.status());
-                write_debug(&format!(
-                    "[listPublicTunnels] ?{}={} -> {}",
-                    param_name,
-                    offset,
-                    resp.status()
-                ));
-            }
-            Err(e) => {
-                last_err = format!("list tunnels error: {}", e);
-                write_debug(&format!("[listPublicTunnels] ?{}={} -> {}", param_name, offset, e));
-            }
-        }
-    }
-
-    // 尝试 2: 加 apikey 再试
-    let url = format!(
-        "http://{}:{}/tunnels/list?offset={}",
-        server_address, HTTP_PORT, offset
-    );
-    match client
-        .get(&url)
-        .header("Authorization", apikey)
-        .send()
-        .await
-    {
-        Ok(resp) if resp.status().is_success() => {
-            if let Ok(obj) = resp.json::<Value>().await {
-                write_debug("[listPublicTunnels] OK with apikey");
-                return Ok(obj);
-            }
-        }
-        Ok(resp) => {
-            write_debug(&format!("[listPublicTunnels] with apikey -> {}", resp.status()));
-        }
-        Err(e) => {
-            write_debug(&format!("[listPublicTunnels] with apikey -> {}", e));
-        }
-    }
-
-    Err(last_err)
-}
-
-// 获取单个公开房间的模组列表
-async fn get_tunnel_mods(server_address: &str, tunnel_id: u64, apikey: &str) -> Result<Value, String> {
-    let client = http_client(8);
-    let url = format!(
-        "http://{}:{}/tunnels/mods?id={}",
-        server_address, HTTP_PORT, tunnel_id
-    );
-
-    // 尝试无认证
-    match client.get(&url).send().await {
-        Ok(resp) if resp.status().is_success() => {
-            if let Ok(obj) = resp.json::<Value>().await {
-                return Ok(obj);
-            }
-        }
-        Ok(resp) if resp.status().as_u16() == 404 => {
-            return Ok(json!({ "mods": [] }));
-        }
-        _ => {}
-    }
-
-    // 尝试加 apikey
-    match client
-        .get(&url)
-        .header("Authorization", apikey)
-        .send()
-        .await
-    {
-        Ok(resp) if resp.status().is_success() => {
-            if let Ok(obj) = resp.json::<Value>().await {
-                return Ok(obj);
-            }
-        }
-        Ok(resp) if resp.status().as_u16() == 404 => {
-            return Ok(json!({ "mods": [] }));
-        }
-        _ => {}
-    }
-
-    Err("get tunnel mods failed".to_string())
 }
 
 // 查询当前用户已存在的隧道
@@ -879,25 +766,10 @@ async fn start_tunnel_inner(app: &AppHandle, params: Value, is_reconnect: bool) 
         .get("gamePort")
         .and_then(|v| v.as_u64())
         .unwrap_or(25565) as u16;
-    let title = params
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    let description = params
-        .get("description")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    let public_access = params.get("publicAccess").map(|v| v.as_bool().unwrap_or(true)).unwrap_or(
-        params.get("isOpen").map(|v| v.as_bool().unwrap_or(true)).unwrap_or(true)
-    );
-    let allow_offline = params
-        .get("allowOffline")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let max_players = params
+        .get("maxPlayers")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(DEFAULT_MAX_PLAYERS) as u32;
 
     if server_address.is_empty() {
         return json!({ "ok": false, "error": "未指定服务器节点" });
@@ -1025,17 +897,8 @@ async fn start_tunnel_inner(app: &AppHandle, params: Value, is_reconnect: bool) 
         }
     } else if first_line.starts_with("OK WAITING") {
         // 需要创建隧道
-        log(if public_access { "正在创建公开房间..." } else { "正在创建私人隧道..." });
-        match create_tunnel(
-            &server_address,
-            &apikey,
-            &title,
-            &description,
-            public_access,
-            allow_offline,
-        )
-        .await
-        {
+        log(&format!("正在创建隧道（最大 {} 人）...", max_players));
+        match create_tunnel(&server_address, &apikey, max_players).await {
             Ok((port, _tunnel_id)) => {
                 listen_port = port;
                 log(&format!("隧道已创建，端口: {}", listen_port));
@@ -1076,10 +939,7 @@ async fn start_tunnel_inner(app: &AppHandle, params: Value, is_reconnect: bool) 
         listen_port,
         server_address: server_address.clone(),
         address: format!("{}:{}", server_address, listen_port),
-        title: title.clone(),
-        description: description.clone(),
-        public_access,
-        allow_offline,
+        max_players,
     };
 
     // 保存状态
@@ -1355,101 +1215,11 @@ pub async fn redstone_status(_app: AppHandle) -> Value {
         "running": s.running,
         "address": s.tunnel.as_ref().map(|t| t.address.clone()),
         "listenPort": s.tunnel.as_ref().map(|t| t.listen_port),
-        "title": s.tunnel.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
-        "description": s.tunnel.as_ref().map(|t| t.description.clone()).unwrap_or_default(),
-        "publicAccess": s.tunnel.as_ref().map(|t| t.public_access).unwrap_or(true),
-        "allowOffline": s.tunnel.as_ref().map(|t| t.allow_offline).unwrap_or(false),
+        "maxPlayers": s.tunnel.as_ref().map(|t| t.max_players),
         "apikey": s.apikey,
         "servers": s.servers,
         "reconnecting": s.reconnecting,
         "reconnectAttempt": s.reconnect_attempts,
         "reconnectMaxAttempts": RECONNECT_MAX_ATTEMPTS,
     })
-}
-
-/// 拉取公开房间列表
-#[tauri::command(rename_all = "camelCase")]
-pub async fn redstone_public_tunnels(_app: AppHandle, server_address: String) -> Value {
-    if server_address.is_empty() {
-        let s = state().lock().await;
-        let fallback = s.servers.first().and_then(|v| v.get("address")).and_then(|v| v.as_str()).unwrap_or("").to_string();
-        if fallback.is_empty() {
-            return json!({ "ok": false, "error": "未指定服务器节点", "tunnels": [] });
-        }
-        drop(s);
-        // 递归调用拿不到，重新组织
-        let mut s = state().lock().await;
-        let apikey = if s.apikey.is_empty() {
-            match load_or_create_apikey().await {
-                Ok(k) => {
-                    s.apikey = k.clone();
-                    k
-                }
-                Err(e) => return json!({ "ok": false, "error": e, "tunnels": [] }),
-            }
-        } else {
-            s.apikey.clone()
-        };
-        drop(s);
-        match list_public_tunnels(&fallback, 0, &apikey).await {
-            Ok(data) => {
-                let tunnels = data.get("tunnels").cloned().unwrap_or(Value::Array(vec![]));
-                return json!({ "ok": true, "tunnels": tunnels, "serverAddress": fallback });
-            }
-            Err(e) => return json!({ "ok": false, "error": e, "tunnels": [] }),
-        }
-    }
-
-    let mut s = state().lock().await;
-    let apikey = if s.apikey.is_empty() {
-        match load_or_create_apikey().await {
-            Ok(k) => {
-                s.apikey = k.clone();
-                k
-            }
-            Err(e) => return json!({ "ok": false, "error": e, "tunnels": [] }),
-        }
-    } else {
-        s.apikey.clone()
-    };
-    drop(s);
-
-    match list_public_tunnels(&server_address, 0, &apikey).await {
-        Ok(data) => {
-            let tunnels = data.get("tunnels").cloned().unwrap_or(Value::Array(vec![]));
-            json!({ "ok": true, "tunnels": tunnels, "serverAddress": server_address })
-        }
-        Err(e) => json!({ "ok": false, "error": e, "tunnels": [] }),
-    }
-}
-
-/// 获取单个公开房间的模组列表
-#[tauri::command(rename_all = "camelCase")]
-pub async fn redstone_tunnel_mods(_app: AppHandle, server_address: String, tunnel_id: String) -> Value {
-    if server_address.is_empty() {
-        return json!({ "ok": false, "error": "未指定服务器节点", "mods": [] });
-    }
-    let tunnel_id_u64 = tunnel_id.parse::<u64>().unwrap_or(0);
-
-    let mut s = state().lock().await;
-    let apikey = if s.apikey.is_empty() {
-        match load_or_create_apikey().await {
-            Ok(k) => {
-                s.apikey = k.clone();
-                k
-            }
-            Err(e) => return json!({ "ok": false, "error": e, "mods": [] }),
-        }
-    } else {
-        s.apikey.clone()
-    };
-    drop(s);
-
-    match get_tunnel_mods(&server_address, tunnel_id_u64, &apikey).await {
-        Ok(data) => {
-            let mods = data.get("mods").cloned().unwrap_or(Value::Array(vec![]));
-            json!({ "ok": true, "mods": mods, "serverAddress": server_address })
-        }
-        Err(e) => json!({ "ok": false, "error": e, "mods": [] }),
-    }
 }

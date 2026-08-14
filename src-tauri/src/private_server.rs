@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::AppHandle;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -532,4 +533,92 @@ pub fn private_server_copy_address(address: String) -> Value {
         },
         Err(e) => json!({ "ok": false, "error": e.to_string() }),
     }
+}
+
+// ============== 图标转 data URL ==============
+// 私人服务器图标可能是本地路径或网络 URL，Tauri 的 WebView 无法直接加载本地文件路径，
+// 这里统一读成 base64 data URL 返回给前端，保证图标能正常显示。
+
+fn mime_from_path(icon: &str) -> &'static str {
+    let lower = icon.to_lowercase();
+    if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else if lower.ends_with(".ico") {
+        "image/x-icon"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+fn mime_from_content(bytes: &[u8]) -> &'static str {
+    if bytes.len() >= 8 && &bytes[..8] == b"\x89PNG\r\n\x1a\n" {
+        "image/png"
+    } else if bytes.len() >= 3 && &bytes[..3] == b"\xff\xd8\xff" {
+        "image/jpeg"
+    } else if bytes.len() >= 6
+        && (&bytes[..6] == b"GIF87a" || &bytes[..6] == b"GIF89a")
+    {
+        "image/gif"
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else if bytes.len() >= 4 && &bytes[..4] == b"<svg" {
+        "image/svg+xml"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+/// 把图标（本地路径或网络 URL）转成 base64 data URL
+#[tauri::command]
+pub async fn private_server_icon(_app: AppHandle, icon: String) -> Value {
+    let icon = icon.trim().to_string();
+    if icon.is_empty() {
+        return json!({ "ok": false, "error": "图标地址为空", "dataUrl": "" });
+    }
+
+    // 1. 本地文件路径
+    let path = std::path::Path::new(&icon);
+    if path.exists() && path.is_file() {
+        if let Ok(bytes) = std::fs::read(&icon) {
+            if !bytes.is_empty() {
+                let mime = mime_from_path(&icon);
+                let b64 = BASE64.encode(&bytes);
+                return json!({ "ok": true, "dataUrl": format!("data:{};base64,{}", mime, b64) });
+            }
+        }
+    }
+
+    // 2. 网络 URL（http/https）
+    if icon.starts_with("http://") || icon.starts_with("https://") {
+        let client = match reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .user_agent("VersePC-Tauri/1.0")
+            .build()
+        {
+            Ok(c) => c,
+            Err(_) => return json!({ "ok": false, "error": "创建请求失败", "dataUrl": "" }),
+        };
+        match client.get(&icon).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(bytes) = resp.bytes().await {
+                    if !bytes.is_empty() {
+                        let mime = mime_from_content(&bytes);
+                        let b64 = BASE64.encode(&bytes);
+                        return json!({ "ok": true, "dataUrl": format!("data:{};base64,{}", mime, b64) });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    json!({ "ok": false, "error": "图标加载失败", "dataUrl": "" })
 }

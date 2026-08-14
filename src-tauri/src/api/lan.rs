@@ -370,10 +370,12 @@ fn handle_lan_port() -> ApiResult {
 /// GET /api/easytier/status — EasyTier 运行状态
 fn handle_et_status() -> ApiResult {
     let state = et_state::get_status();
+    let raw_state = et_state::get_raw_state().unwrap_or(Value::Null);
     ApiResult::ok(json!({
         "success": true,
         "installed": et_state::is_installed(),
-        "state": state,
+        "state": raw_state,
+        "stateIndex": et_state::get_state_index(),
         "running": state.get("running").and_then(|v| v.as_bool()).unwrap_or(false),
         "mode": state.get("mode").and_then(|v| v.as_str()).unwrap_or("idle"),
         "roomCode": state.get("roomCode").and_then(|v| v.as_str()).unwrap_or(""),
@@ -504,7 +506,7 @@ async fn handle_et_diagnose() -> ApiResult {
 async fn handle_et_peers() -> ApiResult {
     let status = et_state::get_status();
     let http_port = status
-        .get("gamePort")
+        .get("httpPort")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
 
@@ -520,7 +522,7 @@ async fn handle_et_peers() -> ApiResult {
 async fn handle_et_log() -> ApiResult {
     let status = et_state::get_status();
     let http_port = status
-        .get("gamePort")
+        .get("httpPort")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as u16;
 

@@ -1,4 +1,4 @@
-const SUPPORT_MILESTONES = [1, 3, 5, 10, 20, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 3000, 5000, 10000];
+const SUPPORT_MILESTONES = [1, 50, 100];
 
 function getLaunchCount() {
     try { return parseInt(localStorage.getItem('verse_launchCount') || '0', 10); }
@@ -19,7 +19,10 @@ function isSupportMilestone(c) { return SUPPORT_MILESTONES.indexOf(c) !== -1; }
 
 function checkSupportMilestone() {
     var c = getLaunchCount();
-    showSupportModal(c);
+    // 仅在启动次数命中里程碑（1 / 50 / 100）时弹出支持卡片，其余次数不弹
+    if (isSupportMilestone(c)) {
+        showSupportModal(c);
+    }
 }
 
 function showSupportModal(count) {
@@ -27,6 +30,13 @@ function showSupportModal(count) {
     setTimeout(function() {
         var countEl = document.getElementById('support-modal-count');
         var modalEl = document.getElementById('support-modal');
+        // 强制关闭全屏启动遮罩层（z-index 10000 > 弹窗 z-index 50），避免盖住支持卡片导致点不动
+        var launchOverlay = document.getElementById('game-launch-overlay');
+        if (launchOverlay) {
+            launchOverlay.style.transition = '';
+            launchOverlay.style.opacity = '1';
+            launchOverlay.style.display = 'none';
+        }
         if (countEl) countEl.textContent = count;
         if (modalEl) {
             modalEl.style.display = '';

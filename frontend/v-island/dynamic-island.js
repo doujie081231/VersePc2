@@ -1381,7 +1381,9 @@
                         return;
                     }
                     try {
-                        var blob = new Blob([res.data], { type: 'audio/mpeg' });
+                        // Tauri 返回的 Vec<u8> 会序列化为数字数组，需先转 Uint8Array 再构造 Blob
+                        var u8 = res.data instanceof Uint8Array ? res.data : new Uint8Array(res.data);
+                        var blob = new Blob([u8], { type: 'audio/mpeg' });
                         var url = URL.createObjectURL(blob);
                         var audio = new Audio(url);
                         self.audio = audio;

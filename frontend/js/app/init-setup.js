@@ -65,11 +65,8 @@ async function init() {
       }
       const cachedAvatarData = localStorage.getItem('cachedAvatarData');
       if (cachedAvatarData) {
-        const homeAvatar = document.getElementById('home-avatar');
         const launchAvatar = document.getElementById('launch-avatar');
-        if (homeAvatar) {
-          homeAvatar.innerHTML = '<img src="' + cachedAvatarData + '" class="account-avatar-img" width="64" height="64">';
-        }
+        // 仅更新启动栏小头像兜底；主页头像由 loadAccounts/_loadAvatarImg 异步加载真实皮肤头像
         if (launchAvatar) {
           launchAvatar.innerHTML = '<img src="' + cachedAvatarData + '" class="account-avatar-img">';
         }
@@ -406,9 +403,9 @@ function setupModBrowse() {
 }
 
 function setupAccountButtons() {
+  // 旧顶部按钮（兼容旧模板）
   const addMsBtn = document.getElementById('add-ms-account-btn');
-  if (!addMsBtn) return;
-  addMsBtn.addEventListener('click', startMsAuth);
+  if (addMsBtn) addMsBtn.addEventListener('click', startMsAuth);
   const addThirdPartyBtn = document.getElementById('add-thirdparty-account-btn');
   if (addThirdPartyBtn) addThirdPartyBtn.addEventListener('click', () => {
     showModal('thirdparty-account-modal');
@@ -416,6 +413,35 @@ function setupAccountButtons() {
   const addOfflineBtn = document.getElementById('add-offline-account-btn');
   if (addOfflineBtn) addOfflineBtn.addEventListener('click', () => {
     showModal('offline-account-modal');
+  });
+
+  // 新版：左侧虚线添加按钮 → 打开添加账号弹窗
+  const addCta = document.getElementById('add-account-cta');
+  if (addCta) addCta.addEventListener('click', () => showModal('add-account-modal'));
+  const closeAddModal = document.getElementById('close-add-account-modal');
+  if (closeAddModal) closeAddModal.addEventListener('click', () => {
+    const m = document.getElementById('add-account-modal');
+    if (m) m.style.display = 'none';
+  });
+
+  // 新版添加账号弹窗里的三卡片
+  const addA = document.getElementById('add-acct-ms');
+  if (addA) addA.addEventListener('click', () => {
+    const m = document.getElementById('add-account-modal');
+    if (m) m.style.display = 'none';
+    startMsAuth();
+  });
+  const addB = document.getElementById('add-acct-offline');
+  if (addB) addB.addEventListener('click', () => {
+    const m = document.getElementById('add-account-modal');
+    if (m) m.style.display = 'none';
+    showModal('offline-account-modal');
+  });
+  const addC = document.getElementById('add-acct-thirdparty');
+  if (addC) addC.addEventListener('click', () => {
+    const m = document.getElementById('add-account-modal');
+    if (m) m.style.display = 'none';
+    showModal('thirdparty-account-modal');
   });
   const createOfflineBtn = document.getElementById('create-offline-btn');
   if (createOfflineBtn) createOfflineBtn.addEventListener('click', async () => {

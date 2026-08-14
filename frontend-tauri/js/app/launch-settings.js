@@ -160,6 +160,46 @@ async function saveLaunchSettings() {
   }
 }
 
+// 计算当前"游戏窗口大小"下拉框的实际分辨率字符串
+function resolveWindowSizeValue() {
+  let windowSize = document.getElementById('window-size')?.value || 'default';
+  if (windowSize === 'default') return '854x480';
+  if (windowSize === 'custom') {
+    const w = document.getElementById('custom-width')?.value;
+    const h = document.getElementById('custom-height')?.value;
+    return (w && h) ? `${w}x${h}` : '1920x1080';
+  }
+  return windowSize;
+}
+
+// 修改"游戏窗口大小"时立即保存，避免用户忘记点"保存设置"导致分辨率不生效
+async function saveWindowSizeOnly() {
+  const windowSize = resolveWindowSizeValue();
+  try {
+    const saved = await window.electronAPI.store.get('versepc_launch_settings');
+    let ls = saved ? JSON.parse(saved) : {};
+    if (typeof ls !== 'object' || ls === null) ls = {};
+    ls.windowSize = windowSize;
+    await window.electronAPI.store.set('versepc_launch_settings', JSON.stringify(ls));
+  } catch (e) {
+    console.warn('[LaunchSettings] 自动保存窗口大小失败:', e);
+  }
+}
+
+// 事件委托：下拉框/自定义宽高变化即自动保存
+document.addEventListener('change', function (e) {
+  if (!e.target) return;
+  const id = e.target.id;
+  if (id === 'window-size') {
+    // 选择"自定义"时显示宽高输入框，否则隐藏
+    const customDiv = document.getElementById('custom-window-size');
+    if (customDiv) customDiv.style.display = e.target.value === 'custom' ? 'flex' : 'none';
+    saveWindowSizeOnly();
+  } else if (id === 'custom-width' || id === 'custom-height') {
+    saveWindowSizeOnly();
+  }
+});
+
 async function browseDataDir() {
   try {
     const current = document.getElementById('setting-data-dir').value;

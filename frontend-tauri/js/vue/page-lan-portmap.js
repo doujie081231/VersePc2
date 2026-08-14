@@ -54,44 +54,18 @@ const PageLanPortmap = {
               </button>
             </div>
 
-            <!-- 对外开放 -->
+            <!-- 最大人数 -->
             <div class="rs-form-row">
-              <div class="rs-switch-row" onclick="var s=document.getElementById('redstone-is-open'); s.checked=!s.checked; s.dispatchEvent(new Event('change'));">
+              <div class="rs-title-row" id="redstone-max-row">
                 <div class="rs-switch-label">
-                  <span>对外开放</span>
-                </div>
-                <div id="redstone-is-open-switch" class="toggle-switch active" onclick="event.stopPropagation(); var s=document.getElementById('redstone-is-open'); s.checked=!s.checked; s.dispatchEvent(new Event('change'));">
-                  <input type="checkbox" id="redstone-is-open" checked style="display:none" onchange="document.getElementById('redstone-is-open-switch').classList.toggle('active', this.checked)">
-                </div>
-              </div>
-              <div class="rs-form-desc">开启后，其他玩家可通过联机大厅搜索并加入你的房间；仅与朋友联机时建议关闭</div>
-            </div>
-
-            <!-- 房间标题 -->
-            <div class="rs-form-row">
-              <div class="rs-title-row" id="redstone-title-row">
-                <div class="rs-switch-label">
-                  <span>房间标题</span>
+                  <span>最大人数</span>
                 </div>
                 <div class="rs-title-input-wrap">
-                  <input type="text" id="redstone-room-title" maxlength="8" placeholder="输入标题" oninput="updateRedstoneTitleCount(this)" onfocus="document.getElementById('redstone-title-row').classList.add('focused')" onblur="document.getElementById('redstone-title-row').classList.remove('focused')">
-                  <span id="redstone-title-count" class="rs-title-count">0/8</span>
+                  <input type="number" id="redstone-max-players" min="0" max="99" value="8" style="width:90px">
+                  <span class="rs-title-count">人</span>
                 </div>
               </div>
-              <div class="rs-form-desc">为你的房间起个名字，最多 8 个字符，其他玩家会在联机大厅看到这个名字</div>
-            </div>
-
-            <!-- 允许离线账户 -->
-            <div class="rs-form-row">
-              <div class="rs-switch-row" onclick="var s=document.getElementById('redstone-allow-offline'); s.checked=!s.checked; s.dispatchEvent(new Event('change'));">
-                <div class="rs-switch-label">
-                  <span>允许离线账户</span>
-                </div>
-                <div id="redstone-allow-offline-switch" class="toggle-switch" onclick="event.stopPropagation(); var s=document.getElementById('redstone-allow-offline'); s.checked=!s.checked; s.dispatchEvent(new Event('change'));">
-                  <input type="checkbox" id="redstone-allow-offline" style="display:none" onchange="document.getElementById('redstone-allow-offline-switch').classList.toggle('active', this.checked)">
-                </div>
-              </div>
-              <div class="rs-form-desc">开启后，未购买正版的玩家也能进入房间；关闭则仅允许正版账户加入</div>
+              <div class="rs-form-desc">本次联机允许的最大玩家数；0 表示不限制</div>
             </div>
 
             <!-- 开启/关闭隧道按钮 -->

@@ -152,6 +152,15 @@ async fn handle_launch(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     // 应用版本级设置覆盖（customInfo、windowTitle、fullscreen、resolution、memory）
     apply_version_settings(&mut settings, &clean_id);
 
+    // 前端启动时直接传入的分辨率（如 "1920x1080" 或 "854x480"）优先，
+    // 确保用户当前在"启动设置"里选择的窗口大小一定生效，不依赖 store 往返。
+    let req_res = utils::get_str(&data, "resolution");
+    if !req_res.is_empty() {
+        if let Some(obj) = settings.as_object_mut() {
+            obj.insert("resolution".to_string(), json!(req_res));
+        }
+    }
+
     // 加载账号列表
     let accounts = storage::load_accounts();
     let accounts_arr = accounts.as_array().cloned().unwrap_or_default();
@@ -589,6 +598,12 @@ fn apply_launch_settings_overrides(settings: &mut Value) {
                 if let Some(window_title) = ls.get("windowTitle").and_then(|v| v.as_str()) {
                     if !window_title.is_empty() {
                         obj.insert("windowTitle".to_string(), json!(window_title));
+                    }
+                }
+                // 全局自定义 JVM 参数：前端存 key 为 jvmArgs，启动参数构建读取 javaArgs，需映射
+                if let Some(jvm_args) = ls.get("jvmArgs").and_then(|v| v.as_str()) {
+                    if !jvm_args.trim().is_empty() {
+                        obj.insert("javaArgs".to_string(), json!(jvm_args));
                     }
                 }
             }

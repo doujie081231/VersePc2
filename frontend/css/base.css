@@ -124,7 +124,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: none;
     -webkit-app-region: drag;
     flex-shrink: 0;
     animation: fadeDown 0.3s var(--ease-out-expo) both;
@@ -135,6 +135,29 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+/* 侧边栏展开/收起按钮（位于标题栏左上角） */
+.sidebar-toggle-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s var(--ease-out-expo), color 0.2s var(--ease-out-expo), transform 0.2s var(--ease-out-expo);
+    -webkit-app-region: no-drag;
+}
+.sidebar-toggle-btn:hover {
+    background: var(--hover-overlay);
+    color: var(--text-primary);
+}
+.sidebar-toggle-btn:active {
+    transform: scale(0.9);
 }
 
 /* macOS：为红绿灯按钮留出空间 */

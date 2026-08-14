@@ -551,11 +551,13 @@ class CustomImageRenderer {
             try {
                 if (window.electronAPI && window.electronAPI.readFileBuffer) {
                     const buffer = await window.electronAPI.readFileBuffer(filePath);
-                    if (buffer && buffer.byteLength > 0) {
+                    // Tauri 返回的 Vec<u8> 会序列化为数字数组，需先转成 Uint8Array 才能正确构造 Blob
+                    const u8 = buffer ? (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)) : null;
+                    if (u8 && u8.byteLength > 0) {
                         const ext = filePath.toLowerCase().split('.').pop();
-                        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
+                        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' };
                         const mime = mimeMap[ext] || 'image/png';
-                        const blob = new Blob([buffer], { type: mime });
+                        const blob = new Blob([u8], { type: mime });
                         imgUrl = URL.createObjectURL(blob);
                     }
                 }

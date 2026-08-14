@@ -2,6 +2,19 @@
  * @file launch.js
  * @description 游戏启动流程 - 检查依赖、显示启动模态框、处理进度
  */
+
+// 读取当前"游戏窗口大小"选择（DOM 优先，兜底默认），用于启动时强制传分辨率给后端
+function getCurrentWindowSize() {
+  let ws = document.getElementById('window-size')?.value || 'default';
+  if (ws === 'default') ws = '854x480';
+  else if (ws === 'custom') {
+    const w = document.getElementById('custom-width')?.value;
+    const h = document.getElementById('custom-height')?.value;
+    ws = (w && h) ? `${w}x${h}` : '1920x1080';
+  }
+  return ws;
+}
+
 async function handleLaunch() {
   if (window._versepc_launching) {
     if (typeof showToast === 'function') showToast('正在启动中，请稍候...', 'info');
@@ -174,7 +187,7 @@ async function handleLaunch() {
 
     setLaunchStep('launching', 'running', '正在启动 Minecraft...');
 
-    const result = await API.launchGame(versionId, {}, 300000);
+    const result = await API.launchGame(versionId, { resolution: getCurrentWindowSize() }, 300000);
 
     if (result.needDownload && result.sessionId) {
       pollLaunchDownload(result.sessionId, versionId, requiredJava);
@@ -188,10 +201,10 @@ async function handleLaunch() {
       document.getElementById('launch-log-section').style.display = '';
       launchBtn.classList.add('running');
       launchBtn.querySelector('span').textContent = '启动游戏';
-      document.getElementById('status-indicator').classList.add('running');
-      document.getElementById('status-text').textContent = '游戏运行中';
+      document.getElementById('status-indicator')?.classList.add('running');
+      const _st1 = document.getElementById('status-text'); if (_st1) _st1.textContent = '游戏运行中';
       startGameLogStream();
-      updateGameStatus();
+      refreshGameStatusAfterLaunch();
       incrementLaunchCount();
       checkSupportMilestone();
       _onGameRunning();
@@ -275,10 +288,10 @@ async function startLaunchDepDownload(versionId, sessionId) {
           showToast('游戏启动成功', 'success');
           launchBtn.classList.add('running');
           launchBtn.querySelector('span').textContent = '启动游戏';
-          document.getElementById('status-indicator').classList.add('running');
-          document.getElementById('status-text').textContent = '游戏运行中';
+          document.getElementById('status-indicator')?.classList.add('running');
+          const _st2 = document.getElementById('status-text'); if (_st2) _st2.textContent = '游戏运行中';
           startGameLogStream();
-          updateGameStatus();
+          refreshGameStatusAfterLaunch();
           incrementLaunchCount();
           checkSupportMilestone();
           _onGameRunning();
@@ -346,8 +359,8 @@ function pollLaunchDepProgress(sessionId, versionId) {
         const homeLaunchBtn = document.getElementById('home-launch-btn');
         launchBtn.classList.add('running');
         launchBtn.querySelector('span').textContent = '启动游戏';
-        document.getElementById('status-indicator').classList.add('running');
-        document.getElementById('status-text').textContent = '游戏运行中';
+        document.getElementById('status-indicator')?.classList.add('running');
+        const _st3 = document.getElementById('status-text'); if (_st3) _st3.textContent = '游戏运行中';
         startGameLogStream();
         incrementLaunchCount();
         checkSupportMilestone();
@@ -410,6 +423,17 @@ let _gameWasRunning = false;
 let _gameStatusErrorCount = 0;
 const MAX_STATUS_ERRORS = 5;
 
+// 启动成功后刷新运行状态：先乐观标记为运行中（让轮询保持 3 秒快节奏），
+// 再立即刷新一次，并延迟 1.5 秒重试，避免后端刚创建进程时状态尚未登记导致的竞态，
+// 确保主页「启动任务」卡片尽快出现。
+function refreshGameStatusAfterLaunch() {
+  _gameWasRunning = true;
+  try { updateGameStatus(); } catch (e) {}
+  setTimeout(function() {
+    try { updateGameStatus(); } catch (e) {}
+  }, 1500);
+}
+
 async function updateGameStatus() {
   try {
     const status = await API.getGameStatus();
@@ -418,26 +442,29 @@ async function updateGameStatus() {
     const launchBtn = document.getElementById('launch-btn');
 
     if (status.running) {
-      indicator.classList.add('running');
+      if (indicator) indicator.classList.add('running');
       const count = status.instances ? status.instances.length : 1;
-      if (count > 1) {
-        statusText.textContent = `${count} 个游戏运行中`;
-      } else {
-        statusText.textContent = '游戏运行中';
+      if (statusText) statusText.textContent = count > 1 ? `${count} 个游戏运行中` : '游戏运行中';
+      if (launchBtn) {
+        launchBtn.classList.add('running');
+        const sp = launchBtn.querySelector('span');
+        if (sp) sp.textContent = '启动游戏';
       }
-      launchBtn.classList.add('running');
-      launchBtn.querySelector('span').textContent = '启动游戏';
 
+      // 无论主页/启动栏元素是否存在，都必须写入运行实例，驱动主页"启动任务"卡片
       updateGameInstanceList(status.instances || []);
       _gameWasRunning = true;
     } else {
       // 用 DOM 状态判断（indicator 是否有 running 类），比 _gameWasRunning 变量更可靠
       // 场景：游戏启动成功后秒崩，_gameWasRunning 还没设为 true，但 indicator 已有 running 类
-      const wasRunning = indicator.classList.contains('running');
-      indicator.classList.remove('running');
-      statusText.textContent = '就绪';
-      launchBtn.classList.remove('running');
-      launchBtn.querySelector('span').textContent = '启动游戏';
+      const wasRunning = indicator ? indicator.classList.contains('running') : _gameWasRunning;
+      if (indicator) indicator.classList.remove('running');
+      if (statusText) statusText.textContent = '就绪';
+      if (launchBtn) {
+        launchBtn.classList.remove('running');
+        const sp = launchBtn.querySelector('span');
+        if (sp) sp.textContent = '启动游戏';
+      }
 
       updateGameInstanceList([]);
       _gameWasRunning = false;
@@ -923,10 +950,10 @@ async function pollLaunchDownload(sessionId, versionId, requiredJava) {
               const homeLaunchBtn = document.getElementById('home-launch-btn');
               launchBtn.classList.add('running');
               launchBtn.querySelector('span').textContent = '启动游戏';
-              document.getElementById('status-indicator').classList.add('running');
-              document.getElementById('status-text').textContent = '游戏运行中';
+              document.getElementById('status-indicator')?.classList.add('running');
+              const _st4 = document.getElementById('status-text'); if (_st4) _st4.textContent = '游戏运行中';
               startGameLogStream();
-              updateGameStatus();
+              refreshGameStatusAfterLaunch();
               incrementLaunchCount();
               checkSupportMilestone();
               _onGameRunning();
@@ -955,22 +982,22 @@ async function pollLaunchDownload(sessionId, versionId, requiredJava) {
 }
 
 function updateGameInstanceList(instances) {
-  let container = document.getElementById('game-instance-list');
-  if (!container) {
-    const sidebar = document.querySelector('.launch-bar') || document.querySelector('.sidebar');
-    if (!sidebar) return;
-    container = document.createElement('div');
-    container.id = 'game-instance-list';
-    container.style.cssText = 'position:fixed;bottom:60px;right:16px;z-index:1000;display:flex;flex-direction:column;gap:6px;max-width:280px;';
-    document.body.appendChild(container);
+  instances = instances || [];
+
+  // 写入共享响应式 store，由主页 Vue 卡片渲染（优先）
+  if (window.VersePCGameStore) {
+    window.VersePCGameStore.instances = instances;
+    window.VersePCGameStore.running = instances.length > 0;
   }
 
+  // 兼容旧的悬浮任务卡片（若存在则不重复渲染）
+  let container = document.getElementById('game-instance-list');
+  if (!container) return;
   if (instances.length === 0) {
     container.innerHTML = '';
     container.style.display = 'none';
     return;
   }
-
   container.style.display = 'flex';
   container.innerHTML = instances.map(inst => {
     const elapsed = Math.floor((Date.now() - inst.startTime) / 1000);
@@ -1048,6 +1075,8 @@ function _onGameExited() {
       window.electronAPI.windowRestore();
     }
   } catch (e) {}
+  // 刷新运行状态，让主页"启动任务"卡片及时消失
+  try { updateGameStatus(); } catch (e) {}
 }
 
 function startGameLogStream() {

@@ -20,6 +20,68 @@
             const el = document.getElementById('updater-version-info');
             if (el) el.textContent = '当前版本：未知';
         }
+
+        // 自更新重启后：读取一次性"已更新"提示并弹出"软件已更新"卡片
+        try {
+            if (api.updater.getPendingNotice) {
+                const notice = await api.updater.getPendingNotice();
+                if (notice && notice.version) {
+                    showUpdatedNotice(notice);
+                }
+            }
+        } catch (e) {}
+
+        // 启动时自动检查更新：检测到新版本时，后端会推送 update-available，
+        // 由 onStatusChanged 触发"发现新版本"卡片；已是最新则静默不打扰。
+        try {
+            if (api.updater.checkForUpdates) {
+                await api.updater.checkForUpdates();
+            }
+        } catch (e) {
+            console.warn('[updater-ui] 启动自动检查更新失败:', e);
+        }
+    }
+
+    // 显示"软件已更新至 xxx 版本"弹窗（自更新重启后触发）
+    function showUpdatedNotice(notice) {
+        const modal = document.getElementById('update-modal');
+        if (!modal) return;
+        const titleEl = document.getElementById('update-modal-title');
+        const verEl = document.getElementById('update-modal-version');
+        const contentEl = document.getElementById('update-modal-content');
+        const gotoBtn = document.getElementById('update-modal-goto-btn');
+        const quarkBtn = document.getElementById('update-modal-quark-btn');
+        const ackBtn = document.getElementById('update-modal-acknowledge-btn');
+        if (titleEl) titleEl.textContent = '更新完成';
+        if (verEl) verEl.textContent = '软件已更新至 v' + notice.version + ' 版本';
+        if (contentEl) {
+            const notes = notice.notes || '';
+            const render = () => {
+                contentEl.innerHTML = '<div class="update-status__title" style="margin-bottom:8px;">更新内容：</div>' +
+                    (typeof marked !== 'undefined' ? marked.parse(notes) : (notes ? notes.replace(/\n/g, '<br>') : '<p>详情请前往官网查看</p>'));
+            };
+            if (typeof marked === 'undefined') {
+                _lazyLoadScript('js/marked.min.js').then(render).catch(render);
+            } else {
+                render();
+            }
+        }
+        if (gotoBtn) gotoBtn.style.display = 'none';
+        if (quarkBtn) quarkBtn.style.display = 'none';
+        if (ackBtn) ackBtn.style.display = '';
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        modal.style.display = 'flex';
+        requestAnimationFrame(function () {
+            modal.classList.add('modal-visible');
+            modal.classList.remove('modal-exiting');
+        });
+        var onKeyDown = function (e) {
+            if (e.key === 'Escape') dismissUpdateModal();
+        };
+        modal.addEventListener('keydown', onKeyDown);
+        modal._escCleanup = function () { modal.removeEventListener('keydown', onKeyDown); };
     }
 
     function resetButtons() {
@@ -204,6 +266,15 @@
         if (!modal) return;
         const verEl = document.getElementById('update-modal-version');
         const contentEl = document.getElementById('update-modal-content');
+        const titleEl = document.getElementById('update-modal-title');
+        if (titleEl) titleEl.textContent = '发现新版本';
+        // 重置按钮：显示"前往更新/夸克网盘更新"，隐藏"我已知晓"
+        const gotoBtn = document.getElementById('update-modal-goto-btn');
+        const quarkBtn = document.getElementById('update-modal-quark-btn');
+        const ackBtn = document.getElementById('update-modal-acknowledge-btn');
+        if (gotoBtn) gotoBtn.style.display = '';
+        if (quarkBtn) quarkBtn.style.display = '';
+        if (ackBtn) ackBtn.style.display = 'none';
         if (verEl) verEl.textContent = 'v' + (data.currentVersion || '?.?.?') + ' → v' + data.version;
         if (contentEl && data.releaseNotes) {
             const renderNotes = () => {

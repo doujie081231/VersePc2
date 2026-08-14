@@ -97,6 +97,22 @@ async function copyPrivateServerAddress(address) {
   }
 }
 
+/** 图标加载失败时，通过后端把本地路径或网络 URL 转成 data URL 显示 */
+async function loadPrivateServerIcon(img, icon) {
+  img.onerror = null; // 防止加载失败后无限循环
+  if (!icon) { img.src = 'img/icon.svg'; return; }
+  try {
+    const r = await window.electronAPI.privateServer.getIcon(icon);
+    if (r && r.ok && r.dataUrl) {
+      img.src = r.dataUrl;
+      return;
+    }
+  } catch (e) {
+    console.error('[PrivateServer] load icon failed:', e);
+  }
+  img.src = 'img/icon.svg';
+}
+
 async function checkPrivateServerStatus(id) {
   const server = getPrivateServerById(id);
   if (!server) return;
@@ -339,7 +355,8 @@ function renderMyServersInner() {
   // 列表
   const cardsHtml = pageItems.map(server => {
     const iconSrc = server.icon ? escapeHtml(server.icon) : 'img/icon.svg';
-    const iconHtml = `<img src="${iconSrc}" alt="" class="ps-card-icon" onerror="this.onerror=null;this.src='img/icon.svg';">`;
+    const iconEsc = String(server.icon || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const iconHtml = `<img src="${iconSrc}" alt="" class="ps-card-icon" onerror="loadPrivateServerIcon(this,'${iconEsc}')">`;
     const modpackBtn = server.modpackUrl
       ? `<button class="btn btn-ghost btn-sm" onclick="window.open('${escapeHtml(server.modpackUrl)}', '_blank')">下载整合包</button>`
       : '';

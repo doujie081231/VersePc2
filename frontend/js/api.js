@@ -575,6 +575,7 @@ const API = {
         apiPost('/api/version/remove-folder', { path: folderPath }),
     listExternalFolders: () => apiGet('/api/version/list-folders'),
     selectExternalFolder: () => apiGet('/api/version/select-folder'),
+    autoDetectFolders: () => apiGet('/api/version/auto-detect-folders', {}, 120000),
 
     // === 整合包导出 ===
     exportModpack: (versionId, name, version, author, description, selectedKeys) =>

@@ -380,16 +380,6 @@ let _redstoneServers = [];
 let _redstoneRunning = false;
 let _redstoneServerIdx = 0;
 
-function updateRedstoneTitleCount(input) {
-    var c = input.value.length || 0;
-    var e = document.getElementById('redstone-title-count');
-    if (!e) return;
-    e.textContent = c + '/8';
-    e.classList.remove('warn', 'full');
-    if (c >= 8) e.classList.add('full');
-    else if (c >= 6) e.classList.add('warn');
-}
-
 /** 三级标签页切换 */
 function redstoneSwitchTab(tab) {
     // 切换 tab 按钮高亮
@@ -537,10 +527,8 @@ async function redstoneStart() {
         return;
     }
 
-    const titleInput = document.getElementById('redstone-room-title');
-    const title = (titleInput ? titleInput.value : '').trim().slice(0, 8);
-    const publicAccess = document.getElementById('redstone-is-open') ? document.getElementById('redstone-is-open').checked : true;
-    const allowOffline = document.getElementById('redstone-allow-offline') ? document.getElementById('redstone-allow-offline').checked : false;
+    const maxPlayersInput = document.getElementById('redstone-max-players');
+    const maxPlayers = maxPlayersInput ? maxPlayersInput.value : '';
 
     // 读取当前选中的游戏版本，作为房间描述上传到联机大厅
     let versionDesc = '';
@@ -578,12 +566,12 @@ async function redstoneStart() {
     updateRedstoneStatus('正在连接...', 'connecting');
     addRedstoneLog('选择服务器: ' + server.name + ' (' + server.address + ')');
     addRedstoneLog('带宽上限: 4 Mbps，约支持 5-8 人');
-    if (title) addRedstoneLog('房间标题: ' + title);
+    if (maxPlayers) addRedstoneLog('最大人数: ' + maxPlayers);
 
     try {
         const r = await window.electronAPI.redstoneOnline.start({
             serverAddress: server.address, gamePort: gamePort,
-            title: title, description: versionDesc, publicAccess: publicAccess, allowOffline: allowOffline,
+            maxPlayers: maxPlayers,
         });
         if (r && r.ok) {
             document.getElementById('redstone-connected-info').style.display = '';
@@ -703,24 +691,10 @@ async function redstoneInitPage() {
                 document.getElementById('redstone-room-addr').textContent = status.address;
                 updateRedstoneStatus('隧道已开启 | ' + status.address, 'connected');
             }
-            // 恢复房间设置显示
-            const titleInput = document.getElementById('redstone-room-title');
-            if (titleInput && status.title !== undefined) {
-                titleInput.value = status.title;
-                updateRedstoneTitleCount(titleInput);
-            }
-            const isOpenInput = document.getElementById('redstone-is-open');
-            const isOpenSwitch = document.getElementById('redstone-is-open-switch');
-            const isOpenValue = status.publicAccess !== undefined ? status.publicAccess : status.isOpen;
-            if (isOpenInput && isOpenValue !== undefined) {
-                isOpenInput.checked = isOpenValue;
-                if (isOpenSwitch) isOpenSwitch.classList.toggle('active', isOpenValue);
-            }
-            const allowOfflineInput = document.getElementById('redstone-allow-offline');
-            const allowOfflineSwitch = document.getElementById('redstone-allow-offline-switch');
-            if (allowOfflineInput && status.allowOffline !== undefined) {
-                allowOfflineInput.checked = status.allowOffline;
-                if (allowOfflineSwitch) allowOfflineSwitch.classList.toggle('active', status.allowOffline);
+            // 恢复最大人数显示
+            const maxPlayersInput = document.getElementById('redstone-max-players');
+            if (maxPlayersInput && status.maxPlayers !== undefined) {
+                maxPlayersInput.value = status.maxPlayers;
             }
         }
     } catch (e) {

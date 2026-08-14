@@ -1594,7 +1594,9 @@
     background: var(--bg-primary) !important;
 }
 
-[data-no-glass] .sidebar {
+/* 关闭毛玻璃：仅当液态玻璃也未开启时才将侧边栏退化为纯色，
+   液态玻璃（data-liquid-glass）是独立开关，二者同时开启时侧边栏保留玻璃效果 */
+html[data-no-glass]:not([data-liquid-glass]) .sidebar {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     background: var(--bg-primary) !important;
@@ -1724,64 +1726,128 @@
  * 特征：更通透鲜艳（高饱和 + 明亮）、细腻白光高光描边（模拟水晶折射）、柔和内高光。
  * 性能：只覆盖少量大元素，避免大量小元素叠加合成层；开启该模式时关闭动画循环。
  * ========================================================================== */
+/* 卡片 / 弹窗 / 提示的液态玻璃：通透底（低透明度让背景透出）+
+   背景折射弯曲（backdrop-filter 内联 url(#liquid-lens)）+ 细腻高光边缘，
+   模拟苹果 Liquid Glass：玻璃本身几乎透明，靠折射与描边体现质感 */
 [data-liquid-glass] .title-bar,
-[data-liquid-glass] .sidebar,
 [data-liquid-glass] .card,
 [data-liquid-glass] .stat-card,
 [data-liquid-glass] .home-hero,
 [data-liquid-glass] .modal-content,
 [data-liquid-glass] .toast {
     background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.16),
-        rgba(255, 255, 255, 0.05)
+        180deg,
+        rgba(255, 255, 255, 0.16) 0%,
+        rgba(240, 243, 249, 0.10) 100%
     );
-    backdrop-filter: blur(18px) saturate(1.8) brightness(1.05);
-    -webkit-backdrop-filter: blur(18px) saturate(1.8) brightness(1.05);
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    backdrop-filter: blur(10px) url(#liquid-lens) saturate(1.6) brightness(1.05);
+    -webkit-backdrop-filter: blur(10px) url(#liquid-lens) saturate(1.6) brightness(1.05);
+    border: 1px solid rgba(255, 255, 255, 0.5);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.35),
-        inset 0 -1px 1px rgba(255, 255, 255, 0.08),
-        0 8px 32px rgba(0, 0, 0, 0.12);
+        inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+        inset 1.8px 3px 0 -2px rgba(255, 255, 255, 0.85),
+        inset -2px -2px 0 -2px rgba(255, 255, 255, 0.6),
+        inset 0 -3px 4px 0 rgba(0, 0, 0, 0.06),
+        0 8px 24px rgba(0, 0, 0, 0.12);
     contain: paint;
 }
 
-/* 深色 / 壁纸深色基底下的液态玻璃：压暗透明底，保证文字可读 */
+/* 侧边栏专属液态玻璃：通透半透明底（背景透出）+ 背景折射弯曲 + 亮白边缘高光，
+   顶部斜向镜面反光由 ::before 叠加 */
+[data-liquid-glass] .sidebar {
+    position: relative;
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.20) 0%,
+        rgba(240, 243, 249, 0.12) 100%
+    );
+    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.8) brightness(1.06);
+    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.8) brightness(1.06);
+    border-right: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+        inset 1px 0 0 rgba(255, 255, 255, 0.35),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+        0 18px 40px rgba(0, 0, 0, 0.12),
+        12px 0 32px rgba(0, 0, 0, 0.08);
+}
+/* 玻璃表面镜面高光：斜向白光渐变，模拟苹果玻璃的高光质感（在冷灰蓝底上清晰可见） */
+[data-liquid-glass] .sidebar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(
+        155deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(255, 255, 255, 0.3) 28%,
+        rgba(255, 255, 255, 0) 55%
+    );
+}
+
+/* 深色 / 壁纸深色基底下的液态玻璃：半透明深色底（背景透出）+ 背景折射弯曲，
+   深色下比浅色略实以保证文字可读性 */
 [data-liquid-glass] #app.wp-light .sidebar,
+[data-liquid-glass] #app.wp-light .home-hero,
+[data-liquid-glass] #app.wp-light .title-bar {
+    background: linear-gradient(
+        135deg,
+        rgba(24, 24, 28, 0.42),
+        rgba(24, 24, 28, 0.30)
+    );
+    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.6) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.6) brightness(1.02);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 8px 32px rgba(0, 0, 0, 0.28);
+}
 [data-liquid-glass] #app.wp-light .card,
 [data-liquid-glass] #app.wp-light .stat-card,
-[data-liquid-glass] #app.wp-light .home-hero,
-[data-liquid-glass] #app.wp-light .title-bar,
 [data-liquid-glass] #app.wp-light .toast,
 [data-liquid-glass] #app.wp-light .modal-content {
     background: linear-gradient(
-        135deg,
-        rgba(24, 24, 28, 0.72),
-        rgba(24, 24, 28, 0.5)
+        180deg,
+        rgba(30, 31, 36, 0.55) 0%,
+        rgba(24, 25, 30, 0.42) 100%
     );
-    backdrop-filter: blur(18px) saturate(1.6) brightness(1.02);
-    -webkit-backdrop-filter: blur(18px) saturate(1.6) brightness(1.02);
+    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
     border: 1px solid rgba(255, 255, 255, 0.18);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
         0 8px 32px rgba(0, 0, 0, 0.28);
 }
 
-/* 深色主题下：接近纯黑基底，高光更收敛 */
+/* 深色主题下：侧边栏半透明深色玻璃，卡片/弹窗/提示同样通透但保底可读 */
 html[data-theme="dark"][data-liquid-glass] .sidebar,
+html[data-theme="dark"][data-liquid-glass] .home-hero,
+html[data-theme="dark"][data-liquid-glass] .title-bar {
+    background: linear-gradient(
+        135deg,
+        rgba(18, 18, 22, 0.45),
+        rgba(18, 18, 22, 0.32)
+    );
+    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 8px 32px rgba(0, 0, 0, 0.3);
+}
 html[data-theme="dark"][data-liquid-glass] .card,
 html[data-theme="dark"][data-liquid-glass] .stat-card,
-html[data-theme="dark"][data-liquid-glass] .home-hero,
-html[data-theme="dark"][data-liquid-glass] .title-bar,
 html[data-theme="dark"][data-liquid-glass] .toast,
 html[data-theme="dark"][data-liquid-glass] .modal-content {
     background: linear-gradient(
-        135deg,
-        rgba(18, 18, 22, 0.78),
-        rgba(18, 18, 22, 0.55)
+        180deg,
+        rgba(28, 29, 34, 0.6) 0%,
+        rgba(20, 21, 26, 0.46) 100%
     );
-    backdrop-filter: blur(18px) saturate(1.5) brightness(1.02);
-    -webkit-backdrop-filter: blur(18px) saturate(1.5) brightness(1.02);
+    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
     border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
@@ -1792,6 +1858,112 @@ html[data-theme="dark"][data-liquid-glass] .modal-content {
 body.game-running:not([data-no-glass]) .sidebar {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+}
+
+/* 液态玻璃下的可点击卡片：给实色底座，避免选中/悬停时靠半透明背景导致内容全透看不清。
+   版本项、模组项、服务器项等可点击行在液态玻璃模式下保持可读 */
+[data-liquid-glass] .version-item,
+[data-liquid-glass] .mod-item,
+[data-liquid-glass] .mod-version-item,
+[data-liquid-glass] .mod-featured-card,
+[data-liquid-glass] .home-current-version-card,
+[data-liquid-glass] .java-source-item,
+[data-liquid-glass] .loader-option,
+[data-liquid-glass] .custom-select-trigger,
+[data-liquid-glass] .ps-card,
+[data-liquid-glass] .wallpaper-option,
+[data-liquid-glass] .panorama-theme-option {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.62) 0%,
+        rgba(240, 243, 249, 0.52) 100%
+    );
+    backdrop-filter: blur(4px) saturate(1.2);
+    -webkit-backdrop-filter: blur(4px) saturate(1.2);
+}
+[data-liquid-glass] .version-item:hover,
+[data-liquid-glass] .mod-item:hover,
+[data-liquid-glass] .mod-version-item:hover,
+[data-liquid-glass] .mod-featured-card:hover,
+[data-liquid-glass] .home-current-version-card:hover,
+[data-liquid-glass] .java-source-item:hover,
+[data-liquid-glass] .loader-option:hover,
+[data-liquid-glass] .ps-card:hover,
+[data-liquid-glass] .wallpaper-option:hover,
+[data-liquid-glass] .panorama-theme-option:hover {
+    background: var(--bg-hover);
+}
+[data-liquid-glass] .version-item.selected,
+[data-liquid-glass] .mod-item.selected,
+[data-liquid-glass] .loader-option.selected,
+[data-liquid-glass] .wallpaper-option.active,
+[data-liquid-glass] .panorama-theme-option.active,
+[data-liquid-glass] .theme-option.active {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.78) 0%,
+        rgba(240, 243, 249, 0.66) 100%
+    );
+}
+
+/* 液态玻璃下，按钮/卡片文字用白字+深色投影，保证在任何明暗背景下都清晰可读 */
+[data-liquid-glass] .theme-option .theme-name,
+[data-liquid-glass] .wallpaper-option .wallpaper-name,
+[data-liquid-glass] .panorama-theme-option .wallpaper-name {
+    color: #ffffff;
+    text-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.6),
+        0 0 6px rgba(0, 0, 0, 0.4);
+}
+[data-liquid-glass] .theme-option.active .theme-name,
+[data-liquid-glass] .wallpaper-option.active .wallpaper-name,
+[data-liquid-glass] .panorama-theme-option.active .wallpaper-name {
+    color: #ffffff;
+    text-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.7),
+        0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+/* 深色主题 / 深色壁纸下的可点击卡片：实深色底座保底可读 */
+html[data-theme="dark"][data-liquid-glass] .version-item,
+html[data-theme="dark"][data-liquid-glass] .mod-item,
+html[data-theme="dark"][data-liquid-glass] .mod-version-item,
+html[data-theme="dark"][data-liquid-glass] .mod-featured-card,
+html[data-theme="dark"][data-liquid-glass] .home-current-version-card,
+html[data-theme="dark"][data-liquid-glass] .java-source-item,
+html[data-theme="dark"][data-liquid-glass] .loader-option,
+html[data-theme="dark"][data-liquid-glass] .ps-card,
+html[data-theme="dark"][data-liquid-glass] .wallpaper-option,
+html[data-theme="dark"][data-liquid-glass] .panorama-theme-option {
+    background: linear-gradient(
+        180deg,
+        rgba(30, 31, 36, 0.72) 0%,
+        rgba(24, 25, 30, 0.6) 100%
+    );
+}
+html[data-theme="dark"][data-liquid-glass] .version-item:hover,
+html[data-theme="dark"][data-liquid-glass] .mod-item:hover,
+html[data-theme="dark"][data-liquid-glass] .mod-version-item:hover,
+html[data-theme="dark"][data-liquid-glass] .mod-featured-card:hover,
+html[data-theme="dark"][data-liquid-glass] .home-current-version-card:hover,
+html[data-theme="dark"][data-liquid-glass] .java-source-item:hover,
+html[data-theme="dark"][data-liquid-glass] .loader-option:hover,
+html[data-theme="dark"][data-liquid-glass] .ps-card:hover,
+html[data-theme="dark"][data-liquid-glass] .wallpaper-option:hover,
+html[data-theme="dark"][data-liquid-glass] .panorama-theme-option:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+html[data-theme="dark"][data-liquid-glass] .version-item.selected,
+html[data-theme="dark"][data-liquid-glass] .mod-item.selected,
+html[data-theme="dark"][data-liquid-glass] .loader-option.selected,
+html[data-theme="dark"][data-liquid-glass] .wallpaper-option.active,
+html[data-theme="dark"][data-liquid-glass] .panorama-theme-option.active,
+html[data-theme="dark"][data-liquid-glass] .theme-option.active {
+    background: linear-gradient(
+        180deg,
+        rgba(40, 42, 48, 0.82) 0%,
+        rgba(28, 29, 34, 0.7) 100%
+    );
 }
 
 .color-picker-row {

@@ -139,6 +139,36 @@ fn update_config_path() -> PathBuf {
     crate::storage::resolve_data_dir().join("updater-config.json")
 }
 
+// 自更新重启后的一次性"已更新提示"文件：升级前写入，重启启动时前端读取并删除
+fn pending_notice_path() -> PathBuf {
+    crate::storage::resolve_data_dir().join("pending-update-notice.json")
+}
+
+fn write_pending_notice(version: &str, notes: &str) {
+    let data = json!({
+        "version": version,
+        "notes": notes,
+        "updatedAt": chrono::Local::now().to_rfc3339()
+    });
+    let path = pending_notice_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string()));
+}
+
+#[tauri::command]
+pub fn updater_get_pending_notice() -> Result<Value, String> {
+    let path = pending_notice_path();
+    if !path.exists() {
+        return Ok(Value::Null);
+    }
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&path);
+    let v: Value = serde_json::from_str(&content).unwrap_or_else(|_| json!({}));
+    Ok(v)
+}
+
 fn load_skipped_version() -> Option<String> {
     let path = update_config_path();
     let content = fs::read_to_string(&path).ok()?;
@@ -471,13 +501,20 @@ fn install_and_restart(app: &AppHandle, new_exe: &Path) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn updater_install_update(app: AppHandle) -> Result<Value, String> {
-    let downloaded = {
+    let (downloaded, release) = {
         let guard = UPDATE_STATE.lock().unwrap();
-        guard.as_ref().and_then(|s| s.downloaded_path.clone())
+        (
+            guard.as_ref().and_then(|s| s.downloaded_path.clone()),
+            guard.as_ref().map(|s| s.release.clone()),
+        )
     };
     let path = downloaded.ok_or("更新尚未下载完成")?;
     if !path.exists() {
         return Err("更新文件不存在，请重新下载".into());
+    }
+    // 升级前写入一次性提示，重启启动时前端据此显示"软件已更新至 xxx 版本"
+    if let Some(r) = &release {
+        write_pending_notice(&r.tag_ver, &r.body);
     }
     install_and_restart(&app, &path)?;
     Ok(json!({ "success": true }))
