@@ -371,17 +371,34 @@ function getDownloadStageText(data) {
 async function resolveModSavePath(versionId) {
   try {
     const vid = versionId || _modDownloadVersionId || '';
-    const url = vid ? `/api/filesystem/default-mod-path?versionId=${encodeURIComponent(vid)}` : '/api/filesystem/default-mod-path';
-    const resp = await fetch(url);
-    if (resp.ok) {
-      const gpRes = await resp.json();
-      let path = '';
-      if (typeof gpRes === 'string') {
-        path = gpRes;
-      } else if (gpRes && typeof gpRes === 'object') {
-        path = gpRes.path || gpRes.data || '';
+    // Tauri 下原生 fetch('/api/...') 无本地 HTTP 服务器会失败，
+    // 统一走 API 代理（invoke 通道）；非 Tauri 走原生 fetch。
+    if (window.__TAURI_PROXY__) {
+      const params = vid ? { versionId: vid } : {};
+      const r = await window.__TAURI_PROXY__.apiProxy('GET', '/api/filesystem/default-mod-path', params, null);
+      if (r.ok) {
+        const gpRes = await r.json();
+        let path = '';
+        if (typeof gpRes === 'string') {
+          path = gpRes;
+        } else if (gpRes && typeof gpRes === 'object') {
+          path = gpRes.path || gpRes.data || '';
+        }
+        if (path) return path;
       }
-      if (path) return path;
+    } else {
+      const url = vid ? `/api/filesystem/default-mod-path?versionId=${encodeURIComponent(vid)}` : '/api/filesystem/default-mod-path';
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const gpRes = await resp.json();
+        let path = '';
+        if (typeof gpRes === 'string') {
+          path = gpRes;
+        } else if (gpRes && typeof gpRes === 'object') {
+          path = gpRes.path || gpRes.data || '';
+        }
+        if (path) return path;
+      }
     }
   } catch (e) {}
   return localStorage.getItem('lastModSavePath') || '';

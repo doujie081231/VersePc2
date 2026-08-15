@@ -229,30 +229,49 @@ async fn handle_create_shortcut(body: &Option<Value>) -> ApiResult {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
         // 使用 PowerShell WScript.Shell 创建快捷方式
+        // 采用 here-string（@' '@）包裹路径和描述，避免路径中出现引号等特殊字符时提前终止字符串
         let ps_script = format!(
-            r#"$ws = New-Object -ComObject WScript.Shell
-$sc = $ws.CreateShortcut("{}")
-$sc.TargetPath = "{}"
-$sc.WorkingDirectory = "{}"
-$sc.Description = "VersePC2 Minecraft Launcher"
-$sc.Save()"#,
+r#"
+$shortcutPath = @'
+{}
+'@
+$targetPath = @'
+{}
+'@
+$workingDir = @'
+{}
+'@
+$description = @'
+VersePC2 Minecraft Launcher
+'@
+$ws = New-Object -ComObject WScript.Shell
+$sc = $ws.CreateShortcut($shortcutPath)
+$sc.TargetPath = $targetPath
+$sc.WorkingDirectory = $workingDir
+$sc.Description = $description
+$sc.Save()
+"#,
             shortcut_path.display(),
             exe_path.display(),
             working_dir.display()
         );
 
-        let tmp_script = std::env::temp_dir().join("versepc_shortcut.ps1");
-        if let Err(e) = std::fs::write(&tmp_script, &ps_script) {
-            return ApiResult::err(500, &format!("写入脚本失败: {}", e));
-        }
+        // 使用 -EncodedCommand：把脚本转成 UTF-16LE Base64 再传参，彻底避免
+        // 中文编码、引号嵌套、特殊字符转义失败导致的 PowerShell 语法错误。
+        use base64::{Engine as _, engine::general_purpose::STANDARD as b64};
+        let utf16le: Vec<u8> = ps_script.encode_utf16()
+            .flat_map(|u| u.to_le_bytes())
+            .collect();
+        let encoded_cmd = b64.encode(&utf16le);
 
         let mut ps_cmd = std::process::Command::new("powershell");
         ps_cmd.args([
             "-NoProfile",
+            "-NonInteractive",
             "-ExecutionPolicy",
             "Bypass",
-            "-File",
-            &tmp_script.to_string_lossy(),
+            "-EncodedCommand",
+            &encoded_cmd,
         ]);
         #[cfg(target_os = "windows")]
         {
@@ -261,18 +280,25 @@ $sc.Save()"#,
         }
         let output = ps_cmd.output();
 
-        let _ = std::fs::remove_file(&tmp_script);
-
         match output {
             Ok(out) => {
-                if out.status.success() {
+                if out.status.success() && shortcut_path.exists() {
                     ApiResult::ok(json!({
                         "success": true,
                         "path": shortcut_path.to_string_lossy()
                     }))
                 } else {
                     let err = String::from_utf8_lossy(&out.stderr).to_string();
-                    ApiResult::err(500, &format!("PowerShell 执行失败: {}", err))
+                    let msg = if err.trim().is_empty() {
+                        if shortcut_path.exists() {
+                            "快捷方式已生成，但 PowerShell 返回了非零状态码".to_string()
+                        } else {
+                            "未找到生成的快捷方式文件".to_string()
+                        }
+                    } else {
+                        format!("PowerShell 执行失败: {}", err)
+                    };
+                    ApiResult::err(500, &msg)
                 }
             }
             Err(e) => ApiResult::err(500, &format!("执行 PowerShell 失败: {}", e)),

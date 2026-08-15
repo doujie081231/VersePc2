@@ -10,45 +10,32 @@ const WEBVIEW2_CLIENT_ID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
 const WEBVIEW2_INSTALLER_URL: &str =
     "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
-/// 注册表查询失败/未找到时返回 false，视为未安装
-fn reg_query_exists(path: &str) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let output = std::process::Command::new("reg")
-            .args(["query", path])
-            .output();
-        match output {
-            Ok(o) => o.status.success(),
-            Err(_) => false,
+/// 检测 WebView2 Runtime 是否已安装
+/// 直接用 ws-winreg 读注册表（毫秒级），避免每次启动都 spawn reg.exe 子进程
+/// （子进程被安全软件实时扫描时会拖慢启动好几秒）
+#[cfg(target_os = "windows")]
+pub fn webview2_installed() -> bool {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    let subpaths = [
+        format!(r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{WEBVIEW2_CLIENT_ID}"),
+        format!(r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{WEBVIEW2_CLIENT_ID}"),
+    ];
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    for p in &subpaths {
+        if hklm.open_subkey(p).is_ok() {
+            return true;
         }
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = path;
-        false
-    }
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    hkcu.open_subkey(&subpaths[1]).is_ok()
 }
 
-/// 检测 WebView2 Runtime 是否已安装
-/// 通过注册表 EdgeUpdate Clients 键判断，兼顾 64/32 位视角
+/// 检测 WebView2 Runtime 是否已安装（非 Windows 平台直接视为已安装）
+#[cfg(not(target_os = "windows"))]
 pub fn webview2_installed() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let keys = [
-            format!(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{WEBVIEW2_CLIENT_ID}"
-            ),
-            format!(r"HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{WEBVIEW2_CLIENT_ID}"),
-            format!(
-                r"HKCU\SOFTWARE\Microsoft\EdgeUpdate\Clients\{WEBVIEW2_CLIENT_ID}"
-            ),
-        ];
-        keys.iter().any(|k| reg_query_exists(k))
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        true
-    }
+    true
 }
 
 /// 确保 WebView2 已安装；缺失则在默认浏览器打开官方安装程序

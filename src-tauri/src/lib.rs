@@ -58,16 +58,123 @@ fn trim_working_set() {
     // 非 Windows 平台不做处理
 }
 
+/// 压缩整个进程树的工作集（本进程 + 所有 WebView2 子进程）。
+/// 说明：250MB 内存里绝大部分来自 WebView2 的渲染/GPU 子进程，
+/// 只压缩主进程意义不大；这里枚举子进程逐个压缩，任务管理器里的数字才会真正降下来。
+#[cfg(target_os = "windows")]
+fn trim_working_set_tree() {
+    use std::collections::HashMap;
+    use std::ffi::c_void;
+    use std::mem;
+
+    #[repr(C)]
+    struct PROCESSENTRY32W {
+        dwSize: u32,
+        cntUsage: u32,
+        th32ProcessID: u32,
+        th32DefaultHeapID: usize,
+        th32ModuleID: u32,
+        cntThreads: u32,
+        th32ParentProcessID: u32,
+        pcPriClassBase: i32,
+        dwFlags: u32,
+        szExeFile: [u16; 260],
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcessId() -> u32;
+        fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> *mut c_void;
+        fn Process32FirstW(hSnapshot: *mut c_void, lppe: *mut PROCESSENTRY32W) -> i32;
+        fn Process32NextW(hSnapshot: *mut c_void, lppe: *mut PROCESSENTRY32W) -> i32;
+        fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> *mut c_void;
+        fn CloseHandle(hObject: *mut c_void) -> i32;
+    }
+    #[link(name = "psapi")]
+    unsafe extern "system" {
+        fn EmptyWorkingSet(hProcess: *mut c_void) -> i32;
+    }
+
+    const TH32CS_SNAPPROCESS: u32 = 0x0000_0002;
+    // OpenProcess 需要这两个权限才能打开 WebView2 子进程并压缩其工作集
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const PROCESS_SET_QUOTA: u32 = 0x0100;
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot.is_null() {
+            return;
+        }
+        let mut pe = PROCESSENTRY32W {
+            dwSize: mem::size_of::<PROCESSENTRY32W>() as u32,
+            cntUsage: 0,
+            th32ProcessID: 0,
+            th32DefaultHeapID: 0,
+            th32ModuleID: 0,
+            cntThreads: 0,
+            th32ParentProcessID: 0,
+            pcPriClassBase: 0,
+            dwFlags: 0,
+            szExeFile: [0; 260],
+        };
+        // 建立 父PID -> [子PID] 映射
+        let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+        if Process32FirstW(snapshot, &mut pe) != 0 {
+            loop {
+                children
+                    .entry(pe.th32ParentProcessID)
+                    .or_default()
+                    .push(pe.th32ProcessID);
+                if Process32NextW(snapshot, &mut pe) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snapshot);
+
+        // 从当前进程出发，按进程树遍历所有后代并逐个压缩
+        let root = GetCurrentProcessId();
+        let mut stack: Vec<u32> = vec![root];
+        while let Some(pid) = stack.pop() {
+            if let Some(cs) = children.get(&pid) {
+                for &c in cs {
+                    stack.push(c);
+                }
+            }
+            if pid == root {
+                continue;
+            }
+            let handle = OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA,
+                0,
+                pid,
+            );
+            if !handle.is_null() {
+                EmptyWorkingSet(handle);
+                CloseHandle(handle);
+            }
+        }
+
+        // 主进程自身也压一次
+        trim_working_set();
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn trim_working_set_tree() {
+    trim_working_set();
+}
+
 /// 执行一次完整的内存优化（对齐 electron 项目的 _doFullMemoryOptimize）
 /// 1. 提示前端做垃圾回收 + 壁纸挂起
-/// 2. 调用 EmptyWorkingSet 压缩工作集（任务管理器里可见的内存下降）
+/// 2. 压缩整个进程树的工作集（含 WebView2 子进程，任务管理器里可见的内存明显下降）
 fn do_full_memory_optimize(app_handle: &tauri::AppHandle) {
     // 1. 通知前端执行内存清理（壁纸挂起、释放可选缓存、提示GC）
     if let Some(win) = app_handle.get_webview_window("main") {
         let _ = win.emit("memory-optimize-request", ());
     }
-    // 2. Windows API 工作集压缩（这步让任务管理器里的数字明显变小）
-    trim_working_set();
+    // 2. Windows API 工作集压缩（覆盖 WebView2 子进程，这步让任务管理器里的数字明显变小）
+    trim_working_set_tree();
 }
 
 // ============== 窗口控制 ==============
@@ -423,11 +530,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            println!("[boot] setup start {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             // 初始化存储：使用便携版数据目录（与原项目一致，数据跟 exe 走）
+            // 目录创建失败不阻塞启动：resolve_data_dir 已尽量保证可写（不可写会回退用户目录），
+            // 若仍失败则继续启动，避免"数据目录异常导致软件打不开"。
             let data_dir = storage::resolve_data_dir();
-            std::fs::create_dir_all(&data_dir)?;
+            if let Err(e) = std::fs::create_dir_all(&data_dir) {
+                eprintln!("[boot] 数据目录创建失败（继续启动）: {} -> {}", data_dir.display(), e);
+            }
+            println!("[boot] after data_dir {}", chrono::Local::now().format("%H:%M:%S%.3f"));
 
             let store = storage::Store::new();
+            println!("[boot] after Store::new {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             println!("[store] 数据目录: {:?}", data_dir);
             println!("[store] 存储文件: {:?}", store.path);
             println!("[store] 加载条目数: {}", store.data.lock().unwrap().len());
@@ -437,11 +551,15 @@ pub fn run() {
             if migrated {
                 println!("[store] 已完成旧版 Electron 数据迁移");
             }
+            println!("[boot] after migrate {}", chrono::Local::now().format("%H:%M:%S%.3f"));
 
             // 首次运行/环境检查：WebView2 内核缺失则提示安装
+            println!("[boot] before ensure {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             crate::system::ensure_webview2();
+            println!("[boot] after ensure {}", chrono::Local::now().format("%H:%M:%S%.3f"));
 
             app.manage(store);
+            println!("[boot] after manage {}\n", chrono::Local::now().format("%H:%M:%S%.3f"));
 
             // 窗口默认隐藏（visible:false），等前端 splash 首屏渲染后调用 window_show 显示，避免启动黑屏闪一下。
             // 兜底：若前端因脚本异常始终未调用 show，延迟强制显示，确保窗口不会一直不出现。
@@ -509,17 +627,19 @@ pub fn run() {
                     }
                 });
 
-                // ===== 空闲 5 分钟自动优化 =====
+                // ===== 每 2 分钟自动优化（窗口正常显示时也保持低内存） =====
                 let main_win_for_idle = main_win.clone();
                 tauri::async_runtime::spawn(async move {
-                    // 每 5 分钟做一次轻量优化（不通知前端，只压缩工作集）
-                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
                     loop {
                         interval.tick().await;
                         // 如果此时正最小化（有单独的优化循环在跑），跳过
                         let minimized = main_win_for_idle.is_minimized().unwrap_or(false);
                         if !minimized {
-                            trim_working_set();
+                            // 压缩整个进程树（含 WebView2 子进程），任务管理器内存稳定在低位
+                            trim_working_set_tree();
+                            // 同步提示前端做 GC + 清理隐藏图片缓存
+                            let _ = main_win_for_idle.emit("memory-optimize-request", ());
                         }
                     }
                 });
@@ -530,6 +650,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             modpack::theseus::event::set_app_handle(app_handle);
 
+            println!("[boot] setup done {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -617,6 +738,9 @@ pub fn run() {
             redstone_online::redstone_stop,
             redstone_online::redstone_status,
         ])
+        .on_page_load(|_window, _payload| {
+            println!("[boot] page_load {}", chrono::Local::now().format("%H:%M:%S%.3f"));
+        })
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用时出错");
 }

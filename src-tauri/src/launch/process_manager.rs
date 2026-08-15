@@ -76,26 +76,23 @@ pub async fn do_launch(
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    // 写调试日志：启动命令
-    {
-        let data_dir = crate::storage::resolve_data_dir();
-        let debug_log = data_dir.join("logs").join("launch-debug.log");
-        let _ = std::fs::create_dir_all(debug_log.parent().unwrap_or(std::path::Path::new(".")));
-        let cmd_str = format!("Java: {}\nGameDir: {}\nArgs ({}):\n  {}\n\n",
-            java_path,
-            game_dir,
-            launch_args.args.len(),
-            launch_args.args.join("\n  ")
-        );
-        let _ = std::fs::write(&debug_log, cmd_str);
-    }
+    // 启动失败时写调试日志：成功启动不写，避免用户在 data/logs 目录看到"debug 记事本"
+    // 如果启动失败，在 spawn 错误和 3 秒内退出两个分支写日志
 
     let mut child = cmd
         .spawn()
         .map_err(|e| {
             let data_dir = crate::storage::resolve_data_dir();
             let debug_log = data_dir.join("logs").join("launch-debug.log");
-            let _ = std::fs::write(&debug_log, format!("spawn failed: {}", e));
+            let _ = std::fs::create_dir_all(debug_log.parent().unwrap_or(std::path::Path::new(".")));
+            let cmd_str = format!("[启动失败] Java: {}\nGameDir: {}\nArgs ({}):\n  {}\n\n错误: {}",
+                java_path,
+                game_dir,
+                launch_args.args.len(),
+                launch_args.args.join("\n  "),
+                e
+            );
+            let _ = std::fs::write(&debug_log, cmd_str);
             format!("启动游戏失败: {}", e)
         })?;
 
@@ -108,6 +105,10 @@ pub async fn do_launch(
         .find(|a| !a.starts_with('-') && !a.contains('=') && !a.contains('/'))
         .cloned()
         .unwrap_or_default();
+
+    // 为"3 秒内退出"分支保留调试用副本（game_dir/java_path 随后会被 move 进实例）
+    let debug_game_dir = game_dir.clone();
+    let debug_java_path = java_path.clone();
 
     let instance = GameInstance::new(
         session_id.clone(),
@@ -160,13 +161,14 @@ pub async fn do_launch(
             }
 
             let exit_msg = format!(
-                "\n=== 进程在 3 秒内退出 ===\n退出码: {}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
+                "[启动失败] Java: {}\nGameDir: {}\nArgs ({}):\n  {}\n\n=== 进程在 3 秒内退出 ===\n退出码: {}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
+                debug_java_path,
+                debug_game_dir,
+                launch_args.args.len(),
+                launch_args.args.join("\n  "),
                 code, stdout_text, stderr_text
             );
-            let _ = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&debug_log)
-                .and_then(|mut f| std::io::Write::write_all(&mut f, exit_msg.as_bytes()));
+            let _ = std::fs::write(&debug_log, exit_msg);
 
             // 移除实例
             let _ = remove_instance(&session_id);
@@ -183,6 +185,21 @@ pub async fn do_launch(
                     "isCrash": true
                 }),
             );
+
+            // 写入全局退出分析缓存（启动即退也记录，供崩溃卡片 / 日志导出使用）
+            let exit_logs = super::game_session::get_persistent_logs(50);
+            super::game_session::set_exit_analysis(json!({
+                "code": code,
+                "reason": "游戏进程启动后立即退出",
+                "suggestion": "请查看 launch-debug.log 获取详细启动参数",
+                "isCrash": true,
+                "versionId": version_id.clone(),
+                "launchInfo": {
+                    "versionId": version_id.clone(),
+                    "fullVersionId": version_id.clone()
+                },
+                "logBuffer": exit_logs
+            }));
 
             return Err(format!("游戏进程启动后立即退出（退出码: {}），请检查 Java 版本和游戏文件是否完整", code));
         }
@@ -264,6 +281,8 @@ pub async fn do_launch(
                                     inst.lan_port = Some(port);
                                 }
                             });
+                            // 写入全局持久化日志缓冲（实例移除后仍可导出）
+                            super::game_session::push_persistent_log(trimmed.clone());
                             // 通过 Tauri 事件实时推送日志（替代 SSE）
                             let _ = app_for_stdout.emit(
                                 "game-log",
@@ -306,6 +325,8 @@ pub async fn do_launch(
                                     inst.log_buffer.drain(0..extra);
                                 }
                             });
+                            // 写入全局持久化日志缓冲（实例移除后仍可导出）
+                            super::game_session::push_persistent_log(trimmed.clone());
                             let _ = app_for_stderr.emit(
                                 "game-log",
                                 json!({
@@ -340,6 +361,22 @@ pub async fn do_launch(
                 "isCrash": analysis.is_crash
             }),
         );
+
+        // 写入全局退出分析缓存（供 GET /api/game/exit-analysis 轮询与日志导出使用）
+        // 对应原项目 server/context.js 的 ctx.sessions.lastGameExitAnalysis
+        let exit_logs = super::game_session::get_persistent_logs(50);
+        super::game_session::set_exit_analysis(json!({
+            "code": exit_code,
+            "reason": analysis.reason.clone(),
+            "suggestion": analysis.suggestion.clone(),
+            "isCrash": analysis.is_crash,
+            "versionId": version_id_for_log.clone(),
+            "launchInfo": {
+                "versionId": version_id_for_log.clone(),
+                "fullVersionId": version_id_for_log.clone()
+            },
+            "logBuffer": exit_logs
+        }));
 
         eprintln!(
             "[Game] {} exited code={} reason={} crash={}",

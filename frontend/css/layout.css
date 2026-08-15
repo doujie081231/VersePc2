@@ -907,6 +907,33 @@ body {
     flex-direction: column;
 }
 
+/* 全局拖拽条（Tauri 模式下用于拖动窗口）
+   - 默认 left 从侧边栏右边缘开始，不覆盖侧边栏顶部区域（保证侧边栏最上面的"主页"等按钮可点击）
+   - body.sidebar-collapsed 时，侧边栏被收起（width 0），此时拖拽条延伸到最左
+   - 高度 48px，与右上角窗口控制条、左上角圆形侧边栏按钮的垂直范围一致 */
+.global-drag-strip {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    height: 48px;
+    z-index: 99997;
+    -webkit-app-region: drag;
+    pointer-events: none;
+    transition: left 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.sidebar-collapsed .global-drag-strip {
+    left: 0;
+}
+
+/* 侧边栏：顶部留出 56px 安全边距，让第一枚导航按钮（主页）与左侧圆形侧边栏按钮、右上角窗口控制条垂直对齐，
+   同时避开顶部拖拽条的区域，保证点击正常 */
+.sidebar {
+    padding-top: 56px !important;
+    box-sizing: border-box;
+}
+/* 拖拽条收起时，侧边栏虽然被 translateX(-100%) 隐藏，但保留 padding 不影响视觉 */
+
 /* 浮动窗口控制栏（右上角，最小化/最大化/关闭） */
 .floating-window-bar {
     position: fixed;

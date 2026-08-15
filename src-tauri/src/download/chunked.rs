@@ -3,8 +3,8 @@
 // 对应原项目 server/http-client/download-chunked.js
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use tokio::io::AsyncWriteExt;
@@ -24,10 +24,14 @@ fn chunk_path(dest: &Path, idx: usize) -> PathBuf {
 const CHUNK_THRESHOLD: u64 = 1024 * 1024;
 /// 最小分块大小（原项目 512KB）
 const MIN_CHUNK_SIZE: u64 = 512 * 1024;
-/// 最大并发分块数（原项目 64）
+/// 最大并发分块数（原项目上限 64，实际受 maxChunksPerFile 设置约束）
 const MAX_CHUNKS: usize = 64;
 /// 单块 stall 超时（秒）：对齐 XMCL stallTimeout 默认 30s
 const CHUNK_STALL_SECS: u64 = 30;
+/// 初始并发分块数（对齐原项目 _MAX_INITIAL_THREADS=4：前 4 个分块不受速度限制）
+const INITIAL_CHUNKS: usize = 4;
+/// 速度下限（字节/秒）：低于此值才新增分块并发（对齐原项目 _speedFloor 初始 256KB/s）
+const SPEED_FLOOR_BASE: u64 = 256 * 1024;
 
 /// 全局连接预算：限制所有文件的分块连接总数，避免多个大文件各开满并发导致
 /// 连接爆炸（如 64 mod × 64 分块 = 4096 连接），从而触发 CDN 限流反而拖慢速度。
@@ -42,6 +46,86 @@ fn global_conn_budget() -> usize {
         .clamp(4, 256)
 }
 static GLOBAL_CONN: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(global_conn_budget()));
+
+/// 动态并发调度器（对齐原项目 download-chunked.js 的 P2-10/P2-11 线程决策逻辑）：
+/// - 初始 4 个分块并发，不受速度限制（保证基础并发）
+/// - 滑动窗口采样实际下载速度（每 200ms）
+/// - 速度下限 floor = max(256KB/s, 实际平均速度 * 0.85)，随速度动态调整
+/// - 仅当当前速度低于下限时才允许新增分块并发（上限 max_chunks）
+/// - 若所有分块都已结束，必须允许启动新的（避免卡死）
+///
+/// 效果：网络快就保持少量并发不堆连接（避免触发 CDN 限流）；网络慢/单连接被限速
+/// 时才逐步增加并发去"碰运气"提速，直到速度达标或到上限。
+struct ChunkScheduler {
+    launched: AtomicUsize,  // 已启动的分块任务总数
+    active: AtomicUsize,    // 正在下载数据的分块数
+    max_chunks: usize,
+    // 滑动窗口：上次采样累计字节、上次采样时刻、计算出的瞬时速度
+    window: Mutex<(u64, Instant, u64)>,
+    bytes_done: Arc<AtomicU64>, // 引用全局累计下载字节，用于计算速度
+}
+
+impl ChunkScheduler {
+    fn new(max_chunks: usize, bytes_done: Arc<AtomicU64>) -> Self {
+        Self {
+            launched: AtomicUsize::new(0),
+            active: AtomicUsize::new(0),
+            max_chunks: max_chunks.max(INITIAL_CHUNKS),
+            window: Mutex::new((0, Instant::now(), 0)),
+            bytes_done,
+        }
+    }
+
+    /// 更新滑动窗口速度（每 200ms 采样一次），返回当前瞬时速度（字节/秒）
+    fn sample_speed(&self) -> u64 {
+        let now = Instant::now();
+        let bytes = self.bytes_done.load(Ordering::SeqCst);
+        let mut w = self.window.lock().unwrap();
+        let (prev_bytes, prev_time, _) = *w;
+        if now.duration_since(prev_time).as_millis() >= 200 {
+            let dt = now.duration_since(prev_time).as_millis().max(1) as u64;
+            let speed = ((bytes - prev_bytes) * 1000) / dt;
+            *w = (bytes, now, speed);
+            speed
+        } else {
+            w.2
+        }
+    }
+
+    /// 当前是否应启动新的分块任务（对齐原项目 _shouldAddThread）
+    fn should_add(&self) -> bool {
+        let launched = self.launched.load(Ordering::SeqCst);
+        // 前 INITIAL_CHUNKS 个分块不受速度限制，保证基础并发
+        if launched < INITIAL_CHUNKS {
+            return true;
+        }
+        // 没有正在下载的分块时必须启动新的，否则会卡死（前一批已全部完成）
+        if self.active.load(Ordering::SeqCst) == 0 {
+            return true;
+        }
+        // 已达上限不再新增
+        if launched >= self.max_chunks {
+            return false;
+        }
+        // 速度下限 = max(256KB/s, 实际平均速度 * 0.85)
+        let speed = self.sample_speed();
+        let floor = SPEED_FLOOR_BASE.max(speed * 85 / 100);
+        // 速度达标：不再新增并发，避免无谓堆连接触发限流
+        speed >= floor
+    }
+
+    fn mark_launched(&self) {
+        self.launched.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn mark_active_start(&self) {
+        self.active.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn mark_active_end(&self) {
+        self.active.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 
 /// 探测文件大小与 Range 支持
 /// 返回 (file_size, supports_range)
@@ -134,9 +218,12 @@ async fn download_chunked_once(
     let start_time = Instant::now();
     let last_report = Arc::new(std::sync::Mutex::new(Instant::now()));
     let failed = Arc::new(AtomicBool::new(false));
-    let sem = Arc::new(Semaphore::new(chunk_count));
+    // 动态并发调度器：初始 4 起步，速度不够才加，上限 max_chunks
+    let scheduler = Arc::new(ChunkScheduler::new(max_chunks, bytes_done.clone()));
 
     // 下载分块，写入 dest.c{i}
+    // 每个分块任务先等待调度器允许启动（对齐原项目 _safeDlChunk 的 _shouldAddThread），
+    // 允许后再占连接下载，实现"4 起步 + 速度不够才加并发"的动态线程池。
     let mut handles = Vec::with_capacity(chunk_count);
     for (idx, (s, e)) in chunks.into_iter().enumerate() {
         let client = client.clone();
@@ -144,14 +231,38 @@ async fn download_chunked_once(
         let tmp_path = chunk_path(dest, idx);
         let bytes_done = bytes_done.clone();
         let failed = failed.clone();
-        let sem = sem.clone();
         let cancel = cancel.cloned();
         let on_progress = on_progress.clone();
         let last_report = last_report.clone();
         let file_size = file_size;
+        let scheduler = scheduler.clone();
 
         handles.push(tokio::spawn(async move {
-            let _perm = sem.acquire().await.map_err(|_| "信号量关闭".to_string())?;
+            // 等待调度器允许启动（每次检查间隔 50ms，与原项目 while 轮询一致）
+            loop {
+                if scheduler.should_add() {
+                    break;
+                }
+                if failed.load(Ordering::SeqCst) {
+                    return Ok::<(), String>(());
+                }
+                if let Some(c) = &cancel {
+                    if c.load(Ordering::SeqCst) {
+                        return Err("已取消".to_string());
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            scheduler.mark_launched();
+            scheduler.mark_active_start();
+            // 用守卫确保下载结束后标记 active 结束（无论成功失败）
+            struct ActiveGuard(Arc<ChunkScheduler>);
+            impl Drop for ActiveGuard {
+                fn drop(&mut self) {
+                    self.0.mark_active_end();
+                }
+            }
+            let _guard = ActiveGuard(scheduler);
             // 全局连接预算：所有文件的分块连接共享，避免连接爆炸触发 CDN 限流
             // 加超时：32 并发大文件下载时连接预算可能被占满，若长时间等不到许可就放弃
             // 该分块（让文件级重试换源），避免所有分块无限排队导致整体"卡住"。

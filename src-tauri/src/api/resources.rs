@@ -1165,11 +1165,17 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     let modpack_icon_url_clone = modpack_icon_url.clone();
     let download_url_clone = download_url.to_string();
     let expected_sha1_clone = expected_sha1.to_string();
-    let download_source = settings
-        .get("downloadSource")
-        .and_then(|v| v.as_str())
-        .unwrap_or("auto")
-        .to_string();
+    // 整合包 mrpack 文件强制使用 china-first（镜像优先，官方兜底），
+    // 避免用户设置成 auto 时先连 Modrinth 官方 CDN（国内 TTFB 慢、易限流）导致下载卡住。
+    let download_source = if project_type == "modpack" {
+        "china-first".to_string()
+    } else {
+        settings
+            .get("downloadSource")
+            .and_then(|v| v.as_str())
+            .unwrap_or("auto")
+            .to_string()
+    };
 
     tokio::spawn(async move {
         let _cancel = cancel_flag; // 持有 cancel_flag，便于扩展取消逻辑

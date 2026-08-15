@@ -8,6 +8,21 @@ async function init() {
   const startTime = Date.now();
   const MIN_SPLASH_DURATION = 100;
 
+  // 记录页面总加载耗时（从 WebView 导航开始到 init 执行），细分每个阶段，用于定位加载慢的瓶颈
+  try {
+    var _t = window.performance.timing;
+    if (window.electronAPI && window.electronAPI.writeStartupTiming && _t) {
+      var _d = function (x) { return x ? Math.round(x - _t.navigationStart) + 'ms' : '?'; };
+      window.electronAPI.writeStartupTiming(
+        'page-nav init@' + Math.round(window.performance.now())
+        + 'ms | domLoading=' + _d(_t.domLoading)
+        + ' domInteractive=' + _d(_t.domInteractive)
+        + ' domContentLoaded=' + _d(_t.domContentLoadedEventEnd)
+        + ' loadEnd=' + _d(_t.loadEventEnd)
+      );
+    }
+  } catch (e) {}
+
   // 启动阶段计时（诊断用）：记录各被 await 的初始化阶段耗时，写入日志
   const _tPhase = {};
   const _tOrder = [];
@@ -176,12 +191,17 @@ async function init() {
   // 避免大脚本下载+解析阻塞主线程、拖慢窗口出现。窗口先出来，壁纸稍后淡入。
   _mark('wallpaper.dispatch');
 
-  // 阶段5：Java 检测 + 游戏状态（仍在 splash 覆盖下）
+  // 阶段5：Java 检测 + 游戏状态
+  // 改为窗口出现后后台执行，不再阻塞 splash：
+  // Java 检测会给每个候选 Java 启动子进程验证版本，较耗时；游戏状态也仅是状态显示。
+  // 这些都不影响核心功能，窗口先出现，状态稍后刷新。
   setProgress(96, '正在检查运行环境...');
-  try { await checkJavaOnStartup(); } catch (e) { console.error('Java check failed:', e); }
-  _mark('javaCheck');
-  try { await updateGameStatus(); } catch (e) { console.error('Game status failed:', e); }
-  _mark('java');
+  (async function checkEnvAsync() {
+    try { await checkJavaOnStartup(); } catch (e) { console.error('Java check failed:', e); }
+    try { await updateGameStatus(); } catch (e) { console.error('Game status failed:', e); }
+    _mark('envDone');
+  })();
+  _mark('javaCheck.dispatch');
 
   // 阶段6：准备就绪，淡出 splash
   setProgress(100, '准备就绪!');
@@ -204,6 +224,11 @@ async function init() {
     try { splashOverlay.remove(); } catch (err) {}
   }
 
+  // 窗口已出现，后台加载壁纸引擎（three.bundle.js 约 2MB），不阻塞任何交互
+  if (typeof initWallpaper === 'function') {
+    setTimeout(() => { try { backgroundLoadWallpaper(); } catch (e) {} }, 0);
+  }
+
   // 写入启动阶段计时（诊断用）：各阶段耗时，用于定位启动慢的瓶颈
   try {
     _mark('done');
@@ -224,6 +249,21 @@ async function init() {
   setTimeout(() => {
     try { triggerJvmPreheat(); } catch (e) {}
   }, 2000);
+}
+
+/**
+ * 窗口出现后后台加载壁纸引擎（three.bundle.js 约 2MB）。
+ * 放在 init 的 splash 淡出之后调用，避免大脚本下载+解析阻塞主线程、拖慢窗口出现。
+ */
+async function backgroundLoadWallpaper() {
+  try {
+    const savedWallpaper = await window.electronAPI?.store?.get('versepc_wallpaper');
+    if (savedWallpaper && savedWallpaper !== 'none') {
+      try { await _lazyLoadScript('js/three.bundle.js'); } catch (_) {}
+      try { initWallpaper(); } catch (e) { console.error('[Wallpaper] init error:', e); }
+      try { await loadWallpaperSettings(); } catch (_) {}
+    }
+  } catch (e) {}
 }
 
 /**

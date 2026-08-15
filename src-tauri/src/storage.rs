@@ -13,6 +13,34 @@ use serde_json::{json, Value};
 // 把 exe 及其同目录数据整体拷走，数据也随之迁移。
 //   优先级 1: exe 同目录 data-config.json 手动指定的 dataDir（存在才用）
 //   优先级 2: exe 同目录/data（默认，紧跟 exe）
+//
+// 兼容性处理（解决"移动文件夹后识别不到原数据"）：
+//   a) data-config.json 支持相对路径（如 "./data"）：移动整个文件夹后路径自动跟随 exe；
+//   b) 若 data-config.json 记录的绝对路径已失效（文件夹被移动/删除），
+//      自动回退到 exe 同目录/data 并把 data-config.json 更新为有效路径；
+//   c) 若 exe 所在目录不可写（例如被放到 Program Files / 只读目录），
+//      自动改用用户目录 %APPDATA%/VersePC/data，保证软件一定能打开且数据可保存。
+
+/// 探测 exe 所在目录是否可写（尝试创建+删除一个临时探针文件）
+fn app_dir_writable(app_dir: &std::path::Path) -> bool {
+    let probe = app_dir.join(format!(".versepc_wr_probe_{}", std::process::id()));
+    match std::fs::File::create(&probe) {
+        Ok(f) => {
+            drop(f);
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// 用户目录回退位置：%APPDATA%/VersePC/data（exe 目录不可写时使用）
+fn user_fallback_data_dir() -> std::path::PathBuf {
+    dirs::data_dir()
+        .map(|d| d.join("VersePC").join("data"))
+        .or_else(|| dirs::home_dir().map(|h| h.join("AppData").join("Roaming").join("VersePC").join("data")))
+        .unwrap_or_else(|| std::path::PathBuf::from("VersePC").join("data"))
+}
 
 pub fn resolve_data_dir() -> std::path::PathBuf {
     let exe = std::env::current_exe()
@@ -26,15 +54,48 @@ pub fn resolve_data_dir() -> std::path::PathBuf {
         if let Ok(cfg) = serde_json::from_str::<Value>(&raw) {
             if let Some(data_dir_str) = cfg.get("dataDir").and_then(|v| v.as_str()) {
                 let data_dir = std::path::PathBuf::from(data_dir_str);
+                // 支持相对路径：基于 exe 目录解析（"./data" 随文件夹移动自动跟随）
+                let data_dir = if data_dir.is_absolute() {
+                    data_dir
+                } else {
+                    app_dir.join(&data_dir)
+                };
                 if data_dir.exists() {
                     return data_dir;
+                }
+                // data-config.json 记录的路径不存在（用户移动了文件夹），
+                // 尝试 fallback 路径，如果存在则自动更新 data-config.json
+                let fallback = app_dir.join("data");
+                if fallback.exists() {
+                    // 更新 data-config.json 指向新位置
+                    let _ = std::fs::write(
+                        &config_path,
+                        serde_json::to_string_pretty(&json!({ "dataDir": fallback.to_string_lossy() })).unwrap_or_default(),
+                    );
+                    return fallback;
                 }
             }
         }
     }
 
-    // 优先级 2: exe 同目录/data（紧跟 exe，纯便携）
-    app_dir.join("data")
+    // 优先级 2: exe 同目录/data（默认，紧跟 exe，纯便携）
+    let default_dir = app_dir.join("data");
+    // 已存在的目录直接使用（无需探测可写性）
+    if default_dir.exists() {
+        return default_dir;
+    }
+    // 目录尚不存在、需要创建时：若 exe 所在目录不可写（如 Program Files），
+    // 回退到用户目录，避免"打不开"或数据写不进去
+    if !app_dir_writable(&app_dir) {
+        let user_dir = user_fallback_data_dir();
+        // 若 data-config.json 可写，记录回退位置，避免每次启动重复探测
+        let _ = std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&json!({ "dataDir": user_dir.to_string_lossy() })).unwrap_or_default(),
+        );
+        return user_dir;
+    }
+    default_dir
 }
 
 // ============== settings.json ==============
@@ -69,7 +130,7 @@ pub fn default_settings() -> Value {
         "versionSource": "mojang",
         "maxThreads": 64,
         "enableChunkDownload": true,
-        "maxChunksPerFile": 64,
+        "maxChunksPerFile": 32,
         "speedLimit": 0,
         "targetDir": "",
         "sslVerify": false,

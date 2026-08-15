@@ -262,9 +262,10 @@ ipcMain.handle('install-files', async (event, installPath) => {
 
         const dataConfigPath = path.join(installPath, 'data-config.json');
         if (!fs.existsSync(dataConfigPath)) {
-            const defaultDataDir = path.join(installPath, 'data');
-            fs.mkdirSync(defaultDataDir, { recursive: true });
-            fs.writeFileSync(dataConfigPath, JSON.stringify({ dataDir: defaultDataDir }, null, 2));
+            // 使用相对路径 "./data"：用户移动整个文件夹后数据目录自动跟随 exe，
+            // 不会出现"移动位置后识别不到原本数据文件夹"的问题
+            fs.mkdirSync(path.join(installPath, 'data'), { recursive: true });
+            fs.writeFileSync(dataConfigPath, JSON.stringify({ dataDir: './data' }, null, 2));
         }
 
         mainWindow.webContents.send('install-progress', {

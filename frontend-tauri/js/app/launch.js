@@ -3,6 +3,45 @@
  * @description 游戏启动流程 - 检查依赖、显示启动模态框、处理进度
  */
 
+/**
+ * 等待后端 Java 自动安装完成（轮询 /api/java/install-status）
+ * @param {string} sessionId - 安装会话 ID
+ * @param {number} requiredVer - 所需 Java 主版本
+ * @param {string} rangeDesc - 显示用版本区间描述（如 "17+"）
+ * @returns {Promise<boolean>} 安装是否成功
+ */
+function waitJavaAutoInstall(sessionId, requiredVer, rangeDesc) {
+  return new Promise((resolve) => {
+    let tries = 0;
+    const maxTries = 3600; // 500ms 轮询，最长约 30 分钟
+    const timer = setInterval(async () => {
+      tries++;
+      if (tries > maxTries) { clearInterval(timer); resolve(false); return; }
+      try {
+        const st = await API.getJavaInstallStatus(sessionId);
+        if (!st) { return; }
+        if (st.status === 'completed') {
+          clearInterval(timer);
+          resolve(true);
+          return;
+        }
+        if (st.status === 'error' || st.status === 'failed' || st.status === 'cancelled') {
+          clearInterval(timer);
+          resolve(false);
+          return;
+        }
+        // 进行中：更新进度文案
+        const pct = st.progress || 0;
+        if (typeof setLaunchStep === 'function') {
+          setLaunchStep('java-check', 'running', `正在自动下载 Java ${rangeDesc}... ${pct}%`);
+        }
+      } catch (e) {
+        // 轮询出错忽略，继续重试
+      }
+    }, 500);
+  });
+}
+
 // 读取当前"游戏窗口大小"选择（DOM 优先，兜底默认），用于启动时强制传分辨率给后端
 function getCurrentWindowSize() {
   let ws = document.getElementById('window-size')?.value || 'default';
@@ -64,7 +103,7 @@ async function handleLaunch() {
         if (v && v.externalDir) externalVersionDir = v.externalDir;
       }
     } catch (_) {}
-    const depCheck = await API.launchCheck(versionId, externalVersionDir);
+    let depCheck = await API.launchCheck(versionId, externalVersionDir);
     const requiredJava = (depCheck.java && depCheck.java.required) || 21;
 
     if (!depCheck.java || !depCheck.java.ok) {
@@ -72,13 +111,49 @@ async function handleLaunch() {
       const maxVer = depCheck.java.maxVersion;
       const rangeDesc = maxVer && maxVer < 999 ? `${requiredVer}~${maxVer}` : `${requiredVer}+`;
       const serverMsg = depCheck.java.message || '';
-      setLaunchStep('java-check', 'error', `未找到 Java ${rangeDesc}`);
-      const detailMsg = serverMsg || `未找到合适的Java运行环境（需要 Java ${rangeDesc}）`;
-      showLaunchError(`${detailMsg}<br><a href="javascript:void(0)" id="launch-nav-java" style="color:var(--accent);text-decoration:underline;cursor:pointer;">前往 Java 管理页面 →</a>`);
-      launchBtn.disabled = false;
-      homeLaunchBtn.disabled = false;
-      window._versepc_launching = false;
-      return;
+
+      // ===== 自动补 Java（对齐 Electron 版 autoInstallJava）=====
+      setLaunchStep('java-check', 'running', `未找到 Java ${rangeDesc}，正在自动下载...`);
+      try {
+        const ai = await API.autoInstallJava(requiredVer);
+        if (ai && ai.success && ai.javaPath) {
+          setLaunchStep('java-check', 'success', `Java ${ai.version || requiredVer} 已就绪 ✓`);
+        } else if (ai && ai.success && ai.sessionId) {
+          const ok = await waitJavaAutoInstall(ai.sessionId, requiredVer, rangeDesc);
+          if (!ok) {
+            setLaunchStep('java-check', 'error', `Java ${rangeDesc} 自动下载失败`);
+            showLaunchError(`Java 自动下载失败，请检查网络后重试，或前往 Java 管理页面手动安装。<br><a href="javascript:void(0)" id="launch-nav-java" style="color:var(--accent);text-decoration:underline;cursor:pointer;">前往 Java 管理页面 →</a>`);
+            launchBtn.disabled = false;
+            homeLaunchBtn.disabled = false;
+            window._versepc_launching = false;
+            return;
+          }
+          setLaunchStep('java-check', 'success', `Java ${requiredVer} 自动安装成功 ✓`);
+        } else {
+          throw new Error((ai && ai.message) || 'Java 自动安装请求失败');
+        }
+      } catch (e) {
+        setLaunchStep('java-check', 'error', `Java ${rangeDesc} 自动下载失败`);
+        showLaunchError(`${e.message || 'Java 自动下载失败'}<br><a href="javascript:void(0)" id="launch-nav-java" style="color:var(--accent);text-decoration:underline;cursor:pointer;">前往 Java 管理页面 →</a>`);
+        launchBtn.disabled = false;
+        homeLaunchBtn.disabled = false;
+        window._versepc_launching = false;
+        return;
+      }
+
+      // 自动安装完成后重新检查
+      try {
+        depCheck = await API.launchCheck(versionId, externalVersionDir);
+      } catch (_) {}
+      if (!depCheck.java || !depCheck.java.ok) {
+        setLaunchStep('java-check', 'error', `Java ${rangeDesc} 仍未就绪`);
+        showLaunchError(`${serverMsg || `未找到合适的Java运行环境（需要 Java ${rangeDesc}）`}<br><a href="javascript:void(0)" id="launch-nav-java" style="color:var(--accent);text-decoration:underline;cursor:pointer;">前往 Java 管理页面 →</a>`);
+        launchBtn.disabled = false;
+        homeLaunchBtn.disabled = false;
+        window._versepc_launching = false;
+        return;
+      }
+      setLaunchStep('java-check', 'success', depCheck.java.message || `Java ${depCheck.java.version} ✓`);
     }
     
     setLaunchStep('java-check', 'success', depCheck.java.message || `Java ${depCheck.java.version} ✓`);

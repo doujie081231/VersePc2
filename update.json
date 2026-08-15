@@ -1,13 +1,13 @@
 {
-  "version": "0.4.0",
-  "releaseName": "v0.4.0",
-  "releaseDate": "2026-08-15",
-  "releaseNotes": "VersePC2 v0.4.0\n\n修复:\n- 修复账户头像皮肤被正方形裁剪帽子的问题，与 PCL 展示一致\n- 修复外部文件夹版本打开时崩溃的问题\n- 修复外部文件夹版本被误判为本地版本的问题",
+  "version": "0.5.0",
+  "releaseName": "v0.5.0",
+  "releaseDate": "2026-08-16",
+  "releaseNotes": "VersePC2 v0.5.0\n\n新增:\n- Java 下载支持镜像加速（中科大源优先），国内下载更快\n- 设置页面新增 GitHub 开源仓库卡片和开源协议卡片\n\n修复:\n- 修复启动游戏时自动补全 Java 环境的问题\n- 修复整合包（mrpack）下载时进度条不涨、越下越慢卡住的问题\n- 修复 Modrinth 源下载模组时卡住的问题，下载速度更快\n- 修复自定义视频壁纸无法加载的问题\n- 修复账号详情界面皮肤导入失败的问题\n- 修复模组下载及模组文件夹定位不准的问题",
   "files": {
     "win-x64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v0.4.0/VersePC2-0.4.0.exe",
-      "size": 71848448,
-      "sha256": "285F32E472CF7C274DDEEE25EDEACE3A505A13FCE49242DBC39468B2215023FB"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v0.5.0/VersePC2-0.5.0.exe",
+      "size": 71895040,
+      "sha256": "B791ED2007C7BE4F16E3382F7D15197012F16CB915CAE5C1A8B150407444018E"
     }
   }
 }

@@ -910,17 +910,28 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let settings = storage::load_settings();
+    // 前端选择的保存路径（默认模组路径）。优先使用它作为 mods 目录，
+    // 未传时才按当前选中版本自动定位（对齐 PCL：下载到当前实例的 mods 文件夹）。
+    let save_path = body
+        .as_ref()
+        .and_then(|b| b.get("savePath"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from);
 
     if project_id.is_empty() {
         return ApiResult::err(400, "Missing projectId");
     }
 
-    // 确定目标 mods 目录
-    let settings = storage::load_settings();
-    let mods_dir = resolve_mods_dir(&settings, &version_id, &mc_version);
-    let mods_dir = match mods_dir {
-        Some(d) => d,
-        None => return ApiResult::err(400, "请先安装一个游戏版本"),
+    // 确定目标 mods 目录：优先前端选择的路径，其次按当前选中版本自动定位
+    let mods_dir = if let Some(sp) = save_path {
+        sp
+    } else {
+        match resolve_mods_dir(&settings, &version_id, &mc_version) {
+            Some(d) => d,
+            None => return ApiResult::err(400, "请先安装一个游戏版本"),
+        }
     };
 
     if let Err(e) = std::fs::create_dir_all(&mods_dir) {
@@ -1539,9 +1550,19 @@ fn resolve_mods_dir(settings: &Value, version_id: &str, _mc_version: &str) -> Op
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
 
-    // 优先用指定的 versionId
+    // 优先用指定的 versionId（须是已安装的版本目录，否则视为无效，
+    // 回退到 selectedVersion —— 防止把 Modrinth 文件 ID 等误当版本 ID 定位）
     let vid = if !version_id.is_empty() {
-        version_id.to_string()
+        let cand = versions_dir.join(version_id);
+        if cand.is_dir() {
+            version_id.to_string()
+        } else {
+            settings
+                .get("selectedVersion")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        }
     } else {
         // 否则用 selectedVersion
         settings

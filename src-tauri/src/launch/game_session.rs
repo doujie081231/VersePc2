@@ -142,3 +142,55 @@ pub fn get_logs(session_id: &str, count: usize, offset: usize) -> Vec<String> {
     }
     Vec::new()
 }
+
+// ============================================================================
+// 全局缓存：退出分析 + 持久化游戏日志
+// 对应原项目 server/context.js 的 ctx.sessions.lastGameExitAnalysis + gameLogBuffer
+// ----------------------------------------------------------------------------
+// 问题背景：
+//   - 游戏实例在进程退出后会被 remove_instance 移除，绑在实例上的 log_buffer 随之丢失，
+//     导致崩溃分析、日志导出拿不到日志。
+//   - 这里提供两个与实例生命周期无关的全局缓存：
+//       1) LAST_GAME_EXIT_ANALYSIS：最近一次游戏退出的分析结果（含退出码/原因/建议/launchInfo/logBuffer）
+//       2) PERSISTENT_LOG_BUFFER：全局游戏日志缓冲，实例移除后仍然保留（最多 5000 行）
+// ============================================================================
+
+static LAST_GAME_EXIT_ANALYSIS: Mutex<Option<Value>> = Mutex::new(None);
+static PERSISTENT_LOG_BUFFER: Mutex<Vec<String>> = Mutex::new(Vec::new());
+const PERSISTENT_LOG_MAX: usize = 5000;
+
+/// 记录最近一次游戏退出分析结果（游戏进程退出时由 process_manager 调用）
+pub fn set_exit_analysis(analysis: Value) {
+    let mut slot = LAST_GAME_EXIT_ANALYSIS.lock().unwrap();
+    *slot = Some(analysis);
+}
+
+/// 读取最近一次游戏退出分析结果
+pub fn get_exit_analysis() -> Option<Value> {
+    LAST_GAME_EXIT_ANALYSIS.lock().unwrap().clone()
+}
+
+/// 向全局日志缓冲追加一行（游戏进程输出时调用）
+pub fn push_persistent_log(line: String) {
+    let mut buf = PERSISTENT_LOG_BUFFER.lock().unwrap();
+    buf.push(line);
+    if buf.len() > PERSISTENT_LOG_MAX {
+        let extra = buf.len() - PERSISTENT_LOG_MAX;
+        buf.drain(0..extra);
+    }
+}
+
+/// 读取全局日志缓冲尾部若干行
+pub fn get_persistent_logs(count: usize) -> Vec<String> {
+    let buf = PERSISTENT_LOG_BUFFER.lock().unwrap();
+    if buf.is_empty() {
+        return Vec::new();
+    }
+    let start = if count == 0 { 0 } else { buf.len().saturating_sub(count) };
+    buf[start..].to_vec()
+}
+
+/// 清空全局日志缓冲（所有游戏退出后调用，与 Electron 版行为一致）
+pub fn clear_persistent_logs() {
+    PERSISTENT_LOG_BUFFER.lock().unwrap().clear();
+}

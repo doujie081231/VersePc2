@@ -156,13 +156,12 @@ fn handle_game_log(params: &Option<Value>) -> ApiResult {
 }
 
 /// GET /api/game/exit-analysis — 返回上次游戏退出分析结果
-/// 简化版：从 game_session 中读取最后退出实例的信息
+/// 数据由 process_manager 在游戏进程退出时写入全局缓存（game_session::set_exit_analysis），
+/// 对应原项目 server/context.js 的 ctx.sessions.lastGameExitAnalysis。
 fn handle_exit_analysis() -> ApiResult {
-    // 退出分析当前由 process_manager 通过 "game-exit" 事件推送
-    // 这里返回空，前端应监听事件
+    let analysis = game_session::get_exit_analysis();
     ApiResult::ok(json!({
-        "analysis": null,
-        "message": "退出分析已通过 game-exit 事件推送"
+        "analysis": analysis,
     }))
 }
 
@@ -288,7 +287,36 @@ fn handle_crash_analyze(params: &Option<Value>) -> ApiResult {
     };
 
     // 取主日志文件的摘录（用于前端展示）
-    let log_excerpt: Vec<Value> = Vec::new();
+    let log_excerpt: Vec<Value> = {
+        let mut excerpt = Vec::new();
+        // 从崩溃报告 / 游戏日志 / hs_err 提取关键行（最多 20 行）
+        let sources = [
+            ("crash-report", &output.log_crash),
+            ("latest.log", &output.log_mc),
+            ("hs_err", &output.log_hs),
+        ];
+        for (src_label, content_opt) in &sources {
+            if let Some(content) = content_opt {
+                for line in content.lines().take(80) {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    excerpt.push(json!({
+                        "source": src_label,
+                        "line": trimmed
+                    }));
+                    if excerpt.len() >= 20 {
+                        break;
+                    }
+                }
+                if excerpt.len() >= 20 {
+                    break;
+                }
+            }
+        }
+        excerpt
+    };
 
     let mod_name = output
         .crash_reasons
@@ -326,15 +354,110 @@ fn handle_crash_analyze(params: &Option<Value>) -> ApiResult {
         "未分析出崩溃原因".to_string()
     };
 
+    // 最终回退：文件系统找不到崩溃日志时（游戏秒崩来不及写 crash-reports），
+    // 用后端收集的 lastGameExitAnalysis 数据（进程退出码分析 + stdout/stderr logBuffer）
+    let (final_found, final_reason, final_solution, final_log_excerpt, final_crash_desc, final_log_file, final_mod_name, final_severity) = if found {
+        (
+            found,
+            reason.clone(),
+            solution.clone(),
+            log_excerpt,
+            output.detail.clone(),
+            log_file,
+            mod_name,
+            severity,
+        )
+    } else if let Some(ea) = game_session::get_exit_analysis() {
+        if ea.get("isCrash").and_then(|v| v.as_bool()).unwrap_or(false) {
+            let ea_code = ea.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
+            let ea_reason = ea.get("reason").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let ea_sugg = ea.get("suggestion").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+            // 从进程输出提取错误相关行构造崩溃描述
+            let mut fallback_desc = String::new();
+            let mut fallback_excerpt: Vec<Value> = Vec::new();
+            let mut error_lines: Vec<String> = Vec::new();
+            if let Some(buf) = ea.get("logBuffer").and_then(|v| v.as_array()) {
+                for line in buf {
+                    if let Some(s) = line.as_str() {
+                        let trimmed = s.trim().to_string();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        fallback_excerpt.push(json!({
+                            "source": if trimmed.starts_with("[VersePC]") { "launcher" } else { "latest.log" },
+                            "line": trimmed
+                        }));
+                        if trimmed.contains("Exception")
+                            || trimmed.contains("Error")
+                            || trimmed.contains("error")
+                            || trimmed.contains("ERROR")
+                            || trimmed.contains("Failed")
+                            || trimmed.contains("failed")
+                            || trimmed.contains("at ")
+                            || trimmed.contains("Caused by")
+                        {
+                            error_lines.push(trimmed);
+                        }
+                    }
+                }
+            }
+            if !error_lines.is_empty() {
+                let tail: Vec<String> = error_lines.iter().rev().take(25).rev().cloned().collect();
+                fallback_desc = format!("【进程错误输出】\n{}", tail.join("\n"));
+            }
+            let mut proc_info = format!("【进程信息】\n退出码: {}", ea_code);
+            if !ea_reason.is_empty() {
+                proc_info.push_str(&format!("\n退出原因: {}", ea_reason));
+            }
+            if !fallback_desc.is_empty() {
+                fallback_desc.push_str(&format!("\n\n{}", proc_info));
+            } else {
+                fallback_desc = proc_info;
+            }
+
+            let fallback_sev = if ea_code == 0 {
+                "low"
+            } else if ea_code == 137 || ea_reason.contains("内存") || ea_reason.contains("OOM") || ea_reason.contains("OutOfMemory") {
+                "high"
+            } else {
+                "medium"
+            };
+
+            (
+                true,
+                if !ea_reason.is_empty() {
+                    ea_reason
+                } else {
+                    format!("游戏异常退出（退出码: {}）", ea_code)
+                },
+                if !ea_sugg.is_empty() {
+                    ea_sugg
+                } else {
+                    "请查看日志获取更多信息，或尝试重新启动游戏。".to_string()
+                },
+                fallback_excerpt,
+                fallback_desc,
+                if log_file.is_empty() { "(进程输出)".to_string() } else { log_file },
+                None,
+                fallback_sev.to_string(),
+            )
+        } else {
+            (found, reason.clone(), solution.clone(), log_excerpt, output.detail.clone(), log_file, mod_name, severity)
+        }
+    } else {
+        (found, reason.clone(), solution.clone(), log_excerpt, output.detail.clone(), log_file, mod_name, severity)
+    };
+
     ApiResult::ok(json!({
-        "found": found,
-        "reason": reason,
-        "solution": solution,
-        "modName": mod_name,
-        "logFile": log_file,
-        "severity": severity,
-        "logExcerpt": log_excerpt,
-        "crashDescription": output.detail,
+        "found": final_found,
+        "reason": final_reason,
+        "solution": final_solution,
+        "modName": final_mod_name,
+        "logFile": final_log_file,
+        "severity": final_severity,
+        "logExcerpt": final_log_excerpt,
+        "crashDescription": final_crash_desc,
         "files": output.files,
         "crashReasons": output.crash_reasons.iter().map(|(r, a)| json!({
             "reason": r.as_str(),
@@ -606,11 +729,50 @@ fn handle_log_export(params: &Option<Value>) -> ApiResult {
     }
     parts.push(String::new());
 
-    // 上次退出分析：Rust 项目通过 game-exit 事件推送，无全局缓存，跳过
+    // 上次退出分析（进程退出时由 process_manager 写入全局缓存）
+    if let Some(ea) = game_session::get_exit_analysis() {
+        parts.push("[上次退出分析]".to_string());
+        let ea_code = ea.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
+        let ea_reason = ea.get("reason").and_then(|v| v.as_str()).unwrap_or("");
+        let ea_sugg = ea.get("suggestion").and_then(|v| v.as_str()).unwrap_or("");
+        let ea_crash = ea.get("isCrash").and_then(|v| v.as_bool()).unwrap_or(false);
+        parts.push(format!("退出码: {}", ea_code));
+        parts.push(format!("原因: {}", ea_reason));
+        parts.push(format!("建议: {}", ea_sugg));
+        parts.push(format!("是否崩溃: {}", if ea_crash { "是" } else { "否" }));
+        if let Some(ea_vid) = ea.get("versionId").and_then(|v| v.as_str()) {
+            if !ea_vid.is_empty() {
+                parts.push(format!("版本ID: {}", ea_vid));
+            }
+        }
+        parts.push(String::new());
+        // 退出时的日志尾部（logBuffer，最多 50 行）
+        if let Some(buf) = ea.get("logBuffer").and_then(|v| v.as_array()) {
+            if !buf.is_empty() {
+                parts.push(format!("[退出日志尾部] (最近 {} 行)", buf.len()));
+                parts.push("-".repeat(40));
+                for line in buf {
+                    if let Some(s) = line.as_str() {
+                        parts.push(s.to_string());
+                    }
+                }
+                parts.push(String::new());
+            }
+        }
+    }
 
-    // 游戏日志缓冲区：取最近运行实例的日志（最多 2000 行）
-    let instances = game_session::get_all_status();
-    if !instances.is_empty() {
+    // 全局持久化游戏日志缓冲：游戏实例移除后仍保留（最多 2000 行）
+    let persistent_logs = game_session::get_persistent_logs(2000);
+    if !persistent_logs.is_empty() {
+        parts.push(format!("[游戏日志] (最近 {} 行)", persistent_logs.len()));
+        parts.push("-".repeat(40));
+        for line in &persistent_logs {
+            parts.push(line.clone());
+        }
+        parts.push(String::new());
+    } else {
+        // 兜底：从仍存活的运行实例取日志
+        let instances = game_session::get_all_status();
         if let Some(inst) = instances.first() {
             let session_id = utils::get_str(inst, "sessionId");
             if !session_id.is_empty() {

@@ -704,8 +704,10 @@ class CustomVideoRenderer {
             try {
                 if (window.electronAPI && window.electronAPI.readFileBuffer) {
                     const buffer = await window.electronAPI.readFileBuffer(filePath);
-                    if (buffer && buffer.byteLength > 0) {
-                        const blob = new Blob([buffer], { type: 'video/mp4' });
+                    // Tauri 返回的 Vec<u8> 会序列化为数字数组，需先转成 Uint8Array 才能正确构造 Blob
+                    const u8 = buffer ? (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)) : null;
+                    if (u8 && u8.byteLength > 0) {
+                        const blob = new Blob([u8], { type: 'video/mp4' });
                         videoUrl = URL.createObjectURL(blob);
                     } else {
                         videoUrl = wpfilePath(filePath);

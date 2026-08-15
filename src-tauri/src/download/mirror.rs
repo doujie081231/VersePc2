@@ -90,9 +90,33 @@ pub fn is_mirror_available() -> bool {
     }
 }
 
+/// 把 Adoptium Temurin 的 GitHub 直链转换为中科大 USTC 镜像 URL
+/// 对应原项目 server/java/java-download.js 的 getTemurinMirrorUrl
+/// 形如：
+///   https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip
+///   → https://mirrors.ustc.edu.cn/adoptium/releases/temurin21-binaries/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip
+fn temurin_ustc_mirror(github_url: &str) -> Option<String> {
+    let re = regex::Regex::new(
+        r"https://github\.com/adoptium/temurin(\d+)-binaries/releases/download/([^/]+)/([^/?]+)",
+    )
+    .ok()?;
+    let cap = re.captures(github_url)?;
+    let major = cap.get(1)?.as_str();
+    let tag = cap.get(2)?.as_str();
+    let file = cap.get(3)?.as_str();
+    Some(format!(
+        "https://mirrors.ustc.edu.cn/adoptium/releases/temurin{}-binaries/{}/{}",
+        major, tag, file
+    ))
+}
+
 /// 把官方 URL 替换为 BMCLAPI 镜像 URL
 /// 对应原项目 context.js 的 ctx.mirrors.BMCLAPI_MIRROR 映射表
 pub fn to_mirror_url(original: &str) -> Option<String> {
+    // Adoptium Temurin JDK GitHub 直链 → 中科大 USTC 镜像（Java 下载用）
+    if original.starts_with("https://github.com/adoptium/temurin") {
+        return temurin_ustc_mirror(original);
+    }
     // Mojang 官方源 → BMCLAPI
     let mirror = if original.starts_with("https://piston-data.mojang.com/") {
         original.replace("https://piston-data.mojang.com/", "https://bmclapi2.bangbang93.com/")

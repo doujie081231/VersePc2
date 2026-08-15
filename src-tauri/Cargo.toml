@@ -1,6 +1,6 @@
 [package]
 name = "verse-tauri"
-version = "0.4.0"
+version = "0.5.0"
 description = "VersePC Tauri 框架替换项目"
 edition = "2024"
 # 通过 rust-version 说明需要较新的编译器；let-chains 语法在 2024 edition 下可用
@@ -58,6 +58,7 @@ tracing = "0.1"
 futures = "0.3"
 sysinfo = "0.30"
 arboard = "3"
+winreg = "0.52"
 
 # ============== Release 体积优化 ==============
 # 通过 LTO + strip + 单 codegen-unit 大幅缩小 exe 体积

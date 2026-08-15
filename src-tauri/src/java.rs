@@ -63,7 +63,31 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         }
     }
 
-    // 2. Program Files 下的常见 Java 目录
+    // 2. PATH 环境变量逐个目录详细查找（不仅 where java，还会对含 java/jdk 关键字的 PATH 目录检查父级 bin/java）
+    #[cfg(target_os = "windows")]
+    if let Ok(path_env) = std::env::var("PATH") {
+        let sep = if path_env.contains(';') { ';' } else { ':' };
+        for dir in path_env.split(sep) {
+            let trimmed = dir.trim().trim_matches('"');
+            if trimmed.is_empty() {
+                continue;
+            }
+            let dir_path = PathBuf::from(trimmed);
+            // 直接查 PATH 目录下的 java.exe
+            let direct = dir_path.join("java.exe");
+            add(&mut paths, &mut found, direct);
+            // 如果 PATH 目录名包含 java/jdk 关键字，很可能是 .../bin，父目录就是 javaHome
+            let dir_lower = trimmed.to_lowercase();
+            if dir_lower.contains("java") || dir_lower.contains("jdk") {
+                if let Some(parent) = dir_path.parent() {
+                    let parent_java = PathBuf::from(parent).join("bin").join("java.exe");
+                    add(&mut paths, &mut found, parent_java);
+                }
+            }
+        }
+    }
+
+    // 3. Program Files 下的常见 Java 目录
     if let Ok(pf) = std::env::var("ProgramFiles") {
         scan_java_subdirs(&pf, &mut paths, &mut found, add);
     }
@@ -71,17 +95,17 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         scan_java_subdirs(&pf86, &mut paths, &mut found, add);
     }
 
-    // 3. AppData / LocalAppData
+    // 4. AppData / LocalAppData：广义 2 层深度扫描（含任何 java/jdk 关键字的目录都能命中，不局限于特定启动器）
     if let Ok(appdata) = std::env::var("APPDATA") {
-        scan_java_subdirs(&appdata, &mut paths, &mut found, add);
+        scan_java_subdirs_depth(&PathBuf::from(&appdata), 2, &mut paths, &mut found, add);
     }
     if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-        scan_java_subdirs(&localappdata, &mut paths, &mut found, add);
+        scan_java_subdirs_depth(&PathBuf::from(&localappdata), 2, &mut paths, &mut found, add);
 
-        // JetBrains JBR
-        let jbr = PathBuf::from(&localappdata).join("JetBrains").join("Toolbox").join("apps").join("JBR");
-        if jbr.exists() {
-            scan_java_subdirs_depth(&jbr, 3, &mut paths, &mut found, add);
+        // JetBrains JBR（整个 JetBrains 目录深搜，兼容 Toolbox 与其他安装方式）
+        let jetbrains = PathBuf::from(&localappdata).join("JetBrains");
+        if jetbrains.exists() {
+            scan_java_subdirs_depth(&jetbrains, 3, &mut paths, &mut found, add);
         }
     }
 
@@ -97,8 +121,10 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         }
     }
 
-    // 5. 用户目录 / APPDATA 下的常见 Java 路径
+    // 5. 用户目录：广义 2 层深度扫描（任何 java/jdk 关键字目录都会命中）
     if let Some(ref home) = userprofile {
+        scan_java_subdirs_depth(&PathBuf::from(home), 2, &mut paths, &mut found, add);
+
         let user_java = PathBuf::from(home).join("Java");
         scan_java_subdirs(&user_java.to_string_lossy(), &mut paths, &mut found, add);
         let user_jdks = PathBuf::from(home).join(".jdks");
@@ -142,13 +168,18 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         let ftba = PathBuf::from(localappdata).join(".ftba").join("bin").join("runtime");
         scan_java_subdirs_depth(&ftba, 3, &mut paths, &mut found, add);
         // Microsoft Store 版 Minecraft 自带 runtime
-        let ms_store = PathBuf::from(localappdata)
+        let ms_base = PathBuf::from(localappdata)
             .join("Packages")
             .join("Microsoft.4297127D64EC6_8wekyb3d8bbwe")
             .join("LocalCache")
             .join("Local")
             .join("runtime");
-        scan_java_subdirs_depth(&ms_store, 4, &mut paths, &mut found, add);
+        scan_java_subdirs_depth(&ms_base, 4, &mut paths, &mut found, add);
+        // Microsoft Store 版本额外的特定子路径（gamma/gold 架构子目录）
+        let ms_gamma = ms_base.join("java-runtime-gamma").join("windows-x64");
+        scan_java_subdirs_depth(&ms_gamma, 3, &mut paths, &mut found, add);
+        let ms_gold = ms_base.join("java-runtime-gold").join("windows-x64");
+        scan_java_subdirs_depth(&ms_gold, 3, &mut paths, &mut found, add);
         // Programs 目录
         let programs = PathBuf::from(localappdata).join("Programs");
         scan_java_subdirs(&programs.to_string_lossy(), &mut paths, &mut found, add);
@@ -187,22 +218,87 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         }
     }
 
-    // 7. 其他常见根目录（用户直接解压到盘根目录的情况）
-    // 只检查固定的目录名（C:\Java、C:\JDK 等），不做递归深度扫描，
-    // 否则每次启动会遍历整个盘根目录两层，导致启动卡死（黑屏）
-    for drive in &["C:", "D:", "E:", "F:", "G:", "H:"] {
-        for dir_name in &[
-            "Java", "JDK", "JRE", "OpenJDK", "jdk", "jre",
-            ".jdks", ".jre", ".java", "Temurin", "Corretto", "Zulu",
+    // 7. 盘符根目录下的常见 Java 目录（用户直接解压到盘根的情况）
+    //    先用 wmic 枚举实际存在的盘符（避免漏了 I:、J: 等移动硬盘 / U 盘）
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut drives: Vec<String> = Vec::new();
+        if let Ok(out) = Command::new("wmic")
+            .args(["logicaldisk", "get", "caption", "/value"])
+            .creation_flags(0x08000000)
+            .output()
+        {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                if let Ok(re) = regex::Regex::new(r"Caption=(\w:)") {
+                    for cap in re.captures_iter(&stdout) {
+                        if let Some(m) = cap.get(1) {
+                            drives.push(m.as_str().to_string());
+                        }
+                    }
+                }
+            }
+        }
+        if drives.is_empty() {
+            // wmic 失败时回退到常见盘符
+            for d in &["C:", "D:", "E:", "F:", "G:", "H:", "I:", "J:"] {
+                drives.push(d.to_string());
+            }
+        }
+        let dir_names = [
+            "Java", "JDK", "JRE", "Runtime",
+            "Javas", "JDKs", "JREs", "Runtimes",
+            "OpenJDK", "jdk", "jre", "runtime",
+            ".jdks", ".jre", ".java",
+            "Temurin", "Corretto", "Zulu",
             "Microsoft", "GraalVM", "Liberica", "Dragonwell",
-        ] {
-            let p = PathBuf::from(format!("{}\\{}", drive, dir_name));
-            scan_java_subdirs(&p.to_string_lossy(), &mut paths, &mut found, add);
+        ];
+        for drive in &drives {
+            // 先读盘根目录，枚举命中 java/jdk/jre/runtime 关键字的目录（与 Electron 版逻辑一致）
+            let root = PathBuf::from(format!("{}\\", drive));
+            if let Ok(entries) = std::fs::read_dir(&root) {
+                for entry in entries.flatten() {
+                    if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    let name = entry.file_name().to_string_lossy().to_lowercase();
+                    let hit = ["java", "jdk", "jre", "runtime"]
+                        .iter()
+                        .any(|k| name == *k || name == format!("{}s", k));
+                    if hit {
+                        scan_java_subdirs_depth(&entry.path(), 2, &mut paths, &mut found, add);
+                    }
+                }
+            }
+            // 同时保留常见目录名精确匹配
+            for dir_name in &dir_names {
+                let p = PathBuf::from(format!("{}\\{}", drive, dir_name));
+                scan_java_subdirs(&p.to_string_lossy(), &mut paths, &mut found, add);
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        for drive in &["C:", "D:", "E:", "F:", "G:", "H:"] {
+            for dir_name in &[
+                "Java", "JDK", "JRE", "OpenJDK", "jdk", "jre",
+                ".jdks", ".jre", ".java", "Temurin", "Corretto", "Zulu",
+                "Microsoft", "GraalVM", "Liberica", "Dragonwell",
+            ] {
+                let p = PathBuf::from(format!("{}/{}", drive, dir_name));
+                scan_java_subdirs(&p.to_string_lossy(), &mut paths, &mut found, add);
+            }
         }
     }
     // ProgramData\Oracle\Java
-    let oracle = PathBuf::from("C:\\ProgramData\\Oracle\\Java");
-    scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
+    if let Ok(pd) = std::env::var("ProgramData") {
+        let oracle = PathBuf::from(pd).join("Oracle").join("Java");
+        scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
+    } else {
+        let oracle = PathBuf::from("C:\\ProgramData\\Oracle\\Java");
+        scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
+    }
 
     // 8. where java（PATH 里的 java）
     #[cfg(target_os = "windows")]
@@ -1303,10 +1399,17 @@ async fn install_mojang_runtime(
     major_version: u64,
     component: &str,
 ) -> Result<(), String> {
-    // 1. 拉取 Mojang Java 运行时清单
+    // 1. 拉取 Mojang Java 运行时清单（动态平台 key，对齐 electron 的 getPlatformKey）
     let runtime_url = "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
     let runtime_list = shared::fetch_json(runtime_url).await?;
-    let platform_key = "windows-x64";
+    let arch_aarch64 = std::env::consts::ARCH == "aarch64";
+    let platform_key = if cfg!(target_os = "windows") {
+        if arch_aarch64 { "windows-arm64" } else { "windows-x64" }
+    } else if cfg!(target_os = "macos") {
+        if arch_aarch64 { "mac-os-arm64" } else { "mac-os" }
+    } else {
+        "linux"
+    };
     let platform_runtimes = runtime_list
         .get(platform_key)
         .and_then(|v| v.as_array())
@@ -1489,10 +1592,26 @@ async fn install_java_async(session_id: String, major_version: u64) {
         }
     }
 
-    // 步骤 2: 调用 Adoptium API 获取下载链接
+    // 步骤 2: 调用 Adoptium API 获取下载链接（动态平台/架构，对齐 electron 逻辑）
+    // 架构映射：x86_64→x64、aarch64→aarch64、其余→x64
+    let arch = if std::env::consts::ARCH == "x86_64" {
+        "x64"
+    } else if std::env::consts::ARCH == "aarch64" {
+        "aarch64"
+    } else {
+        "x64"
+    };
+    // 平台映射：Windows→windows、macOS→mac、Linux→linux
+    let os_name = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "mac"
+    } else {
+        "linux"
+    };
     let api_url = format!(
-        "https://api.adoptium.net/v3/assets/latest/{}/hotspot?architecture=x64&image_type=jdk&os=windows&vendor=eclipse",
-        major_version
+        "https://api.adoptium.net/v3/assets/latest/{}/hotspot?architecture={}&image_type=jdk&os={}&vendor=eclipse",
+        major_version, arch, os_name
     );
 
     let api_result = match shared::fetch_json(&api_url).await {
@@ -1554,14 +1673,14 @@ async fn install_java_async(session_id: String, major_version: u64) {
     });
     write_java_status(&session_id, &status);
 
-    // 执行下载
+    // 执行下载（china-first：中科大 USTC 镜像优先，Adoptium 官方 GitHub 兜底）
     let expected_size = if total_size > 0 { Some(total_size) } else { None };
     if let Err(e) = download::download_with_mirror(
         &download_url,
         &zip_path,
         None,
         expected_size,
-        "java",
+        "china-first",
         600,
         None,
     )
@@ -1923,7 +2042,48 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
             })))
         }
 
-        "POST /api/java/install" | "POST /api/java/auto-install" | "POST /api/java/download" => {
+        // 自动安装：先检测本地已有 Java，满足要求直接返回；否则启动下载（对应原项目 autoInstallJava）
+        "POST /api/java/auto-install" => {
+            let data = body.clone().unwrap_or(Value::Null);
+            let required_version = data
+                .get("requiredVersion")
+                .and_then(|v| v.as_u64())
+                .or_else(|| data.get("majorVersion").and_then(|v| v.as_u64()))
+                .unwrap_or(17);
+
+            // 1. 先扫描本地已有 Java，满足要求直接返回，不重复下载
+            let java_list = detect_all();
+            if let Some(j) = java_list
+                .iter()
+                .find(|j| j.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0) >= required_version)
+            {
+                return Some(ApiResult::ok(json!({
+                    "success": true,
+                    "installed": false,
+                    "javaPath": utils::get_str(j, "path"),
+                    "version": utils::get_str(j, "version"),
+                    "majorVersion": j.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(required_version),
+                    "message": format!("已检测到合适的 Java {}，无需安装", j.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(required_version))
+                })));
+            }
+
+            // 2. 没有合适的 Java：启动异步下载安装
+            let session_id = uuid::Uuid::new_v4().to_string();
+            let sid = session_id.clone();
+            tokio::spawn(async move {
+                install_java_async(sid, required_version).await;
+            });
+
+            Some(ApiResult::ok(json!({
+                "success": true,
+                "installed": false,
+                "sessionId": session_id,
+                "status": "fetching",
+                "message": format!("正在自动下载 Java {}...", required_version)
+            })))
+        }
+
+        "POST /api/java/install" | "POST /api/java/download" => {
             let data = body.clone().unwrap_or(Value::Null);
             let major_version = data
                 .get("majorVersion")

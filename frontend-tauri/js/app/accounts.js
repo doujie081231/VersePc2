@@ -6,6 +6,38 @@ let accPollTimer = null;
 let accDlSessionId = null;
 let accDlPollTimer = null;
 
+/**
+ * Tauri 兼容的 fetch 包装器：Tauri 下没有本地 HTTP 服务器，
+ * 原生 fetch('/api/...') 会失败。通过 __TAURI_PROXY__ 走 invoke 通道。
+ * Electron 下直接走原生 fetch。
+ */
+async function _tauriFetch(url, options = {}) {
+  // 非 Tauri 环境直接走原生 fetch
+  if (!window.__TAURI_PROXY__) {
+    return fetch(url, options);
+  }
+  // 只对 /api/ 路径走代理，外部 URL 仍走原生 fetch
+  if (!url.startsWith('/api/')) {
+    return fetch(url, options);
+  }
+  const method = (options.method || 'GET').toUpperCase();
+  const u = new URL(url, window.location.origin);
+  const params = {};
+  u.searchParams.forEach((v, k) => { params[k] = v; });
+  let body = null;
+  if (options.body) {
+    try { body = JSON.parse(options.body); } catch (e) { body = options.body; }
+  }
+  const result = await window.__TAURI_PROXY__.apiProxy(method, u.pathname, params, body);
+  return {
+    ok: result.ok,
+    status: result.status,
+    async json() { return result.json(); },
+    async text() { const d = await result.json(); return JSON.stringify(d); },
+    headers: { get: () => null }
+  };
+}
+
 function accUpdateHeroBadge(statusType, text) {
   const badge = document.getElementById('acc-hero-badge');
   if (!badge) return;
@@ -1273,7 +1305,7 @@ async function loadSkinSelector(acc) {
   // 微软账户：只显示本地导入的皮肤库
   if (acc.type === 'microsoft') {
     try {
-      const resp = await fetch(`/api/ms-skins/local?accountId=${encodeURIComponent(acc.id)}`);
+      const resp = await _tauriFetch(`/api/ms-skins/local?accountId=${encodeURIComponent(acc.id)}`);
       const data = await resp.json();
       if (data.success && data.skins && data.skins.length > 0) {
         data.skins.forEach(skin => {
@@ -1313,7 +1345,7 @@ async function loadSkinSelector(acc) {
 
   // 离线账户：显示默认皮肤 + 自定义皮肤
   try {
-    const resp = await fetch('/api/default-skins');
+    const resp = await _tauriFetch('/api/default-skins');
     const data = await resp.json();
     if (!data.success || !data.skins) return;
     const currentSkinFile = acc.skinFile || 'steve_skin.png';
@@ -1363,7 +1395,7 @@ async function selectSkin(skinId, skinFile) {
       _refreshAccountAvatars();
       return;
     }
-    const resp = await fetch('/api/set-account-skin', {
+    const resp = await _tauriFetch('/api/set-account-skin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accountId: _currentDetailAccount.id, skinId })
@@ -1412,7 +1444,7 @@ async function handleSkinUpload(input) {
 
     // 微软账户：导入到本地皮肤库
     if (_currentDetailAccount.type === 'microsoft') {
-      const resp = await fetch('/api/ms-skins/import', {
+      const resp = await _tauriFetch('/api/ms-skins/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1434,7 +1466,7 @@ async function handleSkinUpload(input) {
     }
 
     // 离线账户：直接应用
-    const resp = await fetch('/api/upload-skin', {
+    const resp = await _tauriFetch('/api/upload-skin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1471,7 +1503,7 @@ async function applyMsSkin(skinId) {
   _applyingMsSkin = true;
   showToast('正在上传到 Minecraft 官方…', 'info');
   try {
-    const resp = await fetch('/api/ms-skins/apply', {
+    const resp = await _tauriFetch('/api/ms-skins/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1505,7 +1537,7 @@ async function deleteMsSkin(skinId, skinName) {
   if (!_currentDetailAccount || _currentDetailAccount.type !== 'microsoft') return;
   if (!confirm(`确定要删除皮肤「${skinName}」吗？`)) return;
   try {
-    const resp = await fetch('/api/ms-skins/delete', {
+    const resp = await _tauriFetch('/api/ms-skins/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

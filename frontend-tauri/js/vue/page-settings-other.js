@@ -282,6 +282,41 @@ const PageSettingsOther = {
               </div>
             </div>
 
+            <div class="card" style="cursor:pointer;" onclick="openExternalUrl('https://github.com/doujie081231/VersePc2')">
+              <div style="display:flex;align-items:center;gap:14px;">
+                <svg viewBox="0 0 24 24" fill="currentColor" style="width:40px;height:40px;flex-shrink:0;color:#8b949e;">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">GitHub 开源仓库</div>
+                  <div style="font-size:12px;color:var(--text-secondary);">doujie081231/VersePc2</div>
+                </div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--text-muted);flex-shrink:0;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </div>
+            </div>
+
+            <div class="card">
+              <div style="display:flex;align-items:flex-start;gap:14px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;flex-shrink:0;color:var(--accent);">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <path d="M12 8v8M8 12h8"/>
+                </svg>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">开源协议</div>
+                  <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">
+                    VersePC2 使用 <strong>GNU General Public License v3.0</strong> 开源协议。
+                    你可以自由使用、修改和分发本软件，但必须保留原版权声明，并以相同协议发布修改后的版本。
+                  </div>
+                  <div style="margin-top:8px;">
+                    <button class="btn btn-ghost btn-sm" onclick="openExternalUrl('https://github.com/doujie081231/VersePc2/blob/main/LICENSE')">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:4px;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      查看完整协议
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="card">
               <h3 style="margin-bottom: 16px;">致谢</h3>
               <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">
@@ -333,3 +368,12 @@ const PageSettingsOther = {
 
 window.VersePC = window.VersePC || {};
 window.VersePC.PageSettingsOther = PageSettingsOther;
+
+/* 打开外部链接：Tauri 用 electronAPI.openExternal，非 Tauri 用 window.open */
+window.openExternalUrl = function (url) {
+  if (window.electronAPI && window.electronAPI.openExternal) {
+    window.electronAPI.openExternal(url).catch(() => {});
+  } else {
+    window.open(url, '_blank');
+  }
+};

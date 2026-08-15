@@ -233,8 +233,8 @@
   <canvas id="wallpaper-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;"></canvas>
   <canvas id="wallpaper-canvas-gl" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;display:none;"></canvas>
   <div id="wallpaper-overlay" style="position:fixed;inset:0;z-index:1;pointer-events:none;"></div>
-  <!-- 顶部窗口拖拽带（Tauri）：整条可拖动窗口，避开左上/右上固定按钮（z-index 低于按钮） -->
-  <div id="global-drag-strip" data-tauri-drag-region style="position:fixed;top:0;left:0;right:0;height:48px;z-index:99997;"></div>
+  <!-- 顶部窗口拖拽带（Tauri）：可拖动窗口区域，左侧避开侧边栏宽度（保证侧边栏顶部按钮可点击），收起侧边栏时自动延伸到最左 -->
+  <div id="global-drag-strip" data-tauri-drag-region class="global-drag-strip"></div>
   <!-- 浮动窗口控制栏：最顶层，不占空间，右上角 -->
   <div class="floating-window-bar">
     <div class="floating-window-controls" id="window-controls" style="display:none">

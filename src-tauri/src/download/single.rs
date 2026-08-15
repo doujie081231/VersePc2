@@ -170,7 +170,11 @@ pub async fn download_with_mirror(
     // 避免分块探测失败，始终用最终地址进行下载
     // Modrinth CDN（cdn.modrinth.com/cdn-alt）直接提供文件，无需跳转解析，
     // 且其官方源在国内 TTFB 极慢（实测 >10s），跳过解析避免白白等官方源。
-    let needs_resolve = (!is_small_file && !original_url.contains("cdn.modrinth.com"))
+    // Adoptium Temurin JDK（github.com/adoptium）：走中科大 USTC 镜像，也跳过 GitHub 跳转解析，
+    // 否则 302 到 release-assets.githubusercontent.com 后镜像转换将失效（对应 electron 的 getTemurinMirrorUrl）。
+    let needs_resolve = (!is_small_file
+        && !original_url.contains("cdn.modrinth.com")
+        && !original_url.contains("github.com/adoptium"))
         || original_url.contains("edge.forgecdn.net")
         || original_url.contains("mediafilez.forgecdn.net");
     let base_url = if needs_resolve {
@@ -178,7 +182,16 @@ pub async fn download_with_mirror(
     } else {
         original_url.to_string()
     };
-    let urls = mirror::get_mirror_urls(&base_url, download_source);
+    // Modrinth CDN 强制镜像优先（china-first），即使调用方设置是 auto：
+    // 官方 cdn.modrinth.com 在国内 TTFB 极慢且易限流，先走镜像（mcimirror）再兜底官方。
+    let effective_source = if original_url.contains("cdn.modrinth.com")
+        || original_url.contains("cdn-alt.modrinth.com")
+    {
+        "china-first"
+    } else {
+        download_source
+    };
+    let urls = mirror::get_mirror_urls(&base_url, effective_source);
 
     // 坏源黑名单过滤：本次会话已失败的 host 直接跳过
     let urls: Vec<String> = urls
@@ -191,18 +204,26 @@ pub async fn download_with_mirror(
     // 多个源时并行测速，优先最快的源
     let urls = probe_speed_sort(&urls, timeout_secs).await;
 
-    // 大文件优先走多线程分块下载（读取设置中的并发数）
+    // 大文件优先走多线程分块下载（读取设置中的并发数）。
+    // max_chunks 是"最大分块/线程上限"，默认 32（对齐原项目 maxChunksPerFile=32）。
+    // 实际并发由 chunked.rs 动态调度：初始 4 起步，速度低于下限才逐步增加（对齐原项目 P2-10/P2-11）。
     let max_chunks = crate::storage::load_settings()
         .get("maxChunksPerFile")
         .and_then(|v| v.as_u64())
-        .unwrap_or(64)
-        .min(64) as usize;
+        .unwrap_or(32)
+        .clamp(1, 64) as usize;
     let enable_chunk = crate::storage::load_settings()
         .get("enableChunkDownload")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    if enable_chunk && !is_small_file {
+    // Modrinth CDN（官方 + mcimirror 镜像）对 Range 分块并发不友好，
+    // 单流即可跑满带宽且不会触发限流，直接跳过分块（与镜像解析保持一致）。
+    let is_modrinth_cdn = original_url.contains("cdn.modrinth.com")
+        || original_url.contains("cdn-alt.modrinth.com")
+        || original_url.contains("mod.mcimirror.top");
+
+    if enable_chunk && !is_small_file && !is_modrinth_cdn {
         match chunked::download_chunked_with_mirror(
             &urls,
             dest,
@@ -296,7 +317,7 @@ async fn download_with_retry(
     let mut last_err = String::new();
 
     for attempt in 0..3u32 {
-        match download_once(url, dest, timeout_secs, on_progress.clone()).await {
+        match download_once(url, dest, expected_size, timeout_secs, on_progress.clone()).await {
             Ok(actual_size) => {
                 // 校验大小
                 if let Some(expected) = expected_size {
@@ -362,6 +383,7 @@ async fn download_with_retry(
 async fn download_once(
     url: &str,
     dest: &Path,
+    expected_size: Option<u64>,
     timeout_secs: u64,
     on_progress: Option<ProgressCb>,
 ) -> Result<u64, String> {
@@ -415,6 +437,13 @@ async fn download_once(
     } else {
         response.content_length().unwrap_or(0)
     };
+    // CDN 若用 chunked 传输不返回 Content-Length，则用已知文件大小兜底，
+    // 否则 total_bytes=0 导致进度永远算成 0%（"进度条不涨"）。
+    let total_size = if total_size > 0 {
+        total_size
+    } else {
+        expected_size.unwrap_or(0)
+    };
 
     // 确保父目录存在
     if let Some(parent) = dest.parent() {
@@ -443,6 +472,18 @@ async fn download_once(
     let mut last_bytes = resume_offset;
     // 单流读取同样加 stall 刹车：服务器卡住/滴漏时及时中断，避免永远卡在"下载中"
     let mut finished = false;
+
+    // 低速检测（对齐 XMCL DownloadSpeed）：镜像源若以极低速度"滴漏"式挤数据，
+    // 30 秒 stall 超时永远不会触发（一直有数据进来），导致每个文件都慢慢爬、
+    // 并发下载整体"越下越慢卡住"、进度条不动。
+    // 因此额外检查：持续 LOW_SPEED_WINDOW_SECS 平均速度低于阈值且剩余字节还多时，
+    // 判定该源过慢，立即换源。阈值放宽到 64KB/s，正常网络不会误伤。
+    const LOW_SPEED_THRESHOLD: u64 = 64 * 1024; // 64 KB/s
+    const LOW_SPEED_WINDOW_SECS: u64 = 5;
+    let mut speed_window_bytes: u64 = 0;
+    let mut speed_window_start = Instant::now();
+    let low_speed_enabled = expected_size.map(|s| s > 1024 * 1024).unwrap_or(false);
+
     while !finished {
         let waited = tokio::time::timeout(Duration::from_secs(30), stream.next()).await;
         let chunk_result = match waited {
@@ -460,6 +501,25 @@ async fn download_once(
             .await
             .map_err(|e| format!("写入文件失败: {}", e))?;
         downloaded += chunk.len() as u64;
+        speed_window_bytes += chunk.len() as u64;
+
+        // 低速检测：剩余字节仍较多时才判断，避免文件尾部（剩余不足 1MB）误判换源
+        let remaining = total_size.saturating_sub(downloaded);
+        if low_speed_enabled && remaining > 1024 * 1024 {
+            let win_elapsed = speed_window_start.elapsed().as_secs();
+            if win_elapsed >= LOW_SPEED_WINDOW_SECS {
+                let avg_speed = speed_window_bytes / LOW_SPEED_WINDOW_SECS;
+                if avg_speed < LOW_SPEED_THRESHOLD {
+                    return Err(format!(
+                        "低速检测：源速度过慢 ({}KB/s)，切换镜像",
+                        avg_speed / 1024
+                    ));
+                }
+                // 速度达标，重置窗口继续观察
+                speed_window_bytes = 0;
+                speed_window_start = Instant::now();
+            }
+        }
 
         // 进度回调（50ms 节流）
         let now = Instant::now();
