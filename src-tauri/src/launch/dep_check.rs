@@ -2249,3 +2249,59 @@ fn check_mrpack_mods(version_id: &str, external_version_dir: Option<&Path>, resu
         result.missing_files.extend(result.mrpack_mods.missing.clone());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 1.20.4-Fabric 应要求 Java 17（不是 25），验证版本范围计算不误判
+    #[test]
+    fn java_range_for_1_20_4_fabric_is_17() {
+        // 模拟外部版本的完整 JSON（含 javaVersion=17）
+        let version_json = json!({
+            "id": "1.20.4-Fabric 0.19.3",
+            "javaVersion": { "majorVersion": 17 },
+            "mainClass": "net.fabricmc.loader.impl.launch.knot.KnotClient",
+            "libraries": [
+                { "name": "net.fabricmc:fabric-loader:0.19.3" }
+            ]
+        });
+        let (min, max) = get_java_version_range_from_json("1.20.4-Fabric 0.19.3", &version_json);
+        assert_eq!(min, 17, "1.20.4 应要求 Java 17，实际 min={}", min);
+        assert_eq!(max, 999, "1.20.4 Fabric max 应为 999，实际 max={}", max);
+    }
+
+    /// 1.20.1 应要求 Java 17
+    #[test]
+    fn java_range_for_1_20_1_is_17() {
+        let version_json = json!({
+            "id": "1.20.1",
+            "javaVersion": { "majorVersion": 17 }
+        });
+        let (min, max) = get_java_version_range_from_json("1.20.1", &version_json);
+        assert_eq!(min, 17, "1.20.1 应要求 Java 17，实际 min={}", min);
+        assert_eq!(max, 999);
+    }
+
+    /// 1.21.1 应要求 Java 21
+    #[test]
+    fn java_range_for_1_21_1_is_21() {
+        let version_json = json!({
+            "id": "1.21.1",
+            "javaVersion": { "majorVersion": 21 }
+        });
+        let (min, _) = get_java_version_range_from_json("1.21.1", &version_json);
+        assert_eq!(min, 21, "1.21.1 应要求 Java 21，实际 min={}", min);
+    }
+
+    /// 26.2 应要求 Java 25
+    #[test]
+    fn java_range_for_26_2_is_25() {
+        let version_json = json!({
+            "id": "26.2",
+            "javaVersion": { "majorVersion": 25 }
+        });
+        let (min, _) = get_java_version_range_from_json("26.2", &version_json);
+        assert_eq!(min, 25, "26.2 应要求 Java 25，实际 min={}", min);
+    }
+}

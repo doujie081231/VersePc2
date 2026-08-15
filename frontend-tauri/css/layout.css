@@ -1353,7 +1353,7 @@ body.sidebar-collapsed .content-area {
     background: rgba(255, 255, 255, 0.06);
 }
 .accts-card.is-selected .accts-card-avatar {
-    box-shadow: 0 0 0 3px var(--accent), 0 0 30px rgba(var(--accent-rgb), 0.4);
+    box-shadow: none;
 }
 .accts-card-avatar img {
     width: 100%;

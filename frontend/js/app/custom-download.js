@@ -1,6 +1,11 @@
 const dlManager = {
     tasks: new Map(),
     order: [],
+    _searchQuery: '',
+    applySearch(q) {
+        this._searchQuery = (q || '').trim().toLowerCase();
+        this.render();
+    },
     add(id, name, type, sessionId, iconUrl) {
         if (this.tasks.has(id)) return;
         this.tasks.set(id, { id, name, type, sessionId, iconUrl: iconUrl || '', progress: 0, status: 'downloading', message: '', files: [], stageHistory: [], expanded: false });
@@ -123,7 +128,13 @@ const dlManager = {
         if (percent) percent.textContent = Math.round(t.progress) + '%';
         const statusEl = taskEl.querySelector('.dl-task-status');
         if (statusEl) {
-            statusEl.textContent = t.status === 'completed' ? (t.message || '下载完成') : t.status === 'failed' ? (t.message || '下载失败') : (t.message || '下载中...');
+            const statusText = t.status === 'completed' ? (t.message || '下载完成') : t.status === 'failed' ? (t.message || '下载失败') : (t.message || '下载中...');
+            const indicator = t.status === 'downloading' || t.status === 'cancelling'
+                ? '<svg class="dl-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 11-6.2-8.56"/></svg>'
+                : t.status === 'completed' ? '<span class="dl-status-dot dl-status-dot--completed"></span>'
+                : t.status === 'failed' ? '<span class="dl-status-dot dl-status-dot--failed"></span>'
+                : '';
+            statusEl.innerHTML = indicator + '<span>' + escapeHtml(statusText) + '</span>';
         }
         let detailEl = taskEl.querySelector('.dl-task-detail');
         const hasStageData = t.type === 'modpack' && t.stageHistory && t.stageHistory.length > 0;
@@ -263,8 +274,13 @@ const dlManager = {
     render() {
         const list = document.getElementById('download-queue-list');
         if (!list) return;
-        if (this.order.length === 0) {
-            list.innerHTML = '<p class="empty-text" id="dl-empty-hint">暂无下载任务</p>';
+        const q = this._searchQuery;
+        const visibleOrder = q ? this.order.filter(id => {
+            const t = this.tasks.get(id);
+            return t && (t.name || '').toLowerCase().includes(q);
+        }) : this.order;
+        if (visibleOrder.length === 0) {
+            list.innerHTML = '<p class="empty-text" id="dl-empty-hint">' + (this.order.length === 0 ? '暂无下载任务' : '没有匹配的下载任务') + '</p>';
             return;
         }
         const svgIcons = {
@@ -274,7 +290,7 @@ const dlManager = {
             java: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px"><path d="M17 8h1a4 4 0 110 8h-1M3 8h14v9a4 4 0 01-4 4H7a4 4 0 01-4-4V8zm0 0V6a2 2 0 012-2h2m4-2v2"/></svg>',
             other: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8m8 4H8m2-8H8"/></svg>'
         };
-        list.innerHTML = this.order.map(id => {
+        list.innerHTML = visibleOrder.map(id => {
             const t = this.tasks.get(id);
             if (!t) return '';
             const iconClass = 'dl-task-icon--' + (t.type || 'other');
@@ -283,6 +299,11 @@ const dlManager = {
                 : svgIcons[t.type] || svgIcons.other;
             const fillClass = t.status === 'completed' ? 'dl-task-progress-fill--completed' : t.status === 'failed' ? 'dl-task-progress-fill--failed' : '';
             const statusText = t.status === 'completed' ? (t.message || '下载完成') : t.status === 'failed' ? (t.message || '下载失败') : (t.message || '下载中...');
+            const statusIndicator = t.status === 'downloading' || t.status === 'cancelling'
+                ? '<svg class="dl-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 11-6.2-8.56"/></svg>'
+                : t.status === 'completed' ? '<span class="dl-status-dot dl-status-dot--completed"></span>'
+                : t.status === 'failed' ? '<span class="dl-status-dot dl-status-dot--failed"></span>'
+                : '';
             const isExpandable = t.type !== 'mod';
             const expandedClass = t.expanded && isExpandable ? 'dl-task--expanded' : '';
             let detailHtml = '';
@@ -310,7 +331,7 @@ const dlManager = {
                 '<div class="dl-task-icon ' + iconClass + '">' + iconHtml + '</div>' +
                 '<div class="dl-task-info">' +
                 '<div class="dl-task-name">' + escapeHtml(t.name) + '</div>' +
-                '<div class="dl-task-status">' + escapeHtml(statusText) + '</div>' +
+                '<div class="dl-task-status">' + statusIndicator + '<span>' + escapeHtml(statusText) + '</span></div>' +
                 '</div>' +
                 '<div class="dl-task-progress">' +
                 '<div class="dl-task-progress-bar"><div class="dl-task-progress-fill ' + fillClass + '" style="width:' + t.progress + '%"></div></div>' +

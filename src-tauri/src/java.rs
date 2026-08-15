@@ -231,7 +231,74 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         }
     }
 
+    // 9. Windows 注册表 JavaSoft（用户用安装器装的 Java 会写入注册表，但可能不在 PATH/常见目录）
+    //    对应原项目 detectSystemJava 的注册表查询，避免"装了 Java 却检测不到"
+    #[cfg(target_os = "windows")]
+    {
+        for java_exe in scan_registry_java_paths() {
+            add(&mut paths, &mut found, java_exe);
+        }
+    }
+
     paths
+}
+
+/// 扫描 Windows 注册表 JavaSoft 键下的 JavaHome，返回 java.exe 路径
+/// 覆盖 32/64 位注册表视图与 JRE/JDK/Java Development Kit 各键
+#[cfg(target_os = "windows")]
+fn scan_registry_java_paths() -> Vec<PathBuf> {
+    use std::os::windows::process::CommandExt;
+    let mut result: Vec<PathBuf> = Vec::new();
+    let keys = [
+        r"HKLM\SOFTWARE\JavaSoft\Java Runtime Environment",
+        r"HKLM\SOFTWARE\JavaSoft\JDK",
+        r"HKLM\SOFTWARE\JavaSoft\Java Development Kit",
+        r"HKLM\SOFTWARE\Wow6432Node\JavaSoft\Java Runtime Environment",
+        r"HKLM\SOFTWARE\Wow6432Node\JavaSoft\JDK",
+        r"HKLM\SOFTWARE\Wow6432Node\JavaSoft\Java Development Kit",
+        r"HKCU\SOFTWARE\JavaSoft\Java Runtime Environment",
+        r"HKCU\SOFTWARE\JavaSoft\JDK",
+        r"HKCU\SOFTWARE\JavaSoft\Java Development Kit",
+    ];
+    for key in keys {
+        let mut cmd = Command::new("reg");
+        cmd.args(["query", key, "/s"]);
+        cmd.creation_flags(0x08000000);
+        if let Ok(out) = cmd.output() {
+            if !out.status.success() {
+                continue;
+            }
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for line in stdout.lines() {
+                let line = line.trim();
+                // 形如 "   JavaHome    REG_SZ    C:\Program Files\Java\jdk-17"
+                if let Some(home_idx) = line.find("JavaHome") {
+                    let after = &line[home_idx..];
+                    if let Some(sz_idx) = after.find("REG_SZ") {
+                        let home = after[sz_idx + "REG_SZ".len()..]
+                            .trim()
+                            .trim_matches('"')
+                            .trim_end_matches('\\');
+                        if !home.is_empty() {
+                            let java_exe = PathBuf::from(home).join("bin").join("java.exe");
+                            if java_exe.exists() {
+                                let norm = java_exe
+                                    .to_string_lossy()
+                                    .to_lowercase()
+                                    .replace('\\', "/");
+                                if !result.iter().any(|p| {
+                                    p.to_string_lossy().to_lowercase().replace('\\', "/") == norm
+                                }) {
+                                    result.push(java_exe);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    result
 }
 
 /// 在 dir 下扫描一层包含 java/jdk/jre 关键字的子目录，找到 java.exe
@@ -535,7 +602,7 @@ fn is_in_candidate_folder(java_exe: &Path, candidates: &[String]) -> bool {
     })
 }
 
-/// 排序 Java 列表（对应 PCL 的 SortAsync）：
+/// 排序 Java 列表：
 /// 1. 候选文件夹中的 Java 优先
 /// 2. 其次主版本号接近 21 的 Java 优先
 fn sort_java_list(list: &mut Vec<Value>) {
@@ -612,13 +679,13 @@ pub fn detect_all() -> Vec<Value> {
         if path_str.contains("finalshell") || path_str.contains("paranoia") {
             continue;
         }
-        // 排除重解析点与特殊路径（对应 PCL 的筛除逻辑）
+        // 排除重解析点与特殊路径
         if has_reparse_point(&java_exe) || is_special_path(&java_exe) {
             continue;
         }
 
         if let Some((version, major, is64)) = inspect_java(&java_exe) {
-            // 只接受 64 位 Java（对应 PCL 的 64 位检查）
+            // 只接受 64 位 Java
             if !is64 {
                 println!("[java]   跳过 32 位 Java: {}", java_exe.display());
                 continue;
@@ -881,6 +948,292 @@ fn read_java_status(session_id: &str) -> Option<Value> {
     std::fs::read_to_string(&status_file)
         .ok()
         .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+}
+
+// ============== Java 导入（压缩包/文件夹） ==============
+// 对应原项目 server/java/java-custom.js 的 importJavaArchive / importJavaDirectory
+// 以及 server/api/routes/java.js 的 /api/java/import 路由。
+// 导入成功后将解压/复制后的 Java 写入 custom-java-list.json（source='imported'）。
+
+/// 写入导入状态文件（java-import-{sessionId}.json）
+fn write_java_import_status(session_id: &str, status: &Value) {
+    let data_dir = storage::resolve_data_dir();
+    let status_file = data_dir.join(format!("java-import-{}.json", session_id));
+    if let Ok(s) = serde_json::to_string_pretty(status) {
+        let _ = std::fs::write(&status_file, s);
+    }
+}
+
+/// 读取导入状态文件
+fn read_java_import_status(session_id: &str) -> Option<Value> {
+    let data_dir = storage::resolve_data_dir();
+    let status_file = data_dir.join(format!("java-import-{}.json", session_id));
+    std::fs::read_to_string(&status_file)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+}
+
+/// 递归查找目录下第一个 bin/java.exe（导入解压目录中定位 javaHome 用）
+fn find_java_exe_recursive(dir: &Path, depth: u32) -> Option<PathBuf> {
+    if depth == 0 || !dir.is_dir() {
+        return None;
+    }
+    let direct = dir.join("bin").join("java.exe");
+    if direct.exists() {
+        return Some(direct);
+    }
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                if let Some(found) = find_java_exe_recursive(&p, depth - 1) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 后台执行 Java 导入任务（压缩包或文件夹），边执行边写 java-import-{sessionId}.json
+async fn import_java_async(session_id: &str, import_type: &str, source_path: &str) {
+    let report = |status: &str, progress: u32, message: &str| {
+        write_java_import_status(
+            session_id,
+            &json!({
+                "status": status,
+                "progress": progress,
+                "message": message,
+                "sessionId": session_id,
+            }),
+        );
+    };
+
+    report("importing", 5, "正在准备导入...");
+
+    // 校验源路径存在
+    if source_path.is_empty() {
+        report("error", 0, "缺少导入路径");
+        return;
+    }
+    let source = PathBuf::from(source_path);
+    if !source.exists() {
+        report("error", 0, &format!("文件不存在: {}", source_path));
+        return;
+    }
+
+    let data_dir = storage::resolve_data_dir();
+    let java_dir = data_dir.join("java");
+    if let Err(e) = std::fs::create_dir_all(&java_dir) {
+        report("error", 0, &format!("创建 Java 目录失败: {}", e));
+        return;
+    }
+
+    // 导入的 Java 最终落位：java/imported-jdk-{major}-{timestamp}
+    let import_root = java_dir.join(format!("_import_{}", chrono::Local::now().timestamp_millis()));
+    let mut java_exe: Option<PathBuf> = None;
+    let mut found_home: Option<PathBuf> = None;
+
+    if import_type == "archive" {
+        let ext = source
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        if ext != "zip" {
+            report("error", 0, "目前仅支持 .zip 格式的 Java 压缩包");
+            return;
+        }
+
+        report("importing", 15, "正在解压压缩包...");
+        // 解压到临时目录（spawn_blocking 避免阻塞 tokio worker）
+        let src = source.clone();
+        let tmp = import_root.clone();
+        let extract_result = tokio::task::spawn_blocking(move || extract_zip(&src, &tmp)).await;
+        match extract_result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                let _ = std::fs::remove_dir_all(&import_root);
+                report("error", 0, &format!("解压失败: {}", e));
+                return;
+            }
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&import_root);
+                report("error", 0, &format!("解压任务异常: {}", e));
+                return;
+            }
+        }
+
+        report("importing", 50, "正在查找 Java 可执行文件...");
+        java_exe = find_java_exe_recursive(&import_root, 5);
+        if let Some(ref exe) = java_exe {
+            found_home = exe.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf());
+        }
+    } else if import_type == "directory" {
+        // 文件夹导入：源目录应是 javaHome（含 bin/java.exe），若用户选了 bin 目录则上移一级
+        let java_exe_name = "java.exe";
+        let mut src_dir = source.clone();
+        if !src_dir.join("bin").join(java_exe_name).exists() {
+            let parent_exe = src_dir
+                .parent()
+                .map(|p| p.join("bin").join(java_exe_name));
+            if let Some(pe) = parent_exe {
+                if pe.exists() {
+                    src_dir = src_dir.parent().unwrap_or(src_dir.as_path()).to_path_buf();
+                } else {
+                    report("error", 0, &format!("该目录不是有效的 Java 安装目录（缺少 bin/{}）", java_exe_name));
+                    return;
+                }
+            } else {
+                report("error", 0, &format!("该目录不是有效的 Java 安装目录（缺少 bin/{}）", java_exe_name));
+                return;
+            }
+        }
+        found_home = Some(src_dir.clone());
+        java_exe = Some(src_dir.join("bin").join(java_exe_name));
+    } else {
+        report("error", 0, "type 必须是 archive 或 directory");
+        return;
+    }
+
+    let java_exe = match java_exe {
+        Some(p) => p,
+        None => {
+            let _ = std::fs::remove_dir_all(&import_root);
+            report("error", 0, "未找到有效的 Java（缺少 bin/java.exe）");
+            return;
+        }
+    };
+
+    report("importing", 70, "正在验证 Java...");
+    let info = inspect_java(&java_exe);
+    let (version, major, is64) = match info {
+        Some(v) => v,
+        None => {
+            let _ = std::fs::remove_dir_all(&import_root);
+            report("error", 0, "Java 无法运行或识别失败");
+            return;
+        }
+    };
+
+    let found_home = found_home.unwrap_or_else(|| {
+        java_exe
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| java_exe.clone())
+    });
+
+    // 确定最终目录：压缩包导入时需要把找到的 javaHome 移到最终位置；
+    // 文件夹导入时把源目录复制到最终位置
+    let final_dir_name = format!("imported-jdk-{}-{}", major, chrono::Local::now().timestamp_millis());
+    let final_dir = java_dir.join(&final_dir_name);
+
+    if import_type == "archive" {
+        report("importing", 80, "正在整理 Java 目录...");
+        // 把找到的 javaHome 移到最终目录；跨盘失败时用 copy
+        if found_home.as_path() != import_root.as_path() {
+            let _ = std::fs::create_dir_all(final_dir.parent().unwrap_or(&java_dir));
+            match std::fs::rename(&found_home, &final_dir) {
+                Ok(_) => {}
+                Err(_) => {
+                    let _ = copy_dir_recursive(&found_home, &final_dir);
+                }
+            }
+        } else {
+            // javaHome 就是解压根目录
+            let _ = std::fs::create_dir_all(final_dir.parent().unwrap_or(&java_dir));
+            match std::fs::rename(&import_root, &final_dir) {
+                Ok(_) => {}
+                Err(_) => {
+                    let _ = copy_dir_recursive(&import_root, &final_dir);
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&import_root);
+    } else {
+        report("importing", 80, "正在复制 Java 到启动器目录...");
+        let _ = std::fs::create_dir_all(&java_dir);
+        if let Err(e) = copy_dir_recursive(&found_home, &final_dir) {
+            let _ = std::fs::remove_dir_all(&final_dir);
+            report("error", 0, &format!("复制 Java 目录失败: {}", e));
+            return;
+        }
+    }
+
+    // 最终 java.exe 路径
+    let final_java_exe = if import_type == "archive" {
+        // 压缩包导入后 javaHome 已移到 final_dir，java.exe 在 final_dir/bin/java.exe
+        final_dir.join("bin").join("java.exe")
+    } else {
+        final_dir.join("bin").join("java.exe")
+    };
+
+    // 校验最终 java.exe 存在
+    if !final_java_exe.exists() {
+        let _ = std::fs::remove_dir_all(&final_dir);
+        report("error", 0, "导入后未找到 java.exe");
+        return;
+    }
+
+    report("importing", 90, "正在保存到列表...");
+    let entry = json!({
+        "path": final_java_exe.to_string_lossy().to_string(),
+        "javaHome": final_dir.to_string_lossy().to_string(),
+        "source": "imported",
+        "addedAt": chrono::Local::now().to_rfc3339(),
+        "majorVersion": major,
+        "minorVersion": 0,
+        "version": version,
+        "isJdk": final_dir.join("bin").join("javac.exe").exists(),
+        "is64Bit": is64
+    });
+
+    // 去重后保存到 custom-java-list.json
+    let mut custom = load_custom_java();
+    if let Some(arr) = custom.as_array_mut() {
+        let norm_new = entry
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_lowercase()
+            .replace('\\', "/");
+        let dup = arr
+            .iter()
+            .any(|v| utils::get_str(v, "path").to_lowercase().replace('\\', "/") == norm_new);
+        if dup {
+            let _ = std::fs::remove_dir_all(&final_dir);
+            report("error", 0, "该 Java 已在列表中");
+            return;
+        }
+        arr.push(entry.clone());
+    } else {
+        custom = Value::Array(vec![entry.clone()]);
+    }
+    save_custom_java(&custom.as_array().cloned().unwrap_or_default());
+    invalidate_cache();
+
+    report("completed", 100, &format!("导入成功: Java {}", major));
+    eprintln!("[java] 导入 Java {}: {}", major, final_java_exe.display());
+}
+
+/// 递归复制目录（文件夹导入 Java 用）
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    if !src.is_dir() {
+        return Err(format!("源目录不存在: {}", src.display()));
+    }
+    std::fs::create_dir_all(dst).map_err(|e| format!("创建目标目录失败: {}", e))?;
+    for entry in std::fs::read_dir(src).map_err(|e| format!("读取源目录失败: {}", e))? {
+        let entry = entry.map_err(|e| format!("读取条目失败: {}", e))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path).map_err(|e| format!("复制文件失败: {}", e))?;
+        }
+    }
+    Ok(())
 }
 
 /// 解压 ZIP 文件到目标目录（含 ZipSlip 保护）
@@ -1375,9 +1728,10 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         "POST /api/java/add-manual" => {
             let data = body.clone().unwrap_or(Value::Null);
-            let path_str = utils::get_str(&data, "path");
+            // 前端 api.js 传入字段为 javaPath（与原项目 /api/java/add-manual 契约一致）
+            let path_str = utils::get_str(&data, "javaPath");
             if path_str.is_empty() {
-                return Some(ApiResult::err(400, "Missing path"));
+                return Some(ApiResult::err(400, "Missing javaPath"));
             }
             let path = PathBuf::from(&path_str);
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
@@ -1429,16 +1783,17 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         "POST /api/java/remove-custom" => {
             let data = body.clone().unwrap_or(Value::Null);
-            let path_str = utils::get_str(&data, "path");
+            // 前端 api.js 传入字段为 javaHome（与原项目 /api/java/remove-custom 契约一致）
+            let java_home_str = utils::get_str(&data, "javaHome");
             let delete_files = data.get("deleteFiles").and_then(|v| v.as_bool()).unwrap_or(false);
-            if path_str.is_empty() {
-                return Some(ApiResult::err(400, "Missing path"));
+            if java_home_str.is_empty() {
+                return Some(ApiResult::err(400, "Missing javaHome"));
             }
             let mut custom = load_custom_java();
             let removed_entry: Option<Value> = if let Some(arr) = custom.as_array_mut() {
                 let idx = arr.iter().position(|v| {
-                    utils::get_str(v, "path").to_lowercase().replace('\\', "/")
-                        == path_str.to_lowercase().replace('\\', "/")
+                    utils::get_str(v, "javaHome").to_lowercase().replace('\\', "/")
+                        == java_home_str.to_lowercase().replace('\\', "/")
                 });
                 idx.map(|i| arr.remove(i))
             } else {
@@ -1447,12 +1802,15 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
             save_custom_java(&custom.as_array().cloned().unwrap_or_default());
             invalidate_cache();
 
-            // 可选删除文件
+            // 仅 source=imported 且请求删除文件时才删除目录；manual 是原位引用不删
             if delete_files {
                 if let Some(entry) = &removed_entry {
-                    let java_home = utils::get_str(entry, "javaHome");
-                    if !java_home.is_empty() {
-                        let _ = std::fs::remove_dir_all(&java_home);
+                    let source = utils::get_str(entry, "source");
+                    if source == "imported" {
+                        let java_home = utils::get_str(entry, "javaHome");
+                        if !java_home.is_empty() {
+                            let _ = std::fs::remove_dir_all(&java_home);
+                        }
                     }
                 }
             }
@@ -1469,7 +1827,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
             ]
         }))),
 
-        "GET /api/java/install-status" | "GET /api/java/download-status" | "GET /api/java/import-status" => {
+        "GET /api/java/install-status" | "GET /api/java/download-status" => {
             let session_id = params
                 .as_ref()
                 .and_then(|p| p.get("sessionId"))
@@ -1494,7 +1852,78 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
             }
         }
 
-        "POST /api/java/install" | "POST /api/java/auto-install" | "POST /api/java/download" | "POST /api/java/import" => {
+        "GET /api/java/import-status" => {
+            let session_id = params
+                .as_ref()
+                .and_then(|p| p.get("sessionId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            if session_id.is_empty() {
+                return Some(ApiResult::ok(json!({
+                    "status": "idle",
+                    "progress": 0,
+                    "message": "缺少 sessionId 参数"
+                })));
+            }
+
+            match read_java_import_status(session_id) {
+                Some(st) => Some(ApiResult::ok(st)),
+                None => Some(ApiResult::ok(json!({
+                    "status": "not_found",
+                    "progress": 0,
+                    "message": "未找到导入会话状态"
+                }))),
+            }
+        }
+
+        "POST /api/java/import" => {
+            // 导入 Java（压缩包或文件夹），与原项目 /api/java/import 契约一致：
+            // body: { type: 'archive'|'directory', path: '...' }
+            let data = body.clone().unwrap_or(Value::Null);
+            let import_type = utils::get_str(&data, "type");
+            let source_path = utils::get_str(&data, "path");
+            if import_type.is_empty() || source_path.is_empty() {
+                return Some(ApiResult::err(400, "缺少 type 或 path 参数"));
+            }
+            if import_type != "archive" && import_type != "directory" {
+                return Some(ApiResult::err(400, "type 必须是 archive 或 directory"));
+            }
+
+            let session_id = format!("java-import-{}", chrono::Local::now().timestamp_millis());
+            // 初始化导入状态文件
+            write_java_import_status(
+                &session_id,
+                &json!({
+                    "status": "starting",
+                    "progress": 0,
+                    "message": "准备导入...",
+                    "sessionId": session_id,
+                }),
+            );
+
+            // 后台执行导入
+            let sid = session_id.clone();
+            let itype = import_type.clone();
+            let spath = source_path.clone();
+            tokio::spawn(async move {
+                import_java_async(&sid, &itype, &spath).await;
+                // 完成后 60 秒清理状态文件
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                let _ = std::fs::remove_file(
+                    storage::resolve_data_dir().join(format!("java-import-{}.json", sid)),
+                );
+            });
+
+            Some(ApiResult::ok(json!({
+                "success": true,
+                "sessionId": session_id,
+                "status": "starting",
+                "message": "已开始导入 Java"
+            })))
+        }
+
+        "POST /api/java/install" | "POST /api/java/auto-install" | "POST /api/java/download" => {
             let data = body.clone().unwrap_or(Value::Null);
             let major_version = data
                 .get("majorVersion")
@@ -1710,5 +2139,112 @@ mod tests {
         // 排序后第一个应是接近 21 的 Java 21
         let first = list[0].get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0);
         assert_eq!(first, 21);
+    }
+
+    /// 验证 add-manual 路由能正确识别并写入自定义 Java 列表
+    #[test]
+    fn handle_add_manual_route() {
+        // 系统真实存在的 Java（路径不存在则跳过）
+        let real_java = r"C:\Program Files\Java\jdk-17\bin\java.exe";
+        if !Path::new(real_java).exists() {
+            return;
+        }
+        let body = Some(json!({ "javaPath": real_java }));
+        let r = handle("POST", "/api/java/add-manual", &None, &body);
+        assert!(r.is_some(), "add-manual 应返回结果");
+        let res = r.unwrap();
+        assert_eq!(res.status, 200, "add-manual 应成功: {}", res.body);
+        assert_eq!(res.body["success"], true, "add-manual 返回: {}", res.body);
+        // 清理测试写入的条目，避免污染
+        let custom = load_custom_java();
+        let cleaned: Vec<Value> = custom
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| {
+                utils::get_str(e, "path").to_lowercase().replace('\\', "/")
+                    != real_java.to_lowercase().replace('\\', "/")
+            })
+            .collect();
+        save_custom_java(&cleaned);
+        invalidate_cache();
+    }
+
+    /// 验证 directory 导入：把真实 Java Home 复制到启动器目录并写入列表
+    #[tokio::test]
+    async fn handle_import_directory_route() {
+        let real_java = r"C:\Program Files\Java\jdk-17\bin\java.exe";
+        if !Path::new(real_java).exists() {
+            return;
+        }
+        let java_home = Path::new(real_java)
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let body = Some(json!({ "type": "directory", "path": java_home }));
+        let r = handle("POST", "/api/java/import", &None, &body);
+        assert!(r.is_some(), "import 应返回结果");
+        let res = r.unwrap();
+        assert_eq!(res.status, 200, "import 应成功: {}", res.body);
+        let sid = res.body["sessionId"].as_str().unwrap_or("").to_string();
+        assert!(!sid.is_empty(), "应返回 sessionId: {}", res.body);
+
+        // 轮询等待后台导入完成（最多 10 秒）
+        let mut final_status = String::new();
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            let q = handle(
+                "GET",
+                "/api/java/import-status",
+                &Some(json!({ "sessionId": sid })),
+                &None,
+            );
+            if let Some(qr) = q {
+                let st = qr.body["status"].as_str().unwrap_or("").to_string();
+                if st == "completed" || st == "error" {
+                    final_status = qr.body.to_string();
+                    break;
+                }
+            }
+        }
+        assert!(final_status.contains("\"completed\""), "导入应完成: {}", final_status);
+        // 清理测试写入的条目与目录，避免污染
+        if let Some(arr) = load_custom_java().as_array().cloned() {
+            let mut kept = Vec::new();
+            for e in arr {
+                if utils::get_str(&e, "source") == "imported"
+                    && utils::get_str(&e, "javaHome").contains("imported-jdk-")
+                {
+                    let home = utils::get_str(&e, "javaHome");
+                    if !home.is_empty() {
+                        let _ = std::fs::remove_dir_all(&home);
+                    }
+                    continue;
+                }
+                kept.push(e);
+            }
+            save_custom_java(&kept);
+            invalidate_cache();
+        }
+    }
+
+    /// 验证注册表扫描能发现系统安装的 Java（用户环境检测不到 Java 的关键补充）
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn registry_scan_finds_installed_java() {
+        let found = scan_registry_java_paths();
+        // 本机注册表 HKLM\SOFTWARE\JavaSoft\JDK 指向 jdk-17，应能扫到
+        assert!(
+            !found.is_empty(),
+            "注册表扫描应至少找到一个 Java，实际: {:?}",
+            found
+        );
+        eprintln!("[test] 注册表扫描到 {} 个 Java:", found.len());
+        for p in &found {
+            eprintln!("[test]   {}", p.display());
+        }
     }
 }

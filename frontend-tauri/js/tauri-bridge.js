@@ -376,8 +376,14 @@
     },
     ai: {
       chat: function (reqConfig) {
-        console.log('[tauri-bridge] AI chat stub:', reqConfig);
-        return Promise.resolve({ text: '(Tauri 环境暂不支持 AI 对话)' });
+        // 通过 Rust 后端代理发起 AI 请求，绕过 WebView CORS 限制
+        return invoke('ai_chat', { config: reqConfig || {} }).then(function (res) {
+          if (!res) return { ok: false, error: 'AI 请求无响应' };
+          return res;
+        }).catch(function (err) {
+          console.warn('[tauri-bridge] AI chat 调用失败:', err);
+          return { ok: false, error: String(err) };
+        });
       }
     }
   };
@@ -524,6 +530,10 @@
     windowRestore: windowControls.windowRestore,
     showWindowEarly: windowControls.showWindowEarly,
     openDevtools: windowControls.openDevtools,
+    // 启动计时诊断（写入 logs/startup-timing.log）
+    writeStartupTiming: function (content) {
+      invoke('write_startup_timing', { content: String(content) }).catch(function () {});
+    },
 
     // 存储
     store: store,

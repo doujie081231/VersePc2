@@ -153,7 +153,12 @@ async fn download_chunked_once(
         handles.push(tokio::spawn(async move {
             let _perm = sem.acquire().await.map_err(|_| "信号量关闭".to_string())?;
             // 全局连接预算：所有文件的分块连接共享，避免连接爆炸触发 CDN 限流
-            let _global_perm = GLOBAL_CONN.acquire().await.map_err(|_| "全局连接预算关闭".to_string())?;
+            // 加超时：32 并发大文件下载时连接预算可能被占满，若长时间等不到许可就放弃
+            // 该分块（让文件级重试换源），避免所有分块无限排队导致整体"卡住"。
+            let _global_perm = match tokio::time::timeout(Duration::from_secs(120), GLOBAL_CONN.acquire()).await {
+                Ok(Ok(p)) => p,
+                _ => return Err("等待全局连接预算超时".to_string()),
+            };
             if failed.load(Ordering::SeqCst) {
                 return Ok::<(), String>(());
             }
@@ -177,11 +182,22 @@ async fn download_chunked_once(
             let mut req = client.get(&url).header("Range", format!("bytes={}-{}", start, e));
             req = req.timeout(Duration::from_secs(timeout_secs));
 
-            let resp = match req.send().await {
-                Ok(r) => r,
-                Err(err) => {
+            // TTFB 超时保护：分块请求同样可能卡在等待响应头上（Modrinth CDN 跳转后
+            // 慢速响应），必须及时中断，避免分块长期挂起导致"下载卡住"。
+            let resp = match tokio::time::timeout(
+                Duration::from_secs(20),
+                req.send(),
+            )
+            .await
+            {
+                Ok(Ok(r)) => r,
+                Ok(Err(err)) => {
                     failed.store(true, Ordering::SeqCst);
                     return Err(format!("分块 {} 请求失败: {}", idx, err));
+                }
+                Err(_) => {
+                    failed.store(true, Ordering::SeqCst);
+                    return Err(format!("分块 {} TTFB 超时，切换镜像", idx));
                 }
             };
             if resp.status().as_u16() != 206 {
@@ -401,8 +417,9 @@ pub async fn download_chunked_with_mirror(
                 Ok(false) => return Ok(false), // 不支持分块，交给单流
                 Err(e) => {
                     last_err = e.clone();
-                    // 源本身慢（低速检测）→ 立即换源；否则为临时失败，续传重试
-                    if e.contains("速度过低") {
+                    // 源本身慢（低速检测）或 TTFB 超时（响应头迟迟不回）→ 立即换源；
+                    // 否则为临时失败，续传重试
+                    if e.contains("速度过低") || e.contains("TTFB 超时") {
                         break;
                     }
                     if attempt < 2 {

@@ -3520,40 +3520,88 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     justify-content: center;
     padding: 0 4px;
 }
+/* ===== 下载管理页（Modrinth 风格） ===== */
+.dl-page-header {
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.dl-page-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.dl-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.dl-search-icon {
+    position: absolute;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+.dl-search-input {
+    width: 220px;
+    height: 36px;
+    padding: 8px 14px 8px 36px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    outline: none;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.dl-search-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+.dl-search-input:focus {
+    border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(27, 217, 106, 0.25);
+}
 .dl-queue-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 0 4px;
+    gap: 12px;
+    padding: 2px 4px 8px;
 }
 .dl-task {
     background: var(--bg-card-glass);
-    backdrop-filter: blur(4px) saturate(1.2);
-    -webkit-backdrop-filter: blur(4px) saturate(1.2);
+    backdrop-filter: blur(6px) saturate(1.2);
+    -webkit-backdrop-filter: blur(6px) saturate(1.2);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 16px;
     overflow: hidden;
-    transition: border-color 0.2s;
+    box-shadow: rgba(0, 0, 0, 0.25) 0 2px 4px 0;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .dl-task:hover {
-    border-color: var(--accent);
+    border-color: rgba(27, 217, 106, 0.45);
+    box-shadow: rgba(0, 0, 0, 0.3) 0 6px 16px 0;
+    transform: translateY(-1px);
 }
 .dl-task-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 14px;
+    padding: 14px 18px;
     cursor: pointer;
     user-select: none;
 }
 .dl-task-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 20px;
     flex-shrink: 0;
     overflow: hidden;
     position: relative;
@@ -3562,7 +3610,7 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 8px;
+    border-radius: 12px;
 }
 .dl-task-icon-fallback {
     position: absolute;
@@ -3571,62 +3619,101 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     align-items: center;
     justify-content: center;
 }
-.dl-task-icon--mod { background: rgba(168,85,247,0.15); color: #a855f7; }
-.dl-task-icon--modpack { background: rgba(var(--accent-rgb), 0.15); color: var(--accent); }
-.dl-task-icon--version { background: rgba(34,197,94,0.15); color: #22c55e; }
-.dl-task-icon--java { background: rgba(249,115,22,0.15); color: #f97316; }
-.dl-task-icon--other { background: rgba(148,163,184,0.15); color: #94a3b8; }
+.dl-task-icon--mod { background: rgba(168,85,247,0.16); color: #bd7bff; }
+.dl-task-icon--modpack { background: rgba(27,217,106,0.16); color: #1bd96a; }
+.dl-task-icon--version { background: rgba(34,197,94,0.16); color: #22c55e; }
+.dl-task-icon--java { background: rgba(249,115,22,0.16); color: #f97316; }
+.dl-task-icon--other { background: rgba(148,163,184,0.16); color: #9fa4b3; }
 .dl-task-info {
     flex: 1;
     min-width: 0;
 }
 .dl-task-name {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 .dl-task-status {
     font-size: 12px;
+    font-weight: 500;
     color: var(--text-muted);
-    margin-top: 2px;
-}
-.dl-task-progress {
-    flex: 0 0 120px;
+    margin-top: 3px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+}
+.dl-spinner {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    color: #1bd96a;
+    animation: dl-spin 0.9s linear infinite;
+}
+@keyframes dl-spin {
+    to { transform: rotate(360deg); }
+}
+.dl-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.dl-status-dot--completed { background: #1bd96a; }
+.dl-status-dot--failed { background: #ed1148; }
+.dl-task-progress {
+    flex: 0 0 150px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 .dl-task-progress-bar {
     flex: 1;
-    height: 6px;
+    height: 8px;
     background: var(--bg-tertiary);
-    border-radius: 3px;
+    border-radius: 999px;
     overflow: hidden;
 }
 .dl-task-progress-fill {
+    position: relative;
+    overflow: hidden;
     height: 100%;
-    background: var(--accent);
-    border-radius: 3px;
-    transition: width 0.3s ease;
+    border-radius: 999px;
+    background: linear-gradient(to right, #1bd96a 0%, #1ffa9a 100%);
+    transition: width 0.3s ease-out;
     width: 0%;
 }
-.dl-task-progress-fill--completed { background: #22c55e; }
-.dl-task-progress-fill--failed { background: #ef4444; }
+.dl-task-progress-fill--completed { background: #1bd96a; }
+.dl-task-progress-fill--failed { background: #ed1148; }
+/* 下载中：一道亮光从左向右循环扫过，模拟流动加载 */
+.dl-task-progress-fill:not(.dl-task-progress-fill--completed):not(.dl-task-progress-fill--failed)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.35) 50%, transparent 80%);
+    transform: translateX(-100%);
+    animation: dl-sheen 1.2s ease-in-out infinite;
+}
+@keyframes dl-sheen {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
 .dl-task-percent {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
-    min-width: 36px;
+    min-width: 38px;
     text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 .dl-task-arrow {
     width: 20px;
     height: 20px;
     color: var(--text-muted);
-    transition: transform 0.2s;
+    transition: transform 0.2s ease;
     flex-shrink: 0;
 }
 .dl-task--expanded .dl-task-arrow {
@@ -3635,11 +3722,16 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
 .dl-task-detail {
     display: none;
     border-top: 1px solid var(--border);
-    padding: 10px 16px 12px;
-    background: var(--bg-primary);
+    padding: 10px 18px 12px;
+    background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
 }
 .dl-task--expanded .dl-task-detail {
     display: block;
+    animation: dl-detail-in 0.18s ease-out;
+}
+@keyframes dl-detail-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 .dl-file-item {
     display: flex;
@@ -3658,9 +3750,9 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     flex-shrink: 0;
 }
 .dl-file-status--pending { color: var(--text-muted); }
-.dl-file-status--downloading { color: var(--accent); }
-.dl-file-status--completed { color: #22c55e; }
-.dl-file-status--failed { color: #ef4444; }
+.dl-file-status--downloading { color: #1bd96a; }
+.dl-file-status--completed { color: #1bd96a; }
+.dl-file-status--failed { color: #ed1148; }
 .dl-file-name {
     flex: 1;
     white-space: nowrap;
@@ -3679,25 +3771,36 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
 }
 .dl-file-progress-bar {
     flex: 1;
-    height: 4px;
+    height: 5px;
     background: var(--bg-tertiary);
-    border-radius: 2px;
+    border-radius: 999px;
     overflow: hidden;
 }
 .dl-file-progress-fill {
+    position: relative;
+    overflow: hidden;
     height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-    transition: width 0.3s ease;
+    border-radius: 999px;
+    background: linear-gradient(to right, #1bd96a 0%, #1ffa9a 100%);
+    transition: width 0.3s ease-out;
     width: 0%;
 }
-.dl-file-progress-fill--completed { background: #22c55e; }
-.dl-file-progress-fill--failed { background: #ef4444; }
+.dl-file-progress-fill--completed { background: #1bd96a; }
+.dl-file-progress-fill--failed { background: #ed1148; }
+.dl-file-progress-fill:not(.dl-file-progress-fill--completed):not(.dl-file-progress-fill--failed)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.35) 50%, transparent 80%);
+    transform: translateX(-100%);
+    animation: dl-sheen 1.2s ease-in-out infinite;
+}
 .dl-file-percent {
     font-size: 11px;
     color: var(--text-muted);
     min-width: 30px;
     text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 /* Stage history for modpack import */
 .dl-stage-item {
@@ -3719,8 +3822,8 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     font-weight: bold;
 }
 .dl-stage-status--pending { color: var(--text-muted); }
-.dl-stage-status--active { color: var(--accent); }
-.dl-stage-status--completed { color: #22c55e; }
+.dl-stage-status--active { color: #1bd96a; }
+.dl-stage-status--completed { color: #1bd96a; }
 .dl-stage-name {
     flex: 1;
     white-space: nowrap;
@@ -3735,32 +3838,45 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
 }
 .dl-stage-progress-bar {
     flex: 1;
-    height: 4px;
+    height: 5px;
     background: var(--bg-tertiary);
-    border-radius: 2px;
+    border-radius: 999px;
     overflow: hidden;
 }
 .dl-stage-progress-fill {
+    position: relative;
+    overflow: hidden;
     height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-    transition: width 0.3s ease;
+    border-radius: 999px;
+    background: linear-gradient(to right, #1bd96a 0%, #1ffa9a 100%);
+    transition: width 0.3s ease-out;
     width: 0%;
+}
+.dl-stage-progress-fill:not(.dl-stage-progress-fill--completed):not(.dl-stage-progress-fill--failed)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.35) 50%, transparent 80%);
+    transform: translateX(-100%);
+    animation: dl-sheen 1.2s ease-in-out infinite;
 }
 .dl-stage-percent {
     font-size: 11px;
     color: var(--text-muted);
     min-width: 30px;
     text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 .dl-task-actions {
     display: flex;
-    gap: 6px;
-    padding: 0 16px 10px;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 0 18px 14px;
 }
 .dl-task-actions .btn {
     font-size: 12px;
-    padding: 4px 10px;
+    padding: 5px 12px;
+    border-radius: 8px;
 }
 
 /* 爱发电支持弹窗 */

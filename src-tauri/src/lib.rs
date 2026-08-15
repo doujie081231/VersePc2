@@ -2,6 +2,7 @@
 // 职责：模块声明、窗口控制命令、路径获取命令、命令注册
 
 mod api;
+mod ai;
 mod auth;
 mod avatar;
 mod crash_analyzer;
@@ -146,6 +147,23 @@ fn window_destroy(window: tauri::WebviewWindow) {
 #[tauri::command]
 fn open_devtools(window: tauri::WebviewWindow) {
     window.open_devtools();
+}
+
+/// 记录启动阶段耗时（诊断用）：把前端 init() 各阶段耗时追加写入 logs/startup-timing.log
+#[tauri::command]
+fn write_startup_timing(content: String) -> bool {
+    let dir = storage::resolve_data_dir().join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+    use std::io::Write;
+    let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("startup-timing.log"))
+        .and_then(|mut f| {
+            writeln!(f, "[{}] {}", ts, content)
+        })
+        .is_ok()
 }
 
 #[tauri::command]
@@ -552,12 +570,16 @@ pub fn run() {
             favicon::get_favicon,
             // 开发工具
             open_devtools,
+            // 启动计时诊断
+            write_startup_timing,
             // 系统工具
             open_external,
             // 运行环境检查（WebView2）
             system::check_webview2,
             // TTS 语音合成
             tts_speak,
+            // AI 对话代理
+            ai::ai_chat,
             // 自动更新（便携版全量替换）
             updater::updater_check_for_updates,
             updater::updater_download_update,

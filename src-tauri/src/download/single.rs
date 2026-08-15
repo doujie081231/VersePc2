@@ -15,6 +15,11 @@ use super::chunked;
 /// 分块阈值：小于该字节数的文件视为小文件，直接单流下载（与 chunked.rs 一致）
 const CHUNK_THRESHOLD: u64 = 1024 * 1024;
 
+/// TTFB 超时（秒）：发送请求后等待服务器响应头的最大时间。
+/// 对齐原项目 XMCL 引擎的 ttfbDeadline（15s）——CDN 建立了 TCP 连接但不回响应头时，
+/// 必须及时中断换源，否则会一直挂在 send() 上，表现为"下载一会卡住"。
+const TTFB_TIMEOUT_SECS: u64 = 20;
+
 /// 全局复用 HTTP 客户端：让大量小文件（如 assets）共享连接池，避免每个文件都重新
 /// 建立 TLS 连接导致大量握手开销。对应全局 HttpClient 复用连接池的思路。
 /// 注意：不在此设置总超时，改为在单个请求上用 .timeout() 覆盖，以支持不同超时。
@@ -334,6 +339,11 @@ async fn download_with_retry(
             }
             Err(e) => {
                 last_err = e;
+                // TTFB 超时 / 低速检测：该源本身不可用或太慢，立即换源，
+                // 不再重试同一个 URL（避免浪费 3 次 × 20s 后仍失败）
+                if last_err.contains("TTFB 超时") || last_err.contains("低速检测") {
+                    break;
+                }
                 if attempt < 2 {
                     // 429 限流：等待 10 秒后再试，避免立即重试再次被限流
                     if last_err.contains("429") {
@@ -372,7 +382,18 @@ async fn download_once(
         req = req.header("Range", format!("bytes={}-", resume_offset));
     }
 
-    let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
+    // TTFB 超时保护：CDN 建立连接后迟迟不回响应头时（Modrinth 官方源国内常见），
+    // 立即中断并返回"TTFB 超时"让上层换源，避免一直挂在 send() 上导致"卡住"。
+    let response = match tokio::time::timeout(
+        Duration::from_secs(TTFB_TIMEOUT_SECS),
+        req.send(),
+    )
+    .await
+    {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => return Err(format!("请求失败: {}", e)),
+        Err(_) => return Err("TTFB 超时：服务器响应头迟迟未返回，切换镜像".to_string()),
+    };
 
     let status = response.status().as_u16();
     if status == 429 {

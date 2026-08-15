@@ -152,7 +152,25 @@ function _updateCustomImagePreview(filePath) {
             preview.style.position = 'relative';
             preview.appendChild(img);
         }
-        img.src = typeof wpfilePath === 'function' ? wpfilePath(filePath) : ('wpfile:///' + filePath.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/'));
+        // Tauri 环境未注册 wpfile:// 协议，改用 readFileBuffer → blob 加载本地图片预览
+        img.src = '';
+        if (window.electronAPI && window.electronAPI.readFileBuffer) {
+            window.electronAPI.readFileBuffer(filePath)
+                .then((buffer) => {
+                    const u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []);
+                    if (!u8 || u8.byteLength === 0) throw new Error('empty');
+                    const ext = String(filePath).toLowerCase().split('.').pop();
+                    const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' };
+                    const mime = mimeMap[ext] || 'image/png';
+                    const blob = new Blob([u8], { type: mime });
+                    img.src = URL.createObjectURL(blob);
+                })
+                .catch(() => {
+                    img.src = typeof wpfilePath === 'function' ? wpfilePath(filePath) : '';
+                });
+        } else {
+            img.src = typeof wpfilePath === 'function' ? wpfilePath(filePath) : '';
+        }
     } else {
         if (icon) icon.style.display = '';
         const img = preview.querySelector('.wp-preview-thumb');
@@ -347,7 +365,11 @@ async function savePersonalizeSettings() {
 
     try {
         await window.electronAPI.store.set('versepc_personalize_settings', JSON.stringify(settings));
+        // 同步写入单项键，保证"保存设置"与实时修改的单项键一致，重启后以单项键为准
+        await window.electronAPI.store.set('versepc_theme', settings.theme);
         await window.electronAPI.store.set('versepc_wallpaper', settings.wallpaper);
+        await window.electronAPI.store.set('versepc_glass_effect', settings.glassEffect ? '1' : '0');
+        await window.electronAPI.store.set('versepc_liquid_glass', settings.liquidGlass ? '1' : '0');
         showToast('个性化设置已保存', 'success');
     } catch (e) {
         showToast('保存失败: ' + e.message, 'error');
@@ -385,6 +407,7 @@ async function resetPersonalizeSettings() {
             glassEffect: false,
             liquidGlass: false
         }));
+        await window.electronAPI.store.set('versepc_theme', 'light');
         await window.electronAPI.store.set('versepc_wallpaper', 'none');
         await window.electronAPI.store.delete('versepc_solid_color');
         await window.electronAPI.store.delete('versepc_custom_theme_color');
@@ -409,65 +432,64 @@ async function resetPersonalizeSettings() {
 
 async function loadPersonalizeSettings() {
     try {
-        const saved = await window.electronAPI.store.get('versepc_personalize_settings');
-        if (saved) {
-            const settings = JSON.parse(saved);
-            if (settings.theme) {
-                let themeName = settings.theme;
-                const legacyThemes = ['blue', 'purple', 'green', 'orange', 'red', 'pink', 'teal', 'cyan', 'amber'];
-                if (legacyThemes.includes(themeName)) themeName = 'light';
-                const themeEl = document.querySelector(`.theme-option[data-theme="${themeName}"]`);
-                if (themeEl) selectTheme(themeEl);
-            }
-            if (settings.wallpaper) {
-                let wpName = settings.wallpaper;
-                if (wpName === 'starry') wpName = 'panorama';
-                const wpEl = document.querySelector(`.wallpaper-option[data-wallpaper="${wpName}"]`);
-                if (wpEl) selectWallpaper(wpEl);
-            }
-            if (settings.glassEffect !== undefined) {
-                const enabled = settings.glassEffect;
-                const glassCheckbox = document.getElementById('setting-glass-effect');
-                if (glassCheckbox) glassCheckbox.checked = enabled;
-                toggleGlassEffect(enabled);
-            }
-            if (settings.liquidGlass !== undefined) {
-                const enabled = settings.liquidGlass;
-                const liquidGlassCheckbox = document.getElementById('setting-liquid-glass');
-                if (liquidGlassCheckbox) liquidGlassCheckbox.checked = enabled;
-                toggleLiquidGlassEffect(enabled);
-            }
+        // 以实时保存的单项键为准（selectTheme/selectWallpaper/toggle* 每次修改都会立即写入单项键）
+        // 旧复合键 versepc_personalize_settings 仅作兜底（早期版本只点"保存设置"才写入），
+        // 避免用旧复合键覆盖用户最新修改 → 修复"重启后恢复默认"。
+        const [
+            savedTheme,
+            savedWallpaper,
+            glassSaved,
+            liquidGlassSaved,
+        ] = await Promise.all([
+            window.electronAPI.store.get('versepc_theme'),
+            window.electronAPI.store.get('versepc_wallpaper'),
+            window.electronAPI.store.get('versepc_glass_effect'),
+            window.electronAPI.store.get('versepc_liquid_glass'),
+        ]);
+
+        let legacy = null;
+        try {
+            const saved = await window.electronAPI.store.get('versepc_personalize_settings');
+            if (saved) legacy = JSON.parse(saved);
+        } catch (e) { /* 忽略旧数据解析错误 */ }
+
+        // ── 主题：单项键优先，其次旧复合键，最后默认浅色 ──
+        let themeName = savedTheme || (legacy && legacy.theme) || null;
+        if (themeName) {
+            const legacyThemes = ['blue', 'purple', 'green', 'orange', 'red', 'pink', 'teal', 'cyan', 'amber'];
+            if (legacyThemes.includes(themeName)) themeName = 'light';
+            const themeEl = document.querySelector(`.theme-option[data-theme="${themeName}"]`);
+            if (themeEl) selectTheme(themeEl);
         } else {
-            const savedTheme = await window.electronAPI.store.get('versepc_theme');
-            if (savedTheme) {
-                let themeName = savedTheme;
-                const legacyThemes = ['blue', 'purple', 'green', 'orange', 'red', 'pink', 'teal', 'cyan', 'amber'];
-                if (legacyThemes.includes(themeName)) themeName = 'light';
-                const themeEl = document.querySelector(`.theme-option[data-theme="${themeName}"]`);
-                if (themeEl) selectTheme(themeEl);
-            } else {
-                const defaultThemeEl = document.querySelector('.theme-option[data-theme="light"]');
-                if (defaultThemeEl) selectTheme(defaultThemeEl);
-            }
+            const defaultThemeEl = document.querySelector('.theme-option[data-theme="light"]');
+            if (defaultThemeEl) selectTheme(defaultThemeEl);
+        }
+
+        // ── 壁纸：单项键优先，其次旧复合键，最后无背景 ──
+        let wpName = savedWallpaper || (legacy && legacy.wallpaper) || 'none';
+        if (wpName === 'starry') wpName = 'panorama';
+        const wpEl = document.querySelector(`.wallpaper-option[data-wallpaper="${wpName}"]`);
+        if (wpEl) selectWallpaper(wpEl);
+        else {
             const defaultWpEl = document.querySelector('.wallpaper-option[data-wallpaper="none"]');
             if (defaultWpEl) selectWallpaper(defaultWpEl);
         }
 
-        const glassSaved = await window.electronAPI.store.get('versepc_glass_effect');
-        if (glassSaved !== null && glassSaved !== undefined) {
-            const enabled = glassSaved === '1';
-            const glassCheckbox = document.getElementById('setting-glass-effect');
-            if (glassCheckbox) glassCheckbox.checked = enabled;
-            toggleGlassEffect(enabled);
-        }
+        // ── 毛玻璃：单项键优先，其次旧复合键 ──
+        const glassEnabled = glassSaved !== null && glassSaved !== undefined
+            ? (glassSaved === '1' || glassSaved === true)
+            : (legacy && legacy.glassEffect !== undefined ? !!legacy.glassEffect : false);
+        const glassCheckbox = document.getElementById('setting-glass-effect');
+        if (glassCheckbox) glassCheckbox.checked = glassEnabled;
+        toggleGlassEffect(glassEnabled);
 
-        const liquidGlassSaved = await window.electronAPI.store.get('versepc_liquid_glass');
-        if (liquidGlassSaved !== null && liquidGlassSaved !== undefined) {
-            const enabled = liquidGlassSaved === '1';
-            const liquidGlassCheckbox = document.getElementById('setting-liquid-glass');
-            if (liquidGlassCheckbox) liquidGlassCheckbox.checked = enabled;
-            toggleLiquidGlassEffect(enabled);
-        }
+        // ── 液态玻璃：单项键优先，其次旧复合键 ──
+        const liquidEnabled = liquidGlassSaved !== null && liquidGlassSaved !== undefined
+            ? (liquidGlassSaved === '1' || liquidGlassSaved === true)
+            : (legacy && legacy.liquidGlass !== undefined ? !!legacy.liquidGlass : false);
+        const liquidGlassCheckbox = document.getElementById('setting-liquid-glass');
+        if (liquidGlassCheckbox) liquidGlassCheckbox.checked = liquidEnabled;
+        toggleLiquidGlassEffect(liquidEnabled);
     } catch (e) {
         console.error('[Settings] Load personalize settings error:', e);
     }
