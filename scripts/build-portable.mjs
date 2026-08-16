@@ -42,6 +42,15 @@ copyFileSync(exeSrc, exeDst);
 const exeLatest = join(portableDir, 'VersePC2.exe');
 copyFileSync(exeSrc, exeLatest);
 
+// 5. 复制运行所需的配套 DLL（GNU/MinGW 构建动态链接 WebView2Loader.dll，缺失会导致无法启动）
+const dllSrc = join(projectRoot, 'src-tauri', 'target', 'release', 'WebView2Loader.dll');
+if (existsSync(dllSrc)) {
+  copyFileSync(dllSrc, join(portableDir, 'WebView2Loader.dll'));
+  console.log(`[build-portable] 已复制配套 DLL: WebView2Loader.dll`);
+} else {
+  console.warn(`[build-portable] 警告：未找到 WebView2Loader.dll，GNU 构建下运行会缺少该依赖`);
+}
+
 console.log(`\n[build-portable] 便携版打包完成！`);
 console.log(`[build-portable] 输出位置: ${exeDst}`);
 console.log(`[build-portable] 最新版副本: ${exeLatest}`);

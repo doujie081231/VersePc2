@@ -16,23 +16,16 @@ const frontendDir = resolve(projectRoot, 'frontend-tauri');
 console.log('[prepare-frontend] 前端源目录:', frontendSrcDir);
 console.log('[prepare-frontend] 前端资源输出目录:', frontendDir);
 
-// 清理旧的 frontend-tauri 目录
-// 若部分文件被其他进程占用（如 installer-app/main-app.asar），删除失败时跳过该文件，
-// 不中断整体构建；占用的文件通常是可重新生成的产物，不影响前端资源更新。
 if (existsSync(frontendDir)) {
-  try {
-    rmSync(frontendDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
-  } catch (e) {
-    console.warn(`[prepare-frontend] 清理 frontend-tauri 遇到占用文件，改为增量清理: ${e.message}`);
-    // 增量清理：删除可删除的部分；被占用的文件最终由 robocopy /E 覆盖/保留
+  const keepName = 'installer-app';
+  for (const entry of readdirSync(frontendDir)) {
+    if (entry === keepName) continue;
+    const p = join(frontendDir, entry);
     try {
-      const keepDir = join(frontendDir, 'installer-app');
-      for (const entry of readdirSync(frontendDir)) {
-        const p = join(frontendDir, entry);
-        if (entry === 'installer-app') continue; // 保留，避免删除被占用的 asar
-        try { rmSync(p, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 }); } catch (_) {}
-      }
-    } catch (_) {}
+      rmSync(p, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+    } catch (e) {
+      console.warn(`[prepare-frontend] 清理 ${entry} 遇到占用文件，跳过: ${e.message}`);
+    }
   }
 }
 mkdirSync(frontendDir, { recursive: true });

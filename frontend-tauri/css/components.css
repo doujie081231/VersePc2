@@ -4039,3 +4039,109 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     line-height: 1.6;
 }
 
+/* 收藏夹下拉选择菜单 */
+.fav-select-dropdown {
+    position: fixed;
+    min-width: 180px;
+    max-width: 260px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 9999;
+    padding: 6px;
+    overflow: hidden;
+}
+.fav-select-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: background-color 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fav-select-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.fav-select-item.active {
+    color: var(--text-primary);
+}
+.fav-select-item svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* 收藏夹管理菜单 */
+.fav-manage-menu {
+    position: fixed;
+    min-width: 180px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 9999;
+    padding: 6px;
+}
+.fav-manage-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.fav-manage-menu-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.fav-manage-menu-item.danger {
+    color: var(--red);
+}
+.fav-manage-menu-item.danger:hover {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    color: var(--red);
+}
+.fav-manage-menu-item svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* 收藏心形按钮 */
+.fav-heart-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+}
+.fav-heart-btn:hover {
+    background: var(--bg-hover);
+    color: var(--red);
+}
+.fav-heart-btn.active {
+    color: var(--red);
+}
+.fav-heart-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
