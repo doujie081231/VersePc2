@@ -576,6 +576,10 @@ async function navigateToPage(pageName) {
     if (typeof redstoneInitPage === 'function') {
       setTimeout(() => redstoneInitPage(), 100);
     }
+  } else if (pageName === 'lan-enderlink') {
+    if (typeof enderlinkInitPage === 'function') {
+      setTimeout(() => enderlinkInitPage(), 100);
+    }
   }
 
   // 切到账户页：等页面可见、尺寸稳定后，把账号轮播轨道定位到中间，避免闪到最左边

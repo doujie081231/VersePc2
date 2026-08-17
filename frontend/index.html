@@ -315,6 +315,9 @@
               <button class="nav-sub-btn" data-page="lan-portmap">
                 红石联机
               </button>
+              <button class="nav-sub-btn" data-page="lan-enderlink">
+                EnderLink联机
+              </button>
               <button class="nav-sub-btn" data-page="private-server">
                 一起玩
               </button>
@@ -419,6 +422,10 @@
 
         <div id="page-lan-portmap" class="page">
           <!-- Vue 渐进式改造：内容由 PageLanPortmap 组件渲染 -->
+        </div>
+
+        <div id="page-lan-enderlink" class="page">
+          <!-- Vue 渐进式改造：内容由 PageLanEnderlink 组件渲染 -->
         </div>
 
         <div id="page-explore" class="page">
@@ -692,6 +699,7 @@
   <script src="js/vue/page-shaders.js" defer></script>
   <script src="js/vue/page-lan-terracotta.js" defer></script>
   <script src="js/vue/page-lan-portmap.js" defer></script>
+  <script src="js/vue/page-lan-enderlink.js" defer></script>
   <script src="js/vue/page-explore.js" defer></script>
   <script src="js/vue/page-private-server.js" defer></script>
   <script src="js/app/server-host.js" defer></script>
@@ -733,6 +741,7 @@
         ['PageShaders', '#page-shaders'],
         ['PageLanTerracotta', '#page-lan-terracotta'],
         ['PageLanPortmap', '#page-lan-portmap'],
+        ['PageLanEnderlink', '#page-lan-enderlink'],
         ['PageExplore', '#page-explore'],
         ['PagePrivateServer', '#page-private-server'],
         ['PageToolbox', '#page-toolbox'],

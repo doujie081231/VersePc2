@@ -374,6 +374,7 @@ const API = {
         apiPost('/api/mods/download-version', { versionId, projectId, source, fileId, gameVersion, loader, savePath, includeDeps }),
     getModDownloadStatus: (sessionId) => apiGet('/api/mods/download-status', { sessionId }),
     getModDetail: (projectId, source = 'modrinth') => apiGet('/api/mods/detail', { projectId, source }),
+    getResourceImage: (url) => apiGet('/api/resource-image', { url }),
     getModVersions: (projectId, source = 'modrinth', loader = '', gameVersion = '') =>
         apiGet('/api/mods/versions', { projectId, source, loader, gameVersion }),
     getModCategories: (source = 'modrinth') => apiGet('/api/mods/categories', { source }),
@@ -502,6 +503,9 @@ const API = {
     saveSettings: (settings) => apiPost('/api/settings', settings),
     resetSettings: () => apiPost('/api/settings/reset', {}),
     saveSetting: (key, value) => apiPost('/api/settings/set', { key, value }),
+    getDataDir: () => apiGet('/api/settings/data-dir'),
+    setDataDir: (dataDir) => apiPost('/api/settings/data-dir', { dataDir }),
+    resetDataDir: () => apiPost('/api/settings/data-dir', { reset: true }),
 
     // === 账户管理（离线/Microsoft/外置登录）===
     getAccounts: () => apiGet('/api/accounts'),

@@ -67,11 +67,16 @@ pub async fn login_xbl(
     ms_access_token: &str,
 ) -> Result<(String, String), AuthError> {
     let url = "https://user.auth.xboxlive.com/user/authenticate";
+    let rps_ticket = if ms_access_token.starts_with("d=") {
+        ms_access_token.to_string()
+    } else {
+        format!("d={}", ms_access_token)
+    };
     let body = json!({
         "Properties": {
             "AuthMethod": "RPS",
             "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": format!("d={}", ms_access_token)
+            "RpsTicket": rps_ticket
         },
         "RelyingParty": "http://auth.xboxlive.com",
         "TokenType": "JWT"

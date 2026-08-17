@@ -95,6 +95,14 @@ pub fn resolve_data_dir() -> std::path::PathBuf {
         );
         return user_dir;
     }
+    // 默认目录当前尚不存在但 exe 目录可写：先创建并固化到 data-config.json，
+    // 避免后续启动因临时探测结果变化（如杀毒锁定）导致数据目录漂移、数据"丢失"。
+    // 使用相对路径 "./data"，移动整个文件夹后数据目录自动跟随 exe。
+    let _ = std::fs::create_dir_all(&default_dir);
+    let _ = std::fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&json!({ "dataDir": "./data" })).unwrap_or_default(),
+    );
     default_dir
 }
 

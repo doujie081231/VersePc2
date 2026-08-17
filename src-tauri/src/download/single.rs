@@ -281,6 +281,87 @@ pub async fn download_with_mirror(
     Err(last_err)
 }
 
+/// XMCL 等价的多镜像下载（对应原项目 downloadFileRace → xmclDownload）
+///
+/// 与 download_with_mirror 的区别：直接接收完整镜像列表，一次调用完成下载。
+/// 不再对单个 URL 做 manual 302 解析 + probe 测速 + 全局镜像熔断 + 逐 URL 二次
+/// 展开镜像 —— 这些多余步骤放在 mod 下载路径上，会在某个环节失败时让 mod 静默
+/// 缺失（表现为"导入成功但游戏缺 mod"）。该函数分块失败即回退单流，镜像逐个尝试。
+pub async fn download_file_race(
+    mirrors: &[String],
+    dest: &Path,
+    sha1: Option<&str>,
+    expected_size: Option<u64>,
+    timeout_secs: u64,
+    on_progress: Option<ProgressCb>,
+) -> Result<(), String> {
+    if mirrors.is_empty() {
+        return Err("下载镜像列表为空".to_string());
+    }
+
+    let is_small = expected_size
+        .map(|s| s > 0 && s < CHUNK_THRESHOLD)
+        .unwrap_or(false);
+    let enable_chunk = crate::storage::load_settings()
+        .get("enableChunkDownload")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let max_chunks = crate::storage::load_settings()
+        .get("maxChunksPerFile")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(32)
+        .clamp(1, 64) as usize;
+
+    let mut last_err = String::new();
+    if enable_chunk && !is_small {
+        match chunked::download_chunked_with_mirror(
+            mirrors,
+            dest,
+            sha1,
+            expected_size,
+            timeout_secs,
+            max_chunks,
+            None,
+            on_progress.clone(),
+        )
+        .await
+        {
+            Ok(true) => return Ok(()),
+            Ok(false) => {}
+            Err(e) => {
+                last_err = e;
+                let _ = tokio::fs::remove_file(dest).await;
+            }
+        }
+    }
+
+    for url in mirrors {
+        match download_with_retry(url, dest, sha1, expected_size, timeout_secs, on_progress.clone()).await
+        {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = e;
+                let _ = tokio::fs::remove_file(dest).await;
+                let _ = tokio::fs::remove_file(dest.with_extension("downloading")).await;
+            }
+        }
+    }
+    Err(last_err)
+}
+
+pub async fn download_single(
+    url: &str,
+    dest: &Path,
+    sha1: Option<&str>,
+    expected_size: Option<u64>,
+    timeout_secs: u64,
+) -> Result<(), String> {
+    if dest.exists() && should_skip(dest, sha1, expected_size).await {
+        return Ok(());
+    }
+    download_with_retry(url, dest, sha1, expected_size, timeout_secs, None).await
+}
+
 /// 判断文件是否可跳过（大小+SHA1 校验通过）
 async fn should_skip(dest: &Path, sha1: Option<&str>, expected_size: Option<u64>) -> bool {
     if let Some(expected) = expected_size {

@@ -8,12 +8,13 @@ mod avatar;
 mod crash_analyzer;
 mod dialog;
 mod download;
-mod favicon;
 mod easytier;
+mod enderlink_online;
+mod favicon;
 mod filesystem;
 mod install;
 mod java;
-mod launch;
+pub(crate) mod launch;
 mod modloaders;
 mod modpack;
 mod mods;
@@ -731,12 +732,17 @@ pub fn run() {
             server_host::server_host_sync_mods,
             // 红石联机内网穿透
             redstone_online::redstone_servers,
-            redstone_online::redstone_apikey,
-            redstone_online::redstone_apikey_reset,
             redstone_online::redstone_scan_port,
             redstone_online::redstone_start,
             redstone_online::redstone_stop,
             redstone_online::redstone_status,
+            // EnderLink 联机
+            enderlink_online::enderlink_rooms,
+            enderlink_online::enderlink_nodes,
+            enderlink_online::enderlink_download,
+            enderlink_online::enderlink_start,
+            enderlink_online::enderlink_stop,
+            enderlink_online::enderlink_status,
         ])
         .on_page_load(|_window, _payload| {
             println!("[boot] page_load {}", chrono::Local::now().format("%H:%M:%S%.3f"));

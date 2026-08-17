@@ -873,7 +873,8 @@ async fn run_import_main(
         }
     }
 
-    // 等待进度广播任务结束（所有发送者 drop 后自动结束）
+    // 等待进度广播任务结束：显式 drop 主循环持有的发送端，否则广播任务收不到 None 永不结束
+    drop(progress_tx);
     let _ = broadcast_task.await;
 
     if abort_flag.load(Ordering::SeqCst) {
@@ -2295,7 +2296,6 @@ async fn download_one_mod(
     }
 
     let mut last_err = String::new();
-    let mut downloaded = false;
 
     // 3 轮重试
     for round in 0..MAX_DOWNLOAD_ROUNDS {
@@ -2307,98 +2307,89 @@ async fn download_one_mod(
             tokio::time::sleep(Duration::from_millis(3000 + round as u64 * 2000)).await;
         }
 
-        // 尝试所有镜像 URL
-        for try_url in &all_urls {
-            if abort_flag.load(Ordering::SeqCst) {
-                break;
-            }
+        // 走 XMCL 等价的多镜像下载：一次性传入完整镜像列表（对应原项目 downloadFileRace）
+        let sha1_opt = if expected_sha1.is_empty() {
+            None
+        } else {
+            Some(expected_sha1.as_str())
+        };
+        let size_opt = if file_size > 0 {
+            Some(file_size as u64)
+        } else {
+            None
+        };
 
-            let sha1_opt = if expected_sha1.is_empty() {
-                None
-            } else {
-                Some(expected_sha1.as_str())
-            };
-            let size_opt = if file_size > 0 {
-                Some(file_size as u64)
-            } else {
-                None
-            };
+        // 逐文件下载进度上报：每个文件下载时，把当前百分比推给主循环，
+        // 主循环据此实时广播文件快照（详情里每个模组的进度条才会动）
+        let progress_tx_clone = progress_tx.clone();
+        let on_progress: Option<crate::download::ProgressCb> = Some(Arc::new(
+            move |p: &crate::download::DownloadProgress| {
+                let pct = if p.total_bytes > 0 {
+                    ((p.bytes_downloaded as f64 / p.total_bytes as f64) * 100.0) as u32
+                } else {
+                    0
+                };
+                let _ = progress_tx_clone.send((idx, "downloading", pct));
+            },
+        ));
 
-            // 逐文件下载进度上报：每个文件下载时，把当前百分比推给主循环，
-            // 主循环据此实时广播文件快照（详情里每个模组的进度条才会动）
-            let progress_tx_clone = progress_tx.clone();
-            let on_progress: Option<crate::download::ProgressCb> = Some(Arc::new(
-                move |p: &crate::download::DownloadProgress| {
-                    let pct = if p.total_bytes > 0 {
-                        ((p.bytes_downloaded as f64 / p.total_bytes as f64) * 100.0) as u32
-                    } else {
-                        0
-                    };
-                    let _ = progress_tx_clone.send((idx, "downloading", pct));
-                },
-            ));
-
-            match crate::download::single::download_with_mirror(
-                try_url,
-                dest_path,
-                sha1_opt,
-                size_opt,
-                "china-first",
-                180,
-                on_progress,
-            )
-            .await
-            {
-                Ok(_) => {
-                    // 下载后校验
-                    if cf_shared::is_jar_intact(dest_path) {
-                        let sha1_ok = if !expected_sha1.is_empty() {
-                            match crate::download::single::compute_sha1(dest_path).await {
-                                Ok(actual) => {
-                                    if actual.to_lowercase() == expected_sha1.to_lowercase() {
-                                        true
-                                    } else {
-                                        eprintln!(
-                                            "[mrpack] SHA1校验失败: {} (期望={}, 实际={})",
-                                            file_name,
-                                            &expected_sha1[..8.min(expected_sha1.len())],
-                                            &actual[..8.min(actual.len())]
-                                        );
-                                        let _ = std::fs::remove_file(dest_path);
-                                        false
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("[mrpack] SHA1计算失败: {} - {}", file_name, e);
-                                    true // SHA1 计算失败不阻塞下载
+        match crate::download::single::download_file_race(
+            &all_urls,
+            dest_path,
+            sha1_opt,
+            size_opt,
+            180,
+            on_progress,
+        )
+        .await
+        {
+            Ok(_) => {
+                // 下载后校验
+                if cf_shared::is_jar_intact(dest_path) {
+                    let sha1_ok = if !expected_sha1.is_empty() {
+                        match crate::download::single::compute_sha1(dest_path).await {
+                            Ok(actual) => {
+                                if actual.to_lowercase() == expected_sha1.to_lowercase() {
+                                    true
+                                } else {
+                                    eprintln!(
+                                        "[mrpack] SHA1校验失败: {} (期望={}, 实际={})",
+                                        file_name,
+                                        &expected_sha1[..8.min(expected_sha1.len())],
+                                        &actual[..8.min(actual.len())]
+                                    );
+                                    let _ = std::fs::remove_file(dest_path);
+                                    false
                                 }
                             }
-                        } else {
-                            true
-                        };
-
-                        if sha1_ok {
-                            downloaded_count.fetch_add(1, Ordering::SeqCst);
-                            downloaded = true;
-                            let _ = progress_tx.send((idx, "completed", 100));
-                            return make_result(true, "");
+                            Err(e) => {
+                                eprintln!("[mrpack] SHA1计算失败: {} - {}", file_name, e);
+                                true // SHA1 计算失败不阻塞下载
+                            }
                         }
                     } else {
-                        let _ = std::fs::remove_file(dest_path);
+                        true
+                    };
+
+                    if sha1_ok {
+                        downloaded_count.fetch_add(1, Ordering::SeqCst);
+                        let _ = progress_tx.send((idx, "completed", 100));
+                        return make_result(true, "");
                     }
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[mrpack] {} 下载失败 (round {}/3): {} - {}",
-                        file_name,
-                        round + 1,
-                        try_url,
-                        &e[..100.min(e.len())]
-                    );
-                    last_err = e;
+                } else {
                     let _ = std::fs::remove_file(dest_path);
-                    let _ = std::fs::remove_file(dest_path.with_extension("downloading"));
                 }
+            }
+            Err(e) => {
+                eprintln!(
+                    "[mrpack] {} 下载失败 (round {}/3): {}",
+                    file_name,
+                    round + 1,
+                    &e[..100.min(e.len())]
+                );
+                last_err = e;
+                let _ = std::fs::remove_file(dest_path);
+                let _ = std::fs::remove_file(dest_path.with_extension("downloading"));
             }
         }
     }

@@ -157,7 +157,7 @@ async function initSettingsPages() {
     loadLaunchSettings();
     await loadPersonalizeSettings();
     loadOtherSettings();
-    fetch('/api/settings/data-dir').then(r => r.json()).then(d => {
+    API.getDataDir().then(d => {
         const el = document.getElementById('setting-data-dir');
         if (el && d.dataDir) {
             el.value = d.dataDir;

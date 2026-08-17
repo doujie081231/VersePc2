@@ -9,7 +9,7 @@
 //       GET api.minecraftservices.com/minecraft/profile → 获取 UUID、用户名、皮肤
 
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::error::AuthError;
 use super::xbox::XstsResult;
@@ -109,24 +109,17 @@ pub async fn check_entitlements(
         )));
     }
 
-    // 解析响应：检查 items 是否含 product_minecraft 或 game_minecraft
+    // 解析响应：只要 items 非空即视为持有（与 PCL 一致，兼容 Xbox Game Pass）
     #[derive(Deserialize)]
     struct EntitlementsResponse {
         #[serde(default)]
-        items: Vec<EntitlementItem>,
-    }
-    #[derive(Deserialize)]
-    struct EntitlementItem {
-        name: String,
+        items: Vec<Value>,
     }
 
     let parsed: EntitlementsResponse = serde_json::from_str(&text)
         .map_err(|e| AuthError::Network(format!("所有权响应解析失败: {}", e)))?;
 
-    let has_mc = parsed
-        .items
-        .iter()
-        .any(|i| i.name == "product_minecraft" || i.name == "game_minecraft");
+    let has_mc = !parsed.items.is_empty();
 
     Ok(has_mc)
 }

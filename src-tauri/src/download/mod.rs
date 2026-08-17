@@ -8,4 +8,4 @@ pub mod resources_session;
 pub mod single;
 
 pub use batch::{download_asset_objects, select_asset_sources, AssetObject};
-pub use single::{download_with_mirror, compute_sha1, DownloadProgress, ProgressCb};
+pub use single::{download_single, download_with_mirror, compute_sha1, DownloadProgress, ProgressCb};

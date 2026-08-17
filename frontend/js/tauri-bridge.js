@@ -474,8 +474,6 @@
 
   var redstoneOnline = {
     getServers: function () { return invoke('redstone_servers'); },
-    getApikey: function () { return invoke('redstone_apikey'); },
-    resetApikey: function () { return invoke('redstone_apikey_reset'); },
     scanPort: function () { return invoke('redstone_scan_port'); },
     start: function (params) { return invoke('redstone_start', { params: params }); },
     stop: function () { return invoke('redstone_stop'); },
@@ -508,6 +506,28 @@
         var fn = _rsUnlisteners.pop();
         try { fn(); } catch (_) {}
       }
+    }
+  };
+
+  // EnderLink 联机对象（对应 Rust 端 enderlink_online.rs）
+  var enderlinkOnline = {
+    getRooms: function () { return invoke('enderlink_rooms'); },
+    getNodes: function () { return invoke('enderlink_nodes'); },
+    download: function () { return invoke('enderlink_download'); },
+    start: function (params) { return invoke('enderlink_start', { params: params }); },
+    stop: function () { return invoke('enderlink_stop'); },
+    getStatus: function () { return invoke('enderlink_status'); },
+    onLog: function (callback) {
+      var unsub = onTauriEvent('enderlink:log', callback, function (payload) {
+        return { message: payload.message, ts: payload.ts };
+      });
+      _rsUnlisteners.push(unsub);
+      return unsub;
+    },
+    onDisconnected: function (callback) {
+      var unsub = onTauriEvent('enderlink:disconnected', callback, function () { return undefined; });
+      _rsUnlisteners.push(unsub);
+      return unsub;
     }
   };
 
@@ -573,7 +593,8 @@
     // 三大模块
     privateServer: privateServer,
     serverHost: serverHost,
-    redstoneOnline: redstoneOnline
+    redstoneOnline: redstoneOnline,
+    enderlinkOnline: enderlinkOnline
   };
 
   window.electronAPI = electronAPI;

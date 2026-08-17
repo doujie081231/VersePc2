@@ -117,21 +117,6 @@ const PageLanPortmap = {
     <!-- ===== 服务器标签页 ===== -->
     <div id="redstone-tab-server" class="redstone-tab-content" style="display:none">
       <div style="max-width:520px;margin:0 auto;padding:0 16px">
-        <!-- API Key -->
-        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div>
-              <div style="font-size:14px;font-weight:600;color:var(--text-primary)">API Key</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">首次使用自动生成，重启不丢失</div>
-            </div>
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-secondary btn-sm" onclick="redstoneCopyApikey()">复制</button>
-              <button class="btn btn-secondary btn-sm" onclick="redstoneResetApikey()" style="color:var(--red)">重置</button>
-            </div>
-          </div>
-          <input type="text" id="redstone-apikey" readonly style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-primary);color:var(--text-primary);font-family:monospace;font-size:13px;box-sizing:border-box">
-        </div>
-
         <!-- 服务器节点 -->
         <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">

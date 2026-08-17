@@ -32,6 +32,22 @@ use crate::auth;
 use crate::storage;
 use crate::utils;
 
+// ============== 皮肤操作日志 ==============
+// 追加写入 DATA_DIR/skin.log，记录上传/切换皮肤的关键操作，便于排查
+fn write_skin_log(msg: &str) {
+    let dir = storage::resolve_data_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let ts = utils::now_iso();
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("skin.log"))
+    {
+        let _ = std::io::Write::write_all(&mut f, format!("[{}] {}\n", ts, msg).as_bytes());
+    }
+    println!("[skin] {}", msg);
+}
+
 // ============== 内置皮肤资源 ==============
 // 编译时嵌入到二进制，运行时永远可用（不依赖前端 dist 构建）
 // 文件来源：src-tauri/resources/*.png（复制自原项目 img/ 目录）
@@ -218,6 +234,10 @@ fn handle_set_account_skin(body: &Option<Value>) -> ApiResult {
 
     storage::save_accounts(&accounts);
 
+    write_skin_log(&format!(
+        "切换皮肤成功 accountId={} skinId={} file={} model={}",
+        account_id, skin_id, file, model
+    ));
     ApiResult::ok(json!({ "success": true }))
 }
 
@@ -278,6 +298,13 @@ async fn handle_upload_skin(body: &Option<Value>) -> ApiResult {
 
     storage::save_accounts(&accounts);
 
+    write_skin_log(&format!(
+        "上传皮肤成功 accountId={} model={} file={} size={}",
+        account_id,
+        final_model,
+        file_name,
+        skin_buf.len()
+    ));
     ApiResult::ok(json!({
         "success": true,
         "fileName": file_name
@@ -689,13 +716,27 @@ async fn handle_ms_skins_apply(body: &Option<Value>) -> ApiResult {
             }
             storage::save_accounts(&accounts);
 
+            write_skin_log(&format!(
+                "应用微软皮肤成功 accountId={} skinId={}",
+                account_id, skin_id
+            ));
             ApiResult::ok(json!({
                 "success": true,
                 "skinUrl": new_skin_url
             }))
         }
-        UploadResult::Unauthorized => ApiResult::err(401, "登录已过期，请重新登录微软账户"),
+        UploadResult::Unauthorized => {
+            write_skin_log(&format!(
+                "应用微软皮肤失败 accountId={} skinId={} 原因=登录已过期",
+                account_id, skin_id
+            ));
+            ApiResult::err(401, "登录已过期，请重新登录微软账户")
+        }
         UploadResult::RateLimited(retry_after) => {
+            write_skin_log(&format!(
+                "应用微软皮肤限流 accountId={} skinId={} retryAfter={:?}",
+                account_id, skin_id, retry_after
+            ));
             let wait_seconds = retry_after.unwrap_or(60);
             let wait_minutes = (wait_seconds + 59) / 60;
             let msg = if wait_minutes > 1 {
@@ -720,6 +761,10 @@ async fn handle_ms_skins_apply(body: &Option<Value>) -> ApiResult {
             }
         }
         UploadResult::Failed(status, msg) => {
+            write_skin_log(&format!(
+                "应用微软皮肤失败 accountId={} skinId={} status={} msg={}",
+                account_id, skin_id, status, msg
+            ));
             ApiResult::err(status, &format!("上传失败: {}", msg))
         }
     }
