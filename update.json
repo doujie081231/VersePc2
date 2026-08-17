@@ -1,13 +1,13 @@
 {
-  "version": "0.6.0",
-  "releaseName": "v0.6.0",
+  "version": "0.6.1",
+  "releaseName": "v0.6.1",
   "releaseDate": "2026-08-17",
-  "releaseNotes": "VersePC2 v0.6.0\n\n新增:\n- 新增 EnderLink 联机功能\n- 红石联机节点自动切换重试，连接更稳定\n- 红石联机无内核时自动下载内核\n\n修复:\n- 修复红石联机服务器列表接口地址错误的问题\n- 修复整合包（mrpack）导入下载完模组后卡住的问题\n- 修复部分 NeoForge 版本无法启动的问题",
+  "releaseNotes": "VersePC2 v0.6.1\n\n优化:\n- 更新检查不再依赖服务器，改为从 GitHub + 镜像获取\n- 安装包下载源优先使用 Gitee，GitHub + 镜像自动兜底，国内下载更快更稳",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.6.0/VersePC2-0.6.0.exe",
-      "size": 71859712,
-      "sha256": "204620AAB20AA09C2DF3F89CD7F3DEF79609BFF295CDCA278FEDE652A7C9F396"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.6.1/VersePC2-0.6.1.exe",
+      "size": 71862272,
+      "sha256": "3C568E7388BBC7F788B0478C4BAB0EF4C1EF8063D991D9CE00C688960DA37017"
     }
   }
 }
