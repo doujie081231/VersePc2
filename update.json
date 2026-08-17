@@ -5,7 +5,7 @@
   "releaseNotes": "VersePC2 v0.6.0\n\n新增:\n- 新增 EnderLink 联机功能\n- 红石联机节点自动切换重试，连接更稳定\n- 红石联机无内核时自动下载内核\n\n修复:\n- 修复红石联机服务器列表接口地址错误的问题\n- 修复整合包（mrpack）导入下载完模组后卡住的问题\n- 修复部分 NeoForge 版本无法启动的问题",
   "files": {
     "win-x64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v0.6.0/VersePC2-0.6.0.exe",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.6.0/VersePC2-0.6.0.exe",
       "size": 71859712,
       "sha256": "204620AAB20AA09C2DF3F89CD7F3DEF79609BFF295CDCA278FEDE652A7C9F396"
     }
