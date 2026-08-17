@@ -375,11 +375,20 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         // ===== 默认模组路径 =====
         "GET /api/filesystem/default-mod-path" => {
-            let data_dir = storage::resolve_data_dir();
-            let minecraft_dir = dirs::home_dir()
-                .map(|h| h.join(".minecraft"))
-                .unwrap_or_else(|| data_dir.clone());
-            let mods_dir = minecraft_dir.join("mods");
+            let settings = storage::load_settings();
+            let version_id = params
+                .as_ref()
+                .and_then(|p| p.get("versionId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let resolved = crate::api::mods::resolve_mods_dir(&settings, &version_id, "");
+            let mods_dir = resolved.unwrap_or_else(|| {
+                let minecraft_dir = dirs::home_dir()
+                    .map(|h| h.join(".minecraft"))
+                    .unwrap_or_else(|| storage::resolve_data_dir());
+                minecraft_dir.join("mods")
+            });
             let _ = std::fs::create_dir_all(&mods_dir);
             Some(ApiResult::ok(json!({
                 "success": true,

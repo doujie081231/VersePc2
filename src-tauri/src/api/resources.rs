@@ -17,6 +17,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
+use sha1::Digest;
 use tauri::{AppHandle, Listener};
 use tokio::sync::Mutex;
 
@@ -184,8 +185,79 @@ pub async fn handle(
         "POST /api/resources/download" => Some(handle_download(app, body).await),
         "GET /api/resources/download-status" => Some(handle_download_status(params)),
         "POST /api/resources/download-cancel" => Some(handle_download_cancel(body)),
+        "GET /api/resource-image" => Some(handle_resource_image(params).await),
         _ => None,
     }
+}
+
+/// 从图片 URL 中推断扩展名与 MIME（默认 png）
+fn image_ext_and_mime(url: &str) -> (&'static str, &'static str) {
+    let lower = url.to_lowercase();
+    let without_query = lower.split(['?', '#']).next().unwrap_or("").to_string();
+    let ext = without_query
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('/');
+    match ext {
+        "webp" => ("webp", "image/webp"),
+        "jpg" | "jpeg" => ("jpg", "image/jpeg"),
+        "gif" => ("gif", "image/gif"),
+        "avif" => ("avif", "image/avif"),
+        "svg" => ("svg", "image/svg+xml"),
+        "ico" => ("ico", "image/x-icon"),
+        "bmp" => ("bmp", "image/bmp"),
+        _ => ("png", "image/png"),
+    }
+}
+
+/// GET /api/resource-image — 下载并缓存图片，返回本地 base64 data URL
+async fn handle_resource_image(params: &Option<Value>) -> ApiResult {
+    let url = params
+        .as_ref()
+        .and_then(|p| p.get("url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if url.is_empty() {
+        return ApiResult::err(400, "Missing url");
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return ApiResult::err(400, "Invalid url");
+    }
+
+    let mut hasher = sha1::Sha1::new();
+    hasher.update(url.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    let (ext, mime) = image_ext_and_mime(url);
+
+    let cache_dir = storage::resolve_data_dir().join("image-cache");
+    let cache_path = cache_dir.join(format!("{}.{}", hash, ext));
+
+    if cache_path.exists() {
+        if let Ok(data) = std::fs::read(&cache_path) {
+            return ApiResult::ok(json!({ "dataUrl": crate::utils::bytes_to_data_url(&data, mime) }));
+        }
+    }
+
+    let client = shared_client();
+    let resp = match client.get(url).send().await {
+        Ok(r) if r.status().is_success() => r,
+        Ok(r) => return ApiResult::err(502, &format!("HTTP {}", r.status())),
+        Err(e) => return ApiResult::err(502, &format!("请求失败: {}", e)),
+    };
+    let bytes = match resp.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => return ApiResult::err(502, &format!("读取失败: {}", e)),
+    };
+    if bytes.is_empty() {
+        return ApiResult::err(502, "空响应");
+    }
+
+    if std::fs::create_dir_all(&cache_dir).is_ok() {
+        let _ = std::fs::write(&cache_path, &bytes);
+    }
+
+    ApiResult::ok(json!({ "dataUrl": crate::utils::bytes_to_data_url(&bytes, mime) }))
 }
 
 /// GET /api/resources/search — Modrinth + CurseForge 双源聚合搜索
@@ -535,12 +607,26 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
         .and_then(|g| g.as_array())
         .map(|arr| {
             arr.iter()
-                .map(|g| {
-                    if let Some(s) = g.as_str() {
-                        s.to_string()
-                    } else {
-                        g.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string()
+                .filter_map(|g| {
+                    let obj = match g.as_object() {
+                        Some(o) => o,
+                        None => return None,
+                    };
+                    let url = obj
+                        .get("url")
+                        .and_then(|u| u.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if url.is_empty() {
+                        return None;
                     }
+                    Some(json!({
+                        "url": url,
+                        "rawUrl": obj.get("raw_url").and_then(|u| u.as_str()).unwrap_or(""),
+                        "title": obj.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+                        "description": obj.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+                        "created": obj.get("created").and_then(|v| v.as_str()).unwrap_or(""),
+                    }))
                 })
                 .collect::<Vec<_>>()
         })

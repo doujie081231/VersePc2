@@ -1071,7 +1071,7 @@ fn extract_native_jar(jar_path: &Path, natives_dir: &Path) {
 
 /// 解析版本游戏目录
 /// 复刻原项目 args-builder.js 中的 gameDir 决策
-fn resolve_game_dir(
+pub(crate) fn resolve_game_dir(
     version_id: &str,
     custom_game_dir: Option<&str>,
     external_version_dir: Option<&Path>,
@@ -1099,7 +1099,7 @@ fn resolve_game_dir(
 
 /// 简化版版本隔离判定
 /// 复刻原项目 server/versions/version-dir.js:resolveVersionIsolation
-fn resolve_version_isolation(version_id: &str) -> bool {
+pub(crate) fn resolve_version_isolation(version_id: &str) -> bool {
     if version_id.is_empty() || version_id.contains(" [外部") {
         return !version_id.is_empty();
     }
@@ -1414,41 +1414,27 @@ fn collect_jvm_args_from_json(
     }
 
     let mut prev_was_cp = false;
-    for arg in &sources {
+    let mut i = 0;
+    while i < sources.len() {
+        let arg = &sources[i];
         if let Some(s) = arg.as_str() {
             let replaced = replace_variables(s, variables);
-            // 跳过 -cp 和 classpath 字符串
             if replaced == "-cp" {
                 prev_was_cp = true;
+                i += 1;
                 continue;
             }
             if prev_was_cp {
                 prev_was_cp = false;
+                i += 1;
                 continue;
             }
             prev_was_cp = false;
-
-            let is_multi_value_flag = matches!(
-                replaced.as_str(),
-                "--add-opens" | "--add-exports" | "--add-reads" | "--add-modules" | "--patch-module" | "-javaagent"
-            );
-            if is_multi_value_flag {
-                jvm_args.push(replaced);
-                // 下一个字符串参数也加入
-                // 注意：sources 是 owned Vec，需要在外部处理，这里简化为不预读下个
-            } else {
-                if is_gc_arg(&replaced) && has_garbage_collector_arg(jvm_args) {
-                    continue;
-                }
-                if replaced.starts_with("-Xmx") || replaced.starts_with("-Xms") {
-                    let prefix = &replaced[..4];
-                    if !jvm_args.iter().any(|e| e.starts_with(prefix)) {
-                        jvm_args.push(replaced);
-                    }
-                } else if !jvm_args.iter().any(|existing| existing == &replaced) {
-                    jvm_args.push(replaced);
-                }
+            if is_multi_value_flag_str(&replaced) {
+                i = push_multi_value_flag(jvm_args, &sources, i, variables);
+                continue;
             }
+            push_ordinary_jvm_arg(jvm_args, &replaced);
         } else if let Some(value) = arg.get("value") {
             let rules_match = arg
                 .get("rules")
@@ -1456,48 +1442,100 @@ fn collect_jvm_args_from_json(
                 .map(|rules| dep_check::evaluate_rules(rules, has_custom_resolution))
                 .unwrap_or(true);
             if !rules_match {
+                i += 1;
                 continue;
             }
-            // value 可能是 string 或 array
             if let Some(s) = value.as_str() {
                 let replaced = replace_variables(s, variables);
-                let is_multi = matches!(
-                    replaced.as_str(),
-                    "--add-opens" | "--add-exports" | "--add-reads" | "--add-modules" | "--patch-module" | "-javaagent"
-                );
-                if is_multi {
-                    jvm_args.push(replaced);
-                } else {
-                    if is_gc_arg(&replaced) && has_garbage_collector_arg(jvm_args) {
-                        continue;
-                    }
-                    if !jvm_args.iter().any(|existing| existing == &replaced) {
-                        jvm_args.push(replaced);
-                    }
+                if is_multi_value_flag_str(&replaced) {
+                    i = push_multi_value_flag(jvm_args, &sources, i, variables);
+                    continue;
                 }
+                push_ordinary_jvm_arg(jvm_args, &replaced);
             } else if let Some(arr) = value.as_array() {
-                for v in arr {
-                    if let Some(s) = v.as_str() {
+                let mut j = 0;
+                while j < arr.len() {
+                    if let Some(s) = arr[j].as_str() {
                         let replaced = replace_variables(s, variables);
-                        let is_multi = matches!(
-                            replaced.as_str(),
-                            "--add-opens" | "--add-exports" | "--add-reads" | "--add-modules" | "--patch-module" | "-javaagent"
-                        );
-                        if is_multi {
-                            jvm_args.push(replaced);
-                        } else {
-                            if is_gc_arg(&replaced) && has_garbage_collector_arg(jvm_args) {
-                                continue;
-                            }
-                            if !jvm_args.iter().any(|existing| existing == &replaced) {
-                                jvm_args.push(replaced);
-                            }
+                        if is_multi_value_flag_str(&replaced) {
+                            j = push_multi_value_flag(jvm_args, arr, j, variables);
+                            continue;
                         }
+                        push_ordinary_jvm_arg(jvm_args, &replaced);
                     }
+                    j += 1;
                 }
             }
         }
+        i += 1;
     }
+}
+
+fn is_multi_value_flag_str(s: &str) -> bool {
+    matches!(
+        s,
+        "--add-opens" | "--add-exports" | "--add-reads" | "--add-modules" | "--patch-module" | "-javaagent"
+    )
+}
+
+fn push_ordinary_jvm_arg(jvm_args: &mut Vec<String>, replaced: &str) {
+    if is_gc_arg(replaced) && has_garbage_collector_arg(jvm_args) {
+        return;
+    }
+    if replaced.starts_with("-Xmx") || replaced.starts_with("-Xms") {
+        let prefix = &replaced[..4];
+        if !jvm_args.iter().any(|e| e.starts_with(prefix)) {
+            jvm_args.push(replaced.to_string());
+        }
+    } else if !jvm_args.iter().any(|existing| existing == replaced) {
+        jvm_args.push(replaced.to_string());
+    }
+}
+
+fn push_multi_value_flag(
+    jvm_args: &mut Vec<String>,
+    source: &[Value],
+    idx: usize,
+    variables: &HashMap<String, String>,
+) -> usize {
+    let mut flags: Vec<String> = Vec::new();
+    let mut k = idx;
+    let mut value: Option<String> = None;
+    while k < source.len() {
+        if let Some(s) = source[k].as_str() {
+            let replaced = replace_variables(s, variables);
+            if is_multi_value_flag_str(&replaced) {
+                flags.push(replaced);
+                k += 1;
+                continue;
+            }
+            if replaced == "-cp" {
+                break;
+            }
+            value = Some(replaced);
+            k += 1;
+            break;
+        }
+        break;
+    }
+    if let Some(val) = value {
+        for f in &flags {
+            let exists = jvm_args.iter().enumerate().any(|(p, a)| {
+                a == f && p + 1 < jvm_args.len() && jvm_args[p + 1] == val
+            });
+            if !exists {
+                jvm_args.push(f.clone());
+                jvm_args.push(val.clone());
+            }
+        }
+    } else {
+        for f in flags {
+            if !jvm_args.iter().any(|a| a == &f) {
+                jvm_args.push(f);
+            }
+        }
+    }
+    k
 }
 
 /// 判断是否为 GC 参数

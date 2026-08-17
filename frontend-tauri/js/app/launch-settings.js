@@ -208,11 +208,7 @@ async function browseDataDir() {
     const result = await window.electronAPI.showOpenDialog(opts);
     if (!result || !result.filePaths || result.filePaths.length === 0) return;
     const selectedPath = result.filePaths[0];
-    const res = await fetch('/api/settings/data-dir', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataDir: selectedPath })
-    });
-    const data = await res.json();
+    const data = await API.setDataDir(selectedPath);
     if (data.ok) {
       document.getElementById('setting-data-dir').value = selectedPath;
       if (data.message) {
@@ -228,11 +224,7 @@ async function browseDataDir() {
 
 async function resetDataDir() {
   try {
-    const res = await fetch('/api/settings/data-dir', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true })
-    });
-    const data = await res.json();
+    const data = await API.resetDataDir();
     if (data.ok) {
       document.getElementById('setting-data-dir').value = '';
       if (data.message) {

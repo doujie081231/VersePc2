@@ -49,6 +49,233 @@ function preloadModVersions(projectId, source) {
   }).catch(() => { _versionPreloadInFlight.delete(projectId); });
 }
 
+const _mdImageCache = new Map();
+
+async function getLocalImageDataUrl(url) {
+  if (!url) return '';
+  if (_mdImageCache.has(url)) {
+    const cached = _mdImageCache.get(url);
+    if (typeof cached === 'string') return cached;
+    return cached;
+  }
+  const p = API.getResourceImage(url)
+    .then(r => (r && r.dataUrl) || '')
+    .catch(() => '')
+    .then(d => { if (d) _mdImageCache.set(url, d); return d; });
+  _mdImageCache.set(url, p);
+  return p;
+}
+
+async function setLocalImage(el, url, source) {
+  if (!el || !url) return;
+  const useProxy = (source || currentModDetailSource || 'modrinth') === 'modrinth' && /^https?:\/\//.test(url);
+  if (useProxy) {
+    const dataUrl = await getLocalImageDataUrl(url);
+    if (dataUrl) { el.src = dataUrl; return; }
+  }
+  el.src = url;
+}
+
+function proxifyBodyHtml(html) {
+  const source = currentModDetailSource || 'modrinth';
+  if (source !== 'modrinth') return html;
+  const PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  return html.replace(/<img([^>]*?)src="([^"]+cdn\.modrinth\.com[^"]+)"([^>]*)>/gi, (m, pre, url, post) => {
+    return `<img${pre}src="${PLACEHOLDER}" data-src="${url}"${post}>`;
+  });
+}
+
+function hydrateBodyImages(container) {
+  if (!container) return;
+  const source = currentModDetailSource || 'modrinth';
+  container.querySelectorAll('img[data-src]').forEach(img => {
+    setLocalImage(img, img.getAttribute('data-src'), source);
+  });
+}
+
+function switchMdTab(tab) {
+  document.querySelectorAll('#page-mod-detail .md-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  ['description', 'versions', 'gallery'].forEach(name => {
+    const el = document.getElementById('md-tab-' + name);
+    if (el) el.classList.toggle('active', name === tab);
+  });
+}
+
+async function renderModDescription(detail) {
+  const container = document.getElementById('md-body-content');
+  if (!container) return;
+  const pid = currentModDetailId;
+  const source = currentModDetailSource || 'modrinth';
+  const body = detail && detail.body ? detail.body : '';
+  if (!body) {
+    container.innerHTML = '<p class="empty-text" style="padding:30px 0;text-align:center;color:var(--text-muted)">暂无描述</p>';
+    return;
+  }
+  let html = body;
+  if (source === 'curseforge') {
+    html = body;
+  } else {
+    if (typeof marked === 'undefined' && typeof _lazyLoadScript === 'function') {
+      try { await _lazyLoadScript('js/marked.min.js'); } catch (e) {}
+    }
+    if (pid !== currentModDetailId) return;
+    if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+      try { html = marked.parse(body); } catch (e) { html = body.replace(/\n/g, '<br>'); }
+    } else {
+      html = body.replace(/\n/g, '<br>');
+    }
+  }
+  container.innerHTML = proxifyBodyHtml(html);
+  hydrateBodyImages(container);
+}
+
+function renderModGallery(detail) {
+  const container = document.getElementById('md-gallery');
+  const galleryTab = document.getElementById('md-gallery-tab');
+  const raw = (detail && detail.gallery) || [];
+  const gallery = Array.isArray(raw) ? raw : [];
+  if (galleryTab) galleryTab.style.display = gallery.length > 0 ? '' : 'none';
+  if (!container) return;
+  window._mdGallery = gallery;
+  if (gallery.length === 0) {
+    container.innerHTML = '<p class="empty-text" style="padding:30px 0;text-align:center;color:var(--text-muted)">暂无截图</p>';
+    return;
+  }
+  const source = currentModDetailSource || 'modrinth';
+  const PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  container.innerHTML = gallery.map((item, idx) => {
+    const url = (item && (item.url || item.rawUrl)) || item || '';
+    const title = (item && item.title) || '';
+    return `<div class="md-gallery-item" onclick="openGalleryLightbox(${idx})">
+      <img class="md-gallery-image" src="${PLACEHOLDER}" data-src="${escapeHtml(url)}" alt="${escapeHtml(title)}" loading="lazy">
+      ${title ? `<div class="md-gallery-item-title">${escapeHtml(title)}</div>` : ''}
+    </div>`;
+  }).join('');
+  container.querySelectorAll('img[data-src]').forEach(img => {
+    setLocalImage(img, img.getAttribute('data-src'), source);
+  });
+}
+
+function openGalleryLightbox(idx) {
+  const gallery = window._mdGallery || [];
+  if (gallery.length === 0) return;
+  window._mdGalleryIndex = Math.max(0, Math.min(idx, gallery.length - 1));
+  const box = document.getElementById('md-gallery-lightbox');
+  const img = document.getElementById('md-gallery-lightbox-img');
+  const cap = document.getElementById('md-gallery-lightbox-caption');
+  if (!box || !img) return;
+  const item = gallery[window._mdGalleryIndex];
+  const url = (item && (item.rawUrl || item.url)) || item || '';
+  img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  setLocalImage(img, url);
+  if (cap) cap.textContent = (item && item.title) ? item.title : '';
+  box.style.display = 'flex';
+}
+
+function closeGalleryLightbox() {
+  const box = document.getElementById('md-gallery-lightbox');
+  if (box) box.style.display = 'none';
+}
+
+document.addEventListener('keydown', (e) => {
+  const box = document.getElementById('md-gallery-lightbox');
+  if (!box || box.style.display === 'none') return;
+  if (e.key === 'Escape') { e.preventDefault(); closeGalleryLightbox(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); prevGalleryImage(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); nextGalleryImage(); }
+});
+
+function prevGalleryImage() {
+  const gallery = window._mdGallery || [];
+  if (gallery.length === 0 || window._mdGalleryIndex === undefined) return;
+  const nextIdx = (window._mdGalleryIndex - 1 + gallery.length) % gallery.length;
+  openGalleryLightbox(nextIdx);
+}
+
+function nextGalleryImage() {
+  const gallery = window._mdGallery || [];
+  if (gallery.length === 0 || window._mdGalleryIndex === undefined) return;
+  const nextIdx = (window._mdGalleryIndex + 1) % gallery.length;
+  openGalleryLightbox(nextIdx);
+}
+
+function renderMdSidebar(detail) {
+  const nameMap = { mod: '模组', modpack: '整合包', resourcepack: '材质包', shader: '光影包', datapack: '数据包' };
+  const loadersEl = document.getElementById('md-sidebar-loaders');
+  const versionsEl = document.getElementById('md-sidebar-versions');
+  const catsEl = document.getElementById('md-sidebar-categories');
+  const linksEl = document.getElementById('md-sidebar-links');
+  const detailsEl = document.getElementById('md-sidebar-details');
+  const licEl = document.getElementById('md-sidebar-license');
+  if (!detail) return;
+  const tagHtml = (arr) => (arr && arr.length)
+    ? arr.map(v => `<span class="md-sidebar-tag">${escapeHtml(v)}</span>`).join('')
+    : '<span class="md-sidebar-empty">—</span>';
+  if (loadersEl) loadersEl.innerHTML = tagHtml(detail.loaders);
+  const gvs = detail.gameVersions || [];
+  const shown = gvs.slice(0, 16);
+  if (versionsEl) versionsEl.innerHTML = tagHtml(shown) + (gvs.length > shown.length ? `<span class="md-sidebar-tag md-sidebar-more">+${gvs.length - shown.length}</span>` : '');
+  if (catsEl) catsEl.innerHTML = tagHtml(detail.categories);
+  if (linksEl) {
+    const links = [];
+    if (detail.sourceUrl) links.push(['源码', detail.sourceUrl]);
+    if (detail.issuesUrl) links.push(['问题', detail.issuesUrl]);
+    if (detail.wikiUrl) links.push(['Wiki', detail.wikiUrl]);
+    if (detail.discordUrl) links.push(['Discord', detail.discordUrl]);
+    linksEl.innerHTML = links.length
+      ? links.map(([label, url]) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer" class="md-sidebar-link">${escapeHtml(label)}</a>`).join('')
+      : '<span class="md-sidebar-empty">—</span>';
+  }
+  if (detailsEl) {
+    const rows = [
+      ['类型', nameMap[currentModDetailType] || currentModDetailType || '模组'],
+      ['下载量', formatNumber(detail.downloads || 0)],
+      ['关注数', formatNumber(detail.followers || 0)],
+    ];
+    if (detail.dateCreated) rows.push(['创建', formatDate(detail.dateCreated)]);
+    if (detail.dateModified) rows.push(['更新', formatDate(detail.dateModified)]);
+    if (detail.clientSide) rows.push(['客户端', detail.clientSide]);
+    if (detail.serverSide) rows.push(['服务端', detail.serverSide]);
+    detailsEl.innerHTML = rows.map(([k, v]) => `<div class="md-sidebar-detail-row"><span class="md-sidebar-detail-key">${escapeHtml(k)}</span><span class="md-sidebar-detail-value">${escapeHtml(v)}</span></div>`).join('');
+  }
+  if (licEl) licEl.innerHTML = `<div class="md-sidebar-detail-row"><span class="md-sidebar-detail-key">许可证</span><span class="md-sidebar-detail-value">${escapeHtml(detail.license || '未知')}</span></div>`;
+}
+
+function installCurrentDetailVersion() {
+  if (!mdAllVersions || mdAllVersions.length === 0) {
+    showToast('暂无可用版本', 'warning');
+    return;
+  }
+  const v = mdAllVersions[0];
+  const projectId = currentModDetailId;
+  const source = currentModDetailSource || 'modrinth';
+  const type = currentModDetailType || 'mod';
+  const primaryFile = (v.files && v.files[0]) || {};
+  if (type === 'modpack') {
+    installModpackVersion(projectId, v.id);
+  } else if (type === 'mod') {
+    installModFile(projectId, source, v.id, primaryFile.id || '');
+  } else {
+    quickInstallResourceVersion(projectId, type, v.id);
+  }
+}
+
+function resetMdDetailView() {
+  switchMdTab('description');
+  const descEl = document.getElementById('md-body-content');
+  if (descEl) descEl.innerHTML = '';
+  const galEl = document.getElementById('md-gallery');
+  if (galEl) galEl.innerHTML = '';
+  const galleryTab = document.getElementById('md-gallery-tab');
+  if (galleryTab) galleryTab.style.display = 'none';
+  ['md-sidebar-loaders','md-sidebar-versions','md-sidebar-categories','md-sidebar-links','md-sidebar-details','md-sidebar-license'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+}
+
 async function getInstalledVersionInfo() {
   try {
     const settings = await API.getSettings().catch(() => ({}));
@@ -88,7 +315,8 @@ function _renderModDetailHeader(detail, source, projectId) {
   if (mdName) mdName.textContent = modTitle;
   if (mdDesc) mdDesc.textContent = (detail.description || '').substring(0, 200);
   if (detail.icon && mdIconImg && mdIconFallback) {
-    mdIconImg.src = detail.icon; mdIconImg.style.display = ''; mdIconFallback.style.display = 'none';
+    mdIconImg.style.display = ''; mdIconFallback.style.display = 'none';
+    setLocalImage(mdIconImg, detail.icon, source);
   } else if (mdIconImg && mdIconFallback) {
     mdIconImg.style.display = 'none'; mdIconFallback.textContent = modTitle.charAt(0).toUpperCase(); mdIconFallback.style.display = '';
   }
@@ -118,6 +346,7 @@ async function openModDetail(projectId, source) {
   currentModDetailType = 'mod';
 
   navigateToPage('mod-detail');
+  resetMdDetailView();
 
   const backBtn = document.querySelector('#page-mod-detail .moddetail-page-header .btn-icon');
   if (backBtn) backBtn.setAttribute('onclick', 'goBackFromDetail()');
@@ -131,10 +360,14 @@ async function openModDetail(projectId, source) {
   mdVersionList.innerHTML = '';
   if (mdVersionTabs) mdVersionTabs.innerHTML = '';
 
-  const cached = _projectDataCache.get(projectId);
+  const cachedRaw = _projectDataCache.get(projectId);
+  const cached = (cachedRaw && typeof cachedRaw.body === 'string') ? cachedRaw : null;
   const hasPreloaded = _versionPreloadCache.has(projectId);
   if (cached) {
     _renderModDetailHeader(cached, source, projectId);
+    renderModDescription(cached);
+    renderModGallery(cached);
+    renderMdSidebar(cached);
   } else {
     const mdName = document.getElementById('md-name');
     if (mdName) mdName.textContent = '加载中...';
@@ -168,6 +401,9 @@ async function openModDetail(projectId, source) {
     if (!cached) {
       _projectDataCache.set(projectId, detail);
       _renderModDetailHeader(detail, source, projectId);
+      renderModDescription(detail);
+      renderModGallery(detail);
+      renderMdSidebar(detail);
     }
 
     mdAllVersions = versionsData ? (versionsData.versions || []) : [];

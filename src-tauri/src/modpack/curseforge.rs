@@ -1844,7 +1844,6 @@ async fn download_one_mod(
     // 4. 镜像 URL 列表
     let urls = get_mirror_urls(&url);
     let mut last_err = String::new();
-    let mut downloaded = false;
 
     // 3 轮重试
     for round in 0..MAX_DOWNLOAD_ROUNDS {
@@ -1857,109 +1856,100 @@ async fn download_one_mod(
             tokio::time::sleep(Duration::from_millis(3000 + round as u64 * 2000)).await;
         }
 
-        // 尝试所有镜像 URL
-        for try_url in &urls {
-            if abort_flag.load(Ordering::SeqCst) {
-                break;
-            }
+        // 走 XMCL 等价的多镜像下载：一次性传入完整镜像列表（对应原项目 downloadFileRace）
+        let sha1_opt = if expected_sha1.is_empty() {
+            None
+        } else {
+            Some(expected_sha1.as_str())
+        };
+        let size_opt = if file_size > 0 {
+            Some(file_size as u64)
+        } else {
+            None
+        };
 
-            let sha1_opt = if expected_sha1.is_empty() {
-                None
-            } else {
-                Some(expected_sha1.as_str())
-            };
-            let size_opt = if file_size > 0 {
-                Some(file_size as u64)
-            } else {
-                None
-            };
-
-            match crate::download::single::download_with_mirror(
-                try_url,
-                &dest,
-                sha1_opt,
-                size_opt,
-                "china-first", // CurseForge URL 需保留 mod.mcimirror.top 等镜像回退
-                180,
-                None,
-            )
-            .await
-            {
-                Ok(_) => {
-                    // 2.14 下载后 SHA1 校验
-                    if cf_shared::is_jar_intact(&dest) {
-                        let sha1_ok = if !expected_sha1.is_empty() {
-                            match crate::download::single::compute_sha1(&dest).await {
-                                Ok(actual) => {
-                                    if actual.to_lowercase() == expected_sha1.to_lowercase() {
-                                        true
-                                    } else {
-                                        eprintln!(
-                                            "[CurseForge] 下载后 SHA1 不匹配，重试: {} (期望={}, 实际={})",
-                                            final_name,
-                                            &expected_sha1[..8.min(expected_sha1.len())],
-                                            &actual[..8.min(actual.len())]
-                                        );
-                                        let _ = std::fs::remove_file(&dest);
-                                        false
-                                    }
-                                }
-                                Err(e) => {
+        match crate::download::single::download_file_race(
+            &urls,
+            &dest,
+            sha1_opt,
+            size_opt,
+            180,
+            None,
+        )
+        .await
+        {
+            Ok(_) => {
+                // 2.14 下载后 SHA1 校验
+                if cf_shared::is_jar_intact(&dest) {
+                    let sha1_ok = if !expected_sha1.is_empty() {
+                        match crate::download::single::compute_sha1(&dest).await {
+                            Ok(actual) => {
+                                if actual.to_lowercase() == expected_sha1.to_lowercase() {
+                                    true
+                                } else {
                                     eprintln!(
-                                        "[CurseForge] SHA1 计算失败: {} - {}",
-                                        final_name, e
+                                        "[CurseForge] 下载后 SHA1 不匹配，重试: {} (期望={}, 实际={})",
+                                        final_name,
+                                        &expected_sha1[..8.min(expected_sha1.len())],
+                                        &actual[..8.min(actual.len())]
                                     );
-                                    true // SHA1 计算失败不阻塞下载
+                                    let _ = std::fs::remove_file(&dest);
+                                    false
                                 }
                             }
-                        } else {
-                            true
-                        };
-
-                        if sha1_ok {
-                            let mod_id = cf_shared::read_jar_mod_id(&dest);
-                            let file_info = file_info_map.get(&file_id).map(|fi| FileInfo {
-                                file_name: final_name.clone(),
-                                download_url: fi.download_url.clone().unwrap_or_default(),
-                                file_length: fi.file_length.unwrap_or(0),
-                                sha1: fi
-                                    .hashes
-                                    .as_ref()
-                                    .and_then(|h| h.iter().find(|x| x.algo == 1))
-                                    .map(|h| h.value.clone())
-                                    .unwrap_or_default(),
-                            });
-                            downloaded_count.fetch_add(1, Ordering::SeqCst);
-                            downloaded = true;
-                            return DownloadResult {
-                                success: true,
-                                project_id,
-                                file_id,
-                                file_name: final_name,
-                                download_url: Some(try_url.clone()),
-                                file_length: file_size,
-                                sha1: expected_sha1,
-                                mod_id,
-                                file_info,
-                                error: String::new(),
-                            };
+                            Err(e) => {
+                                eprintln!(
+                                    "[CurseForge] SHA1 计算失败: {} - {}",
+                                    final_name, e
+                                );
+                                true // SHA1 计算失败不阻塞下载
+                            }
                         }
                     } else {
-                        let _ = std::fs::remove_file(&dest);
+                        true
+                    };
+
+                    if sha1_ok {
+                        let mod_id = cf_shared::read_jar_mod_id(&dest);
+                        let file_info = file_info_map.get(&file_id).map(|fi| FileInfo {
+                            file_name: final_name.clone(),
+                            download_url: fi.download_url.clone().unwrap_or_default(),
+                            file_length: fi.file_length.unwrap_or(0),
+                            sha1: fi
+                                .hashes
+                                .as_ref()
+                                .and_then(|h| h.iter().find(|x| x.algo == 1))
+                                .map(|h| h.value.clone())
+                                .unwrap_or_default(),
+                        });
+                        downloaded_count.fetch_add(1, Ordering::SeqCst);
+                        return DownloadResult {
+                            success: true,
+                            project_id,
+                            file_id,
+                            file_name: final_name,
+                            download_url: Some(url.clone()),
+                            file_length: file_size,
+                            sha1: expected_sha1,
+                            mod_id,
+                            file_info,
+                            error: String::new(),
+                        };
                     }
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[CurseForge] {} 下载失败 (round {}/3): {} - {}",
-                        final_name,
-                        round + 1,
-                        try_url,
-                        &e[..100.min(e.len())]
-                    );
-                    last_err = e;
+                } else {
                     let _ = std::fs::remove_file(&dest);
-                    let _ = std::fs::remove_file(dest.with_extension("downloading"));
                 }
+            }
+            Err(e) => {
+                eprintln!(
+                    "[CurseForge] {} 下载失败 (round {}/3): {}",
+                    final_name,
+                    round + 1,
+                    &e[..100.min(e.len())]
+                );
+                last_err = e;
+                let _ = std::fs::remove_file(&dest);
+                let _ = std::fs::remove_file(dest.with_extension("downloading"));
             }
         }
     }

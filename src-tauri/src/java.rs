@@ -201,7 +201,9 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         scan_java_subdirs_depth(&curse_docs, 3, &mut paths, &mut found, add);
     }
 
-    // 6. 启动器自带的 Java（.versepc/java）
+    // 6. 启动器下载/自带的 Java（数据目录 java，兼容旧路径 ~/.versepc/java）
+    let dl_java = storage::resolve_data_dir().join("java");
+    scan_java_subdirs_depth(&dl_java, 3, &mut paths, &mut found, add);
     if let Some(ref home) = userprofile {
         let vrt = PathBuf::from(home).join(".versepc").join("java");
         scan_java_subdirs_depth(&vrt, 3, &mut paths, &mut found, add);
@@ -582,7 +584,7 @@ pub fn inspect_java(java_exe: &Path) -> Option<(String, u32, bool)> {
         let stdout = String::from_utf8_lossy(&out.stdout);
         let combined = format!("{}\n{}", stderr, stdout);
 
-        // 检查是否包含致命错误（参照 PCL 对此类错误的检测）
+        // 检查是否包含致命错误
         if combined.contains("/lib/ext exists") {
             return None;
         }
@@ -743,7 +745,6 @@ fn has_reparse_point(java_exe: &Path) -> bool {
 }
 
 /// 检查路径是否为特殊路径（Java 8 自动更新链接 / system32 等）
-/// 对应 PCL 对此类路径的筛除
 fn is_special_path(java_exe: &Path) -> bool {
     let lower = java_exe.to_string_lossy().to_lowercase();
     lower.contains("java8path_target_")
@@ -1393,15 +1394,20 @@ fn find_java_home(extract_dir: &Path) -> PathBuf {
 }
 
 /// 安装 Mojang 官方 Java 运行时组件
-/// 成功返回 Ok(())，失败返回 Err（用于回退到 Adoptium 下载）
 async fn install_mojang_runtime(
     session_id: &str,
     major_version: u64,
     component: &str,
 ) -> Result<(), String> {
-    // 1. 拉取 Mojang Java 运行时清单（动态平台 key，对齐 electron 的 getPlatformKey）
-    let runtime_url = "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
-    let runtime_list = shared::fetch_json(runtime_url).await?;
+    let all_json_urls = [
+        "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json",
+        "https://bmclapi2.bangbang93.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json",
+    ];
+    let all_json_text = shared::fetch_text_racing(&all_json_urls, 30)
+        .await
+        .ok_or_else(|| "获取 Java 运行时列表失败".to_string())?;
+    let runtime_list: Value = serde_json::from_str(&all_json_text)
+        .map_err(|e| format!("Java 运行时列表解析失败: {}", e))?;
     let arch_aarch64 = std::env::consts::ARCH == "aarch64";
     let platform_key = if cfg!(target_os = "windows") {
         if arch_aarch64 { "windows-arm64" } else { "windows-x64" }
@@ -1412,25 +1418,32 @@ async fn install_mojang_runtime(
     };
     let platform_runtimes = runtime_list
         .get(platform_key)
-        .and_then(|v| v.as_array())
+        .and_then(|v| v.as_object())
         .ok_or_else(|| format!("平台 {} 无 Java 运行时", platform_key))?;
 
-    let component_info = platform_runtimes
-        .iter()
-        .find(|r| shared::jstr(r, "name") == component)
+    let component_entries = platform_runtimes
+        .get(component)
+        .and_then(|v| v.as_array())
         .ok_or_else(|| format!("组件 {} 不存在", component))?;
+
+    let component_info = component_entries
+        .first()
+        .ok_or_else(|| format!("组件 {} 无可用运行时", component))?;
 
     let manifest_url = component_info
         .get("manifest")
         .and_then(|m| m.get("url"))
         .and_then(|v| v.as_str())
         .ok_or_else(|| "manifest URL 缺失".to_string())?;
-    // 镜像替换 manifest URL
-    let manifest_url = crate::download::mirror::to_mirror_url(manifest_url)
-        .unwrap_or_else(|| manifest_url.to_string());
-
-    // 2. 拉取 manifest
-    let manifest = shared::fetch_json(&manifest_url).await?;
+    let manifest_official = manifest_url.to_string();
+    let manifest_mirror = crate::download::mirror::to_mirror_url(&manifest_official)
+        .filter(|m| m != &manifest_official)
+        .unwrap_or_else(|| manifest_official.clone());
+    let manifest_text = shared::fetch_text_racing(&[&manifest_official, &manifest_mirror], 30)
+        .await
+        .ok_or_else(|| "获取 Java 运行时 manifest 失败".to_string())?;
+    let manifest: Value = serde_json::from_str(&manifest_text)
+        .map_err(|e| format!("Java 运行时 manifest 解析失败: {}", e))?;
     let files = manifest
         .get("files")
         .and_then(|v| v.as_object())
@@ -1439,6 +1452,9 @@ async fn install_mojang_runtime(
     // 3. 下载所有文件到 targetDir
     let data_dir = storage::resolve_data_dir();
     let target_dir = data_dir.join("java").join(component);
+    if target_dir.exists() {
+        let _ = std::fs::remove_dir_all(&target_dir);
+    }
     std::fs::create_dir_all(&target_dir).map_err(|e| format!("创建目录失败: {}", e))?;
 
     // 预计算总大小
@@ -1449,49 +1465,70 @@ async fn install_mojang_runtime(
         }
     }
 
-    let mut downloaded_bytes: u64 = 0;
     let total_files = files.len() as u64;
     let mut done_files: u64 = 0;
 
+    let skip_hashes = [
+        "12976a6c2b227cbac58969c1455444596c894656",
+        "c80e4bab46e34d02826eab226a4441d0970f2aba",
+        "84d2102ad171863db04e7ee22a259d1f6c5de4a5",
+    ];
+
     for (file_path, info) in files {
         let dest = target_dir.join(file_path);
-        let url = info
-            .pointer("/downloads/raw/url")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        match url {
-            Some(u) => {
-                let size = info
-                    .pointer("/downloads/raw/size")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                let expected_size = if size > 0 { Some(size) } else { None };
-                let url = crate::download::mirror::to_mirror_url(&u).unwrap_or(u);
-                crate::download::download_with_mirror(
-                    &url,
-                    &dest,
-                    None,
-                    expected_size,
-                    "china-first",
-                    120,
-                    None,
-                )
-                .await?;
-                downloaded_bytes += size;
-            }
+        let raw = match info.pointer("/downloads/raw") {
+            Some(r) => r,
             None => {
-                // 无 raw 下载项（目录占位），写空文件
-                if let Some(parent) = dest.parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                let is_dir = file_path.ends_with('/')
+                    || info.get("type").and_then(|v| v.as_str()).unwrap_or("") == "directory";
+                if is_dir {
+                    let _ = std::fs::create_dir_all(&dest);
+                } else {
+                    if let Some(parent) = dest.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::write(&dest, "");
                 }
-                let _ = std::fs::write(&dest, "");
+                done_files += 1;
+                continue;
             }
+        };
+        let file_url = raw.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let file_sha1 = raw.get("sha1").and_then(|v| v.as_str()).unwrap_or("");
+        let file_size = raw.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+
+        if skip_hashes.contains(&file_sha1) {
+            done_files += 1;
+            continue;
+        }
+
+        if let Some(parent) = dest.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let expected_size = if file_size > 0 { Some(file_size) } else { None };
+
+        let url_official = file_url.to_string();
+        let url_mirror = crate::download::mirror::to_mirror_url(&url_official)
+            .filter(|m| m != &url_official)
+            .unwrap_or_else(|| url_official.clone());
+        let mut last_err = String::new();
+        let mut downloaded = false;
+        for url in &[url_official, url_mirror] {
+            match crate::download::download_single(
+                url, &dest, if file_sha1.is_empty() { None } else { Some(file_sha1) },
+                expected_size, 120,
+            ).await {
+                Ok(()) => { downloaded = true; break; }
+                Err(e) => { last_err = e; }
+            }
+        }
+        if !downloaded {
+            return Err(if last_err.is_empty() { format!("下载失败: {}", file_url) } else { last_err });
         }
 
         done_files += 1;
         let pct = if total_bytes > 0 {
-            (10.0 + (downloaded_bytes as f64 / total_bytes as f64 * 80.0)).min(90.0) as u32
+            (10.0 + (done_files as f64 / total_files as f64 * 80.0)).min(90.0) as u32
         } else {
             50
         };
@@ -1545,7 +1582,7 @@ async fn install_java_async(session_id: String, major_version: u64) {
         return;
     }
 
-    // 优先使用 Mojang 官方 Java 运行时源（失败时回退到下方 Adoptium 逻辑）
+    // 使用 Mojang 官方 Java 运行时源
     let mojang_component_map = [
         ("8", "jre-legacy"),
         ("17", "java-runtime-beta"),
@@ -1583,178 +1620,21 @@ async fn install_java_async(session_id: String, major_version: u64) {
                 });
                 write_java_status(&session_id, &completed);
                 invalidate_cache();
+                let mut settings = storage::load_settings();
+                if let Some(obj) = settings.as_object_mut() {
+                    obj.insert("javaPath".to_string(), json!(java_path.to_string_lossy().to_string()));
+                }
+                storage::overwrite_settings(&settings);
                 clear_cancelled_session(&session_id);
                 return;
             }
             Err(e) => {
-                eprintln!("[java] Mojang官方源下载失败，回退到Adoptium: {}", e);
+                fail!(status, format!("Java {} 下载失败: {}", major_version, e));
             }
         }
     }
 
-    // 步骤 2: 调用 Adoptium API 获取下载链接（动态平台/架构，对齐 electron 逻辑）
-    // 架构映射：x86_64→x64、aarch64→aarch64、其余→x64
-    let arch = if std::env::consts::ARCH == "x86_64" {
-        "x64"
-    } else if std::env::consts::ARCH == "aarch64" {
-        "aarch64"
-    } else {
-        "x64"
-    };
-    // 平台映射：Windows→windows、macOS→mac、Linux→linux
-    let os_name = if cfg!(target_os = "windows") {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "mac"
-    } else {
-        "linux"
-    };
-    let api_url = format!(
-        "https://api.adoptium.net/v3/assets/latest/{}/hotspot?architecture={}&image_type=jdk&os={}&vendor=eclipse",
-        major_version, arch, os_name
-    );
-
-    let api_result = match shared::fetch_json(&api_url).await {
-        Ok(v) => v,
-        Err(e) => fail!(status, format!("获取下载链接失败: {}", e)),
-    };
-
-    let arr = match api_result.as_array() {
-        Some(a) if !a.is_empty() => a,
-        _ => fail!(status, "Adoptium API 返回空数组".to_string()),
-    };
-
-    let first = &arr[0];
-    let binary = first.get("binary").cloned().unwrap_or(Value::Null);
-    let package = binary.get("package").cloned().unwrap_or(Value::Null);
-
-    let download_url = package
-        .get("link")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let file_name_raw = package
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let total_size = package.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
-
-    if download_url.is_empty() || file_name_raw.is_empty() {
-        fail!(status, "下载链接或文件名为空".to_string());
-    }
-
-    // 确保 JAVA_DIR 存在
-    if let Err(e) = std::fs::create_dir_all(&java_dir) {
-        fail!(status, format!("创建 Java 目录失败: {}", e));
-    }
-
-    // 准备路径
-    let zip_file_name = if file_name_raw.ends_with(".zip") {
-        file_name_raw.clone()
-    } else {
-        format!("{}.zip", file_name_raw)
-    };
-    let zip_path = java_dir.join(&zip_file_name);
-    let dir_name = zip_file_name.trim_end_matches(".zip").to_string();
-    let extract_dir = java_dir.join(&dir_name);
-
-    // 步骤 3: downloading
-    status = json!({
-        "sessionId": session_id,
-        "status": "downloading",
-        "progress": 10,
-        "message": format!("正在下载 {}...", zip_file_name),
-        "majorVersion": major_version,
-        "downloadUrl": download_url,
-        "fileName": zip_file_name,
-        "totalSize": total_size,
-        "startedAt": started_at,
-    });
-    write_java_status(&session_id, &status);
-
-    // 执行下载（china-first：中科大 USTC 镜像优先，Adoptium 官方 GitHub 兜底）
-    let expected_size = if total_size > 0 { Some(total_size) } else { None };
-    if let Err(e) = download::download_with_mirror(
-        &download_url,
-        &zip_path,
-        None,
-        expected_size,
-        "china-first",
-        600,
-        None,
-    )
-    .await
-    {
-        fail!(status, format!("下载失败: {}", e));
-    }
-
-    // 检查取消
-    if is_java_download_cancelled(&session_id) {
-        let _ = std::fs::remove_file(&zip_path);
-        clear_cancelled_session(&session_id);
-        return;
-    }
-
-    // 步骤 4: extracting
-    status = json!({
-        "sessionId": session_id,
-        "status": "extracting",
-        "progress": 80,
-        "message": format!("正在解压 {}...", zip_file_name),
-        "majorVersion": major_version,
-        "downloadUrl": download_url,
-        "fileName": zip_file_name,
-        "totalSize": total_size,
-        "startedAt": started_at,
-    });
-    write_java_status(&session_id, &status);
-
-    // 同步解压放到 spawn_blocking，避免阻塞 tokio worker
-    let zip_path_clone = zip_path.clone();
-    let extract_dir_clone = extract_dir.clone();
-    let extract_result =
-        tokio::task::spawn_blocking(move || extract_zip(&zip_path_clone, &extract_dir_clone))
-            .await;
-    match extract_result {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => {
-            let _ = std::fs::remove_file(&zip_path);
-            fail!(status, format!("解压失败: {}", e));
-        }
-        Err(e) => {
-            let _ = std::fs::remove_file(&zip_path);
-            fail!(status, format!("解压任务异常: {}", e));
-        }
-    }
-
-    // 步骤 5: 删除 ZIP 文件
-    let _ = std::fs::remove_file(&zip_path);
-
-    // 查找 javaHome
-    let java_home = find_java_home(&extract_dir);
-    let java_path = java_home.join("bin").join("java.exe");
-
-    // 步骤 6: completed
-    let completed = json!({
-        "sessionId": session_id,
-        "status": "completed",
-        "progress": 100,
-        "message": format!("Java {} 安装完成", major_version),
-        "majorVersion": major_version,
-        "downloadUrl": download_url,
-        "fileName": zip_file_name,
-        "totalSize": total_size,
-        "javaHome": java_home.to_string_lossy(),
-        "javaPath": java_path.to_string_lossy(),
-        "startedAt": started_at,
-        "completedAt": utils::now_iso(),
-    });
-    write_java_status(&session_id, &completed);
-
-    // 刷新 Java 检测缓存
-    invalidate_cache();
-    clear_cancelled_session(&session_id);
+    fail!(status, format!("Java {} 不支持自动下载", major_version));
 }
 
 // ============== Tauri 命令 ==============

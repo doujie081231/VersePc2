@@ -523,6 +523,7 @@ async function openResourceDetail(projectId, type, source) {
   currentModDetailType = type;
 
   navigateToPage('mod-detail');
+  resetMdDetailView();
 
   const depsSection = document.getElementById('md-deps-section');
   if (depsSection) depsSection.style.display = 'none';
@@ -555,18 +556,22 @@ async function openResourceDetail(projectId, type, source) {
   const typeNames = { mod: '模组', modpack: '整合包', resourcepack: '材质包', shader: '光影包', datapack: '数据包' };
   const typeIcons = { mod: '🧩', modpack: '📦', resourcepack: '🎨', shader: '✨', datapack: '📊' };
 
-  const cached = _projectDataCache.get(projectId);
+  const cachedRaw = _projectDataCache.get(projectId);
+  const cached = (cachedRaw && typeof cachedRaw.body === 'string') ? cachedRaw : null;
   if (cached) {
     currentModDetailData = cached;
     mdName.textContent = formatModNameWithChinese(cached.slug || cached.id, cached.title || typeNames[type] || '未知');
     if (mdDesc) mdDesc.textContent = (cached.description || '').substring(0, 200);
-    if (cached.icon && mdIconImg && mdIconFallback) { mdIconImg.src = cached.icon; mdIconImg.style.display = ''; mdIconFallback.style.display = 'none'; }
+    if (cached.icon && mdIconImg && mdIconFallback) { mdIconImg.style.display = ''; mdIconFallback.style.display = 'none'; setLocalImage(mdIconImg, cached.icon, source); }
     const mdDownloads = document.getElementById('md-downloads');
     const mdFollowers = document.getElementById('md-followers');
     if (mdDownloads) mdDownloads.textContent = `⬇ ${formatNumber(cached.downloads || 0)}`;
     if (mdFollowers) mdFollowers.textContent = `❤ ${formatNumber(cached.followers || 0)}`;
     const srcBadge = document.getElementById('md-source-badge');
     if (srcBadge) { srcBadge.textContent = typeNames[type] || type; srcBadge.style.color = '#f59e0b'; srcBadge.style.background = 'rgba(245,158,11,0.12)'; }
+    renderModDescription(cached);
+    renderModGallery(cached);
+    renderMdSidebar(cached);
   } else {
     mdName.textContent = '加载中...';
   }
@@ -603,13 +608,16 @@ async function openResourceDetail(projectId, type, source) {
       currentModDetailData = detail;
       mdName.textContent = formatModNameWithChinese(detail.slug || detail.id, detail.title || typeNames[type] || '未知');
       if (mdDesc) mdDesc.textContent = (detail.description || '').substring(0, 200);
-      if (detail.icon && mdIconImg && mdIconFallback) { mdIconImg.src = detail.icon; mdIconImg.style.display = ''; mdIconFallback.style.display = 'none'; }
+      if (detail.icon && mdIconImg && mdIconFallback) { mdIconImg.style.display = ''; mdIconFallback.style.display = 'none'; setLocalImage(mdIconImg, detail.icon, source); }
       const mdDownloads = document.getElementById('md-downloads');
       const mdFollowers = document.getElementById('md-followers');
       if (mdDownloads) mdDownloads.textContent = `⬇ ${formatNumber(detail.downloads || 0)}`;
       if (mdFollowers) mdFollowers.textContent = `❤ ${formatNumber(detail.followers || 0)}`;
       const srcBadge = document.getElementById('md-source-badge');
       if (srcBadge) { srcBadge.textContent = typeNames[type] || type; srcBadge.style.color = '#f59e0b'; srcBadge.style.background = 'rgba(245,158,11,0.12)'; }
+      renderModDescription(detail);
+      renderModGallery(detail);
+      renderMdSidebar(detail);
     }
 
     mdAllVersions = data ? (data.versions || []) : [];

@@ -147,7 +147,7 @@ pub async fn api_proxy(
     }
 
     // 资源搜索/下载路由（async，Modrinth/CurseForge HTTP 拉取 + 后台下载会话）
-    if path.starts_with("/api/resources") {
+    if path.starts_with("/api/resources") || path == "/api/resource-image" {
         if let Some(r) = resources::handle(&app, &method, &path, &params, &body).await {
             return r;
         }

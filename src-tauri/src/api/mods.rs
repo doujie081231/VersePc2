@@ -554,12 +554,26 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
                             .and_then(|g| g.as_array())
                             .map(|arr| {
                                 arr.iter()
-                                    .map(|g| {
-                                        if let Some(s) = g.as_str() {
-                                            s.to_string()
-                                        } else {
-                                            g.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string()
+                                    .filter_map(|g| {
+                                        let obj = match g.as_object() {
+                                            Some(o) => o,
+                                            None => return None,
+                                        };
+                                        let url = obj
+                                            .get("url")
+                                            .and_then(|u| u.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        if url.is_empty() {
+                                            return None;
                                         }
+                                        Some(json!({
+                                            "url": url,
+                                            "rawUrl": obj.get("raw_url").and_then(|u| u.as_str()).unwrap_or(""),
+                                            "title": obj.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+                                            "description": obj.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+                                            "created": obj.get("created").and_then(|v| v.as_str()).unwrap_or(""),
+                                        }))
                                     })
                                     .collect::<Vec<_>>()
                             })
@@ -1546,7 +1560,7 @@ async fn handle_select_save_folder(_body: &Option<Value>) -> ApiResult {
 
 /// 解析 mods 目录
 /// 复刻原项目 versions.getVersionModsDir 逻辑
-fn resolve_mods_dir(settings: &Value, version_id: &str, _mc_version: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_mods_dir(settings: &Value, version_id: &str, _mc_version: &str) -> Option<PathBuf> {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
 
@@ -1585,27 +1599,29 @@ fn resolve_mods_dir(settings: &Value, version_id: &str, _mc_version: &str) -> Op
                     if name.starts_with('.') || name == "version-settings.json" {
                         continue;
                     }
-                    return Some(versions_dir.join(name).join("mods"));
+                    let game_dir = crate::launch::args_builder::resolve_game_dir(
+                        &name,
+                        None,
+                        None,
+                        settings,
+                        &versions_dir,
+                        &data_dir,
+                    );
+                    return Some(game_dir.join("mods"));
                 }
             }
         }
         return None;
     }
 
-    let version_isolation = settings
-        .get("versionIsolation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    if version_isolation {
-        Some(versions_dir.join(&vid).join("mods"))
-    } else {
-        let game_dir = settings
-            .get("gameDir")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data_dir.clone());
-        Some(game_dir.join("mods"))
-    }
+    // 与游戏启动时完全一致的游戏目录判定（含各版本独立的隔离设置）
+    let game_dir = crate::launch::args_builder::resolve_game_dir(
+        &vid,
+        None,
+        None,
+        settings,
+        &versions_dir,
+        &data_dir,
+    );
+    Some(game_dir.join("mods"))
 }

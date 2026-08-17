@@ -432,44 +432,6 @@ function redstoneCycleServer() {
     addRedstoneLog('切换到服务器: ' + _redstoneServers[_redstoneServerIdx].name);
 }
 
-/** 加载本地 API Key 到输入框 */
-async function redstoneLoadApikey() {
-    const input = document.getElementById('redstone-apikey');
-    if (!input) return;
-    try {
-        const r = await window.electronAPI.redstoneOnline.getApikey();
-        if (r && r.ok && r.apikey) input.value = r.apikey;
-    } catch (e) {
-        console.warn('[Redstone] loadApikey failed:', e.message);
-    }
-}
-
-/** 复制 API Key */
-function redstoneCopyApikey() {
-    const input = document.getElementById('redstone-apikey');
-    if (!input || !input.value) return;
-    navigator.clipboard.writeText(input.value).then(() => {
-        const btn = event.target;
-        if (btn) { const old = btn.textContent; btn.textContent = '已复制!'; setTimeout(() => { btn.textContent = old; }, 1500); }
-    }).catch(() => {});
-}
-
-/** 重置 API Key */
-async function redstoneResetApikey() {
-    if (!confirm('重置 API Key 后旧密钥将失效，确定继续吗？')) return;
-    try {
-        const r = await window.electronAPI.redstoneOnline.resetApikey();
-        if (r && r.ok && r.apikey) {
-            document.getElementById('redstone-apikey').value = r.apikey;
-            addRedstoneLog('API Key 已重置');
-        } else {
-            alert('重置失败: ' + (r && r.error ? r.error : '未知错误'));
-        }
-    } catch (e) {
-        alert('重置失败: ' + e.message);
-    }
-}
-
 /** 开/关隧道 */
 async function redstoneToggle() {
     if (_redstoneRunning) await redstoneStop();
@@ -704,7 +666,6 @@ async function redstoneInitPage() {
 
     redstoneSwitchTab('connect');
     redstoneRefreshServers();
-    redstoneLoadApikey();
     // 主动读取当前版本显示在页面上（不阻塞，后台执行）
     redstoneRefreshCurrentVersion();
     // 监听主进程日志
@@ -764,6 +725,290 @@ async function redstoneInitPage() {
                 updateRedstoneStatus('连接已断开', 'disconnected');
                 addRedstoneLog('隧道连接已彻底断开（自动重连已达最大次数）');
                 showToast('红石联机隧道已断开，请重新开启', 'error');
+            });
+        } catch (_) {}
+    }
+}
+
+// ===== EnderLink 联机：标签页 / 节点 / 大厅 / 隧道开闭 =====
+
+let _enderlinkNodes = [];
+let _enderlinkRunning = false;
+let _enderlinkOpening = false;
+let _enderlinkNodeIdx = 0;
+
+/** 更新 EnderLink 状态指示 */
+function updateEnderlinkStatus(text, state) {
+    const dot = document.getElementById('enderlink-status-dot');
+    const textEl = document.getElementById('enderlink-status-text');
+    if (textEl) textEl.textContent = text;
+    if (dot) {
+        dot.className = 'lan-status-dot';
+        if (state === 'connected') dot.classList.add('connected');
+        else if (state === 'connecting') dot.classList.add('connecting');
+        else dot.classList.add('disconnected');
+    }
+}
+
+/** EnderLink 标签页切换 */
+function enderlinkSwitchTab(tab) {
+    document.querySelectorAll('.enderlink-tabs .lan-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.enderlinkTab === tab);
+    });
+    document.querySelectorAll('.enderlink-tab-content').forEach(el => {
+        el.style.display = el.id === 'enderlink-tab-' + tab ? 'block' : 'none';
+    });
+}
+
+/** 追加 EnderLink 日志 */
+function addEnderlinkLog(msg) {
+    const logEl = document.getElementById('enderlink-room-log');
+    if (!logEl) return;
+    const time = new Date().toLocaleTimeString();
+    logEl.textContent += '[' + time + '] ' + msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+/** 刷新 frp 节点列表 */
+async function enderlinkRefreshNodes() {
+    const info = document.getElementById('enderlink-node-info');
+    const list = document.getElementById('enderlink-node-list');
+    const btn = document.getElementById('enderlink-node-btn');
+    if (btn) btn.textContent = '节点: 加载中...';
+    if (info) info.textContent = '正在加载节点列表...';
+    try {
+        const r = await window.electronAPI.enderlinkOnline.getNodes();
+        if (r && r.ok && r.nodes && r.nodes.length > 0) {
+            _enderlinkNodes = r.nodes;
+            if (info) info.textContent = '共 ' + r.nodes.length + ' 个节点';
+            if (list) {
+                list.innerHTML = _enderlinkNodes.map((n, i) =>
+                    '<div style="padding:6px 0;border-bottom:1px dashed var(--border)"><b>' +
+                    (n.name || ('节点' + (i + 1))) + '</b> &nbsp;' +
+                    '<span style="color:var(--text-muted)">' + n.frpIp + ':' + n.frpPort + '</span>' +
+                    '<div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">ID: ' + n.id + '</div></div>'
+                ).join('');
+            }
+        } else {
+            if (info) info.textContent = '节点列表为空';
+            if (list) list.innerHTML = '暂无可用节点';
+            _enderlinkNodes = [];
+        }
+    } catch (e) {
+        if (info) info.textContent = '加载失败: ' + e.message;
+        if (list) list.innerHTML = '加载失败: ' + e.message;
+    }
+    enderlinkUpdateNodeBtn();
+}
+
+/** 刷新联机大厅房间列表 */
+async function enderlinkRefreshRooms() {
+    const list = document.getElementById('enderlink-hall-list');
+    if (!list) return;
+    list.textContent = '加载中...';
+    try {
+        const r = await window.electronAPI.enderlinkOnline.getRooms();
+        if (r && r.ok && r.rooms && r.rooms.length > 0) {
+            list.innerHTML = '';
+            r.rooms.forEach((room, i) => {
+                const addr = (room.server_addr || '') + ':' + (room.remote_port || '');
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)';
+                row.innerHTML =
+                    '<div style="min-width:0"><div style="font-size:14px;color:var(--text-primary);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+                    (room.room_name || ('房间' + (i + 1))) + '</div>' +
+                    '<div style="font-size:12px;color:var(--text-muted);font-family:monospace">' + addr + '</div></div>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="enderlinkCopyHall(\'' + addr + '\')">复制地址</button>';
+                list.appendChild(row);
+            });
+        } else {
+            list.textContent = '暂无公开房间';
+        }
+    } catch (e) {
+        list.textContent = '加载失败: ' + e.message;
+    }
+}
+
+/** 复制大厅房间地址 */
+function enderlinkCopyHall(addr) {
+    navigator.clipboard.writeText(addr).then(() => {
+        addEnderlinkLog('复制大厅地址: ' + addr);
+        showToast('地址已复制', 'success');
+    }).catch(() => {});
+}
+
+/** 更新节点按钮文本 */
+function enderlinkUpdateNodeBtn() {
+    const btn = document.getElementById('enderlink-node-btn');
+    if (!btn) return;
+    if (!_enderlinkNodes.length) {
+        btn.textContent = '节点: 无可用节点';
+        return;
+    }
+    const n = _enderlinkNodes[_enderlinkNodeIdx % _enderlinkNodes.length];
+    btn.textContent = '节点: ' + (n.name || ('节点' + (_enderlinkNodeIdx + 1))) + ' (' + n.frpIp + ':' + n.frpPort + ')';
+}
+
+/** 循环选择节点 */
+function enderlinkCycleNode() {
+    if (!_enderlinkNodes.length) return;
+    _enderlinkNodeIdx = (_enderlinkNodeIdx + 1) % _enderlinkNodes.length;
+    enderlinkUpdateNodeBtn();
+    addEnderlinkLog('切换到节点: ' + (_enderlinkNodes[_enderlinkNodeIdx].name || ('节点' + _enderlinkNodeIdx)));
+}
+
+/** 开/关联机 */
+async function enderlinkToggle() {
+    if (_enderlinkRunning) await enderlinkStop();
+    else await enderlinkStart();
+}
+
+/** 开启联机 */
+async function enderlinkStart() {
+    const btn = document.getElementById('enderlink-action-btn');
+    if (_enderlinkOpening) return;
+    if (!_enderlinkNodes.length) { alert('请先等待节点列表加载'); return; }
+    const node = _enderlinkNodes[_enderlinkNodeIdx % _enderlinkNodes.length];
+    if (!node) { alert('请选择节点'); return; }
+
+    let gamePort = 25565;
+    try {
+        const gameStatus = await API.getGameStatus();
+        if (gameStatus && gameStatus.running && gameStatus.lanPort) {
+            gamePort = gameStatus.lanPort;
+            addEnderlinkLog('检测到局域网端口: ' + gamePort);
+        } else {
+            addEnderlinkLog('正在扫描局域网端口...');
+            const scanResult = await window.electronAPI.redstoneOnline.scanPort();
+            if (scanResult && scanResult.ok && scanResult.port) {
+                gamePort = scanResult.port;
+                addEnderlinkLog('端口扫描成功: ' + gamePort);
+            } else {
+                addEnderlinkLog('未检测到端口，将使用默认 25565');
+            }
+        }
+    } catch (e) {
+        addEnderlinkLog('检查游戏状态失败: ' + e.message);
+    }
+
+    const roomNameEl = document.getElementById('enderlink-room-name');
+    const publicEl = document.getElementById('enderlink-public');
+    const roomName = roomNameEl ? roomNameEl.value.trim() : '';
+    const isPublic = publicEl ? publicEl.classList.contains('active') : true;
+    let versionDesc = '';
+    try {
+        const ctxRes = await fetch('/api/current-context');
+        if (ctxRes.ok) {
+            const ctx = await ctxRes.json();
+            if (ctx && ctx.selectedVersion) versionDesc = ctx.selectedVersion;
+        }
+    } catch (e) {}
+
+    _enderlinkOpening = true;
+    if (btn) { btn.disabled = true; btn.textContent = '正在开启...'; }
+    updateEnderlinkStatus('正在连接...', 'connecting');
+    addEnderlinkLog('选择节点: ' + (node.name || node.id) + ' (' + node.frpIp + ':' + node.frpPort + ')');
+    addEnderlinkLog('本机端口: ' + gamePort + (isPublic ? '，公开大厅' : '，仅端口映射'));
+    if (roomName) addEnderlinkLog('房间名: ' + roomName);
+
+    try {
+        const r = await window.electronAPI.enderlinkOnline.start({
+            node: node,
+            localPort: gamePort,
+            roomName: roomName,
+            gameVersion: versionDesc || '1.12.2',
+            isPublic: isPublic
+        });
+        if (r && r.ok) {
+            _enderlinkRunning = true;
+            document.getElementById('enderlink-connected-info').style.display = '';
+            document.getElementById('enderlink-room-addr').textContent = r.address;
+            updateEnderlinkStatus('联机已开启 | ' + r.address, 'connected');
+            if (btn) { btn.textContent = '关闭联机'; btn.disabled = false; }
+            try {
+                await navigator.clipboard.writeText(r.address);
+                addEnderlinkLog('联机地址已复制到剪贴板: ' + r.address);
+            } catch (_) {}
+        } else {
+            updateEnderlinkStatus('开启失败', 'disconnected');
+            if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
+            addEnderlinkLog('开启失败: ' + (r && r.error ? r.error : '未知错误'));
+            showToast('开启失败: ' + (r && r.error ? r.error : '未知错误'), 'error');
+        }
+    } catch (e) {
+        updateEnderlinkStatus('开启失败', 'disconnected');
+        if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
+        addEnderlinkLog('开启失败: ' + e.message);
+        showToast('开启失败: ' + e.message, 'error');
+    }
+    _enderlinkOpening = false;
+}
+
+/** 关闭联机 */
+async function enderlinkStop() {
+    const btn = document.getElementById('enderlink-action-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '正在关闭...'; }
+    try { await window.electronAPI.enderlinkOnline.stop(); }
+    catch (e) { addEnderlinkLog('关闭失败: ' + e.message); }
+    _enderlinkRunning = false;
+    document.getElementById('enderlink-connected-info').style.display = 'none';
+    if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
+    updateEnderlinkStatus('未连接', 'disconnected');
+    addEnderlinkLog('联机已关闭');
+}
+
+/** 复制联机地址 */
+function enderlinkCopyAddr() {
+    const addr = document.getElementById('enderlink-room-addr');
+    if (!addr) return;
+    const t = addr.textContent;
+    if (!t || t === '--') return;
+    navigator.clipboard.writeText(t).then(() => addEnderlinkLog('地址已复制: ' + t)).catch(() => {});
+}
+
+/** EnderLink 页面初始化（由导航跳转触发） */
+async function enderlinkInitPage() {
+    try {
+        const status = await window.electronAPI.enderlinkOnline.getStatus();
+        _enderlinkRunning = !!status.running;
+        const btn = document.getElementById('enderlink-action-btn');
+        if (status.running) {
+            if (btn) { btn.textContent = '关闭联机'; btn.disabled = false; }
+            const info = document.getElementById('enderlink-connected-info');
+            if (info) info.style.display = '';
+            if (status.address) {
+                document.getElementById('enderlink-room-addr').textContent = status.address;
+                updateEnderlinkStatus('联机已开启 | ' + status.address, 'connected');
+            } else {
+                updateEnderlinkStatus('联机已开启', 'connected');
+            }
+        } else {
+            if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
+            const info = document.getElementById('enderlink-connected-info');
+            if (info) info.style.display = 'none';
+            updateEnderlinkStatus('未连接', 'disconnected');
+        }
+    } catch (e) { _enderlinkRunning = false; }
+
+    enderlinkSwitchTab('connect');
+    enderlinkRefreshNodes();
+    enderlinkRefreshRooms();
+    if (!window._enderlinkLogListener) {
+        window._enderlinkLogListener = true;
+        try { window.electronAPI.enderlinkOnline.onLog((msg) => addEnderlinkLog(msg)); } catch (_) {}
+    }
+    if (!window._enderlinkDisconnectedListener) {
+        window._enderlinkDisconnectedListener = true;
+        try {
+            window.electronAPI.enderlinkOnline.onDisconnected(() => {
+                if (!_enderlinkRunning) return;
+                _enderlinkRunning = false;
+                const btn = document.getElementById('enderlink-action-btn');
+                if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
+                document.getElementById('enderlink-connected-info').style.display = 'none';
+                updateEnderlinkStatus('连接已断开', 'disconnected');
+                addEnderlinkLog('联机连接已断开');
+                showToast('EnderLink 联机已断开，请重新开启', 'error');
             });
         } catch (_) {}
     }
