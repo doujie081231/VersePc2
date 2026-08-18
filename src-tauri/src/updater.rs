@@ -24,11 +24,7 @@ use tokio::io::AsyncWriteExt;
 
 // ============== 常量 ==============
 
-// 更新信息源（多源并发，第一个成功即可用）：
-//   1. 服务器 download 目录（国内直连，速度快）
-//   2~5. GitHub VersPc2 仓库 update.json（直连 + 多个镜像加速）
 const UPDATE_JSON_SOURCES: &[&str] = &[
-    "https://www.verselauncher.cn/download/update.json",
     "https://ghfast.top/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
     "https://ghproxy.net/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
     "https://gh-proxy.com/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
@@ -37,7 +33,9 @@ const UPDATE_JSON_SOURCES: &[&str] = &[
 
 const RELEASE_PAGE: &str = "https://github.com/doujie081231/VersePc2/releases/latest";
 
-// 下载镜像（国内加速 GitHub 资源）
+const GITHUB_RELEASE_BASE: &str = "https://github.com/doujie081231/VersePc2";
+const GITEE_RELEASE_BASE: &str = "https://gitee.com/doujie081231/verse-pc2";
+
 fn mirror_urls(url: &str) -> Vec<String> {
     let mut v: Vec<String> = Vec::new();
     if url.starts_with("https://github.com/") {
@@ -46,6 +44,33 @@ fn mirror_urls(url: &str) -> Vec<String> {
         }
     }
     v.push(url.to_string());
+    v
+}
+
+fn build_download_sources(url: &str) -> Vec<String> {
+    let seg: Vec<&str> = url.split('/').collect();
+    let (tag, file) = if seg.len() >= 3 {
+        (seg[seg.len() - 2], seg[seg.len() - 1])
+    } else {
+        ("", "")
+    };
+    let mut v: Vec<String> = Vec::new();
+    if url.starts_with("https://gitee.com/") {
+        v.push(url.to_string());
+    } else if !file.is_empty() {
+        v.push(format!("{}/releases/download/{}/{}", GITEE_RELEASE_BASE, tag, file));
+    }
+    if !file.is_empty() {
+        let gh = format!("{}/releases/download/{}/{}", GITHUB_RELEASE_BASE, tag, file);
+        for m in mirror_urls(&gh) {
+            if !v.contains(&m) {
+                v.push(m);
+            }
+        }
+    }
+    if !v.contains(&url.to_string()) {
+        v.push(url.to_string());
+    }
     v
 }
 
@@ -406,7 +431,7 @@ async fn download_with_fallback(
     let _ = fs::remove_file(target);
     let _ = fs::remove_file(target.with_extension("part"));
 
-    for (i, murl) in mirror_urls(url).iter().enumerate() {
+    for (i, murl) in build_download_sources(url).iter().enumerate() {
         match stream_download(app, murl, target, expected_size).await {
             Ok(()) => {
                 if verify_file(target, expected_size, expected_sha) {

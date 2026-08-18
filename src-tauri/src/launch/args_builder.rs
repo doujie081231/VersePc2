@@ -495,6 +495,11 @@ pub fn build_launch_arguments(
     // "E:\Verse Explorer X\..."）会被拆成多段，这里用权威值整体覆盖并清理残留。
     ensure_flag_arg(&mut game_args, "--gameDir", &game_dir.to_string_lossy());
     ensure_flag_arg(&mut game_args, "--assetsDir", &assets_root.to_string_lossy());
+    ensure_flag_arg(&mut game_args, "--username", &player_name);
+    ensure_flag_arg(&mut game_args, "--uuid", &uuid);
+    ensure_flag_arg(&mut game_args, "--accessToken", &access_token);
+    ensure_flag_arg(&mut game_args, "--userType", &user_type);
+    ensure_flag_arg(&mut game_args, "--version", &actual_version_id);
 
     // 去重游戏参数
     let final_game_args = deduplicate_game_args(&game_args);
