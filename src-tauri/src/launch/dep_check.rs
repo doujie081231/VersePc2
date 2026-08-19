@@ -552,41 +552,24 @@ pub fn check_dependencies(version_id: &str, settings: &Value, external_version_d
 
                                 if !found {
                                     missing_count += 1;
-                                    if missing_count <= 50 {
-                                        let size = info.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
-                                        result.assets.missing.push(MissingFile {
-                                            kind: "asset".to_string(),
-                                            url: format!("https://resources.download.minecraft.net/{}/{}", sub_dir, hash),
-                                            path: asset_path.to_string_lossy().to_string(),
-                                            sha1: hash.clone(),
-                                            size,
-                                            name: name.clone(),
-                                            desc: String::new(),
-                                            message: String::new(),
-                                        });
-                                    }
+                                    let size = info.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                                    result.assets.missing.push(MissingFile {
+                                        kind: "asset".to_string(),
+                                        url: format!("https://resources.download.minecraft.net/{}/{}", sub_dir, hash),
+                                        path: asset_path.to_string_lossy().to_string(),
+                                        sha1: hash.clone(),
+                                        size,
+                                        name: name.clone(),
+                                        desc: String::new(),
+                                        message: String::new(),
+                                    });
                                 }
-                            }
-
-                            if missing_count > 50 {
-                                result.assets.missing.push(MissingFile {
-                                    kind: "asset_batch".to_string(),
-                                    url: String::new(),
-                                    path: String::new(),
-                                    sha1: String::new(),
-                                    size: 0,
-                                    name: String::new(),
-                                    desc: String::new(),
-                                    message: format!("还有 {} 个资源文件缺失", missing_count - 50),
-                                });
                             }
 
                             result.assets.ok = missing_count == 0;
                             if missing_count > 0 {
                                 result.assets.message = format!("{} 个资源文件缺失", missing_count);
-                                result.missing_files.extend(
-                                    result.assets.missing.iter().filter(|m| m.kind != "asset_batch").cloned(),
-                                );
+                                result.missing_files.extend(result.assets.missing.clone());
                             }
                         }
                     } else {
@@ -734,79 +717,58 @@ pub(crate) fn merge_version_json_chain(
 }
 
 /// 合并两个版本 JSON：base 是父版本，child 是当前版本
-/// 规则：简单字段 child 优先；数组字段 libraries / arguments 合并；minecraftArguments child 优先
+/// 对齐 PCL2 (ModMinecraft.vb JsonObject 合并段)：
+/// 深度合并全部字段（对象递归、数组按 Newtonsoft MergeArrayHandling.Concat 拼接、
+/// 其余 scalar 由子版本覆盖），libraries 单独处理为"子版本在前、父版本在后"，
+/// 继承标记在合并链中已消费后移除。
 fn merge_two_version_jsons(base: Value, child: Value) -> Value {
-    let mut result = base.clone();
+    let child_libs = child.get("libraries").cloned();
+    let parent_libs = base.get("libraries").cloned();
 
-    if let (Value::Object(result_map), Value::Object(child_map)) = (&mut result, child) {
-        for (key, child_val) in child_map {
-            match key.as_str() {
-                "libraries" => {
-                    // 父版本在前，当前版本追加，按 name 简单去重
-                    let mut merged = Vec::new();
-                    let mut seen = std::collections::HashSet::new();
-                    if let Some(base_arr) = result_map.get("libraries").and_then(|v| v.as_array()) {
-                        for lib in base_arr {
-                            let name = utils::get_str(lib, "name");
-                            if !name.is_empty() {
-                                seen.insert(name.clone());
-                            }
-                            merged.push(lib.clone());
-                        }
-                    }
-                    if let Some(child_arr) = child_val.as_array() {
-                        for lib in child_arr {
-                            let name = utils::get_str(lib, "name");
-                            if !name.is_empty() && seen.contains(&name) {
-                                continue;
-                            }
-                            if !name.is_empty() {
-                                seen.insert(name.clone());
-                            }
-                            merged.push(lib.clone());
-                        }
-                    }
-                    result_map.insert(key.clone(), Value::Array(merged));
-                }
-                "arguments" => {
-                    // 合并 arguments.jvm / arguments.game
-                    let mut merged_args = serde_json::Map::new();
-                    if let Some(base_args) = result_map.get("arguments").and_then(|v| v.as_object()) {
-                        for (k, v) in base_args {
-                            merged_args.insert(k.clone(), v.clone());
-                        }
-                    }
-                    if let Some(child_args) = child_val.as_object() {
-                        for (k, v) in child_args {
-                            if k == "jvm" || k == "game" {
-                                let mut merged_arr = Vec::new();
-                                if let Some(base_arr) = merged_args.get(k).and_then(|v| v.as_array()) {
-                                    merged_arr.extend(base_arr.iter().cloned());
-                                }
-                                if let Some(child_arr) = v.as_array() {
-                                    merged_arr.extend(child_arr.iter().cloned());
-                                }
-                                merged_args.insert(k.clone(), Value::Array(merged_arr));
-                            } else {
-                                merged_args.insert(k.clone(), v.clone());
-                            }
-                        }
-                    }
-                    result_map.insert(key.clone(), Value::Object(merged_args));
-                }
-                "inheritsFrom" => {
-                    // 合并后移除 inheritsFrom，避免外部重复处理
-                    // 但保留记录可能有用，这里直接跳过不写入 result
-                }
-                _ => {
-                    // 其他字段 child 覆盖 base
-                    result_map.insert(key.clone(), child_val);
-                }
-            }
+    let mut result = deep_merge_json(&base, &child);
+
+    if child_libs.is_some() || parent_libs.is_some() {
+        let mut libs = child_libs.and_then(|v| v.as_array().cloned()).unwrap_or_default();
+        if let Some(pl) = parent_libs.and_then(|v| v.as_array().cloned()) {
+            libs.extend(pl);
+        }
+        if let Value::Object(ref mut m) = result {
+            m.insert("libraries".to_string(), Value::Array(libs));
         }
     }
 
+    if let Value::Object(ref mut m) = result {
+        m.remove("inheritsFrom");
+    }
+
     result
+}
+
+/// 递归深度合并两个 JSON：两值都是对象则按 key 递归合并；
+/// 两值都是数组则拼接（父在前面）；否则子版本值覆盖父版本。
+fn deep_merge_json(parent: &Value, child: &Value) -> Value {
+    match (parent, child) {
+        (Value::Object(p), Value::Object(c)) => {
+            let mut out = p.clone();
+            for (k, cv) in c {
+                match out.get_mut(k) {
+                    Some(pv) if pv.is_object() && cv.is_object() => {
+                        *pv = deep_merge_json(pv, cv);
+                    }
+                    Some(pv) if pv.is_array() && cv.is_array() => {
+                        let mut arr = pv.as_array().cloned().unwrap_or_default();
+                        arr.extend(cv.as_array().cloned().unwrap_or_default());
+                        *pv = Value::Array(arr);
+                    }
+                    _ => {
+                        out.insert(k.clone(), cv.clone());
+                    }
+                }
+            }
+            Value::Object(out)
+        }
+        _ => child.clone(),
+    }
 }
 
 /// 沿多路径搜索主 JAR

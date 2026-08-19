@@ -20,5 +20,5 @@ pub mod list;
 pub mod update;
 
 // re-export 主要接口，外部通过 mods::xxx 调用
-pub use list::{get_installed_mods, resolve_saves_dir};
+pub use list::{get_installed_mods, get_installed_mods_for_version, resolve_saves_dir};
 pub use update::check_mod_updates;

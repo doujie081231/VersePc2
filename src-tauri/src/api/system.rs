@@ -106,7 +106,10 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
                 "totalMB": total_mb,
                 "freeMB": free_mb,
                 "usedMB": used_mb,
-                "usagePercent": usage_percent
+                "usagePercent": usage_percent,
+                "loadPercent": usage_percent,
+                "total": total_bytes,
+                "used": total_bytes.saturating_sub(avail_bytes)
             })))
         }
 
@@ -138,68 +141,136 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
 // ============== 内存优化 ==============
 
+#[cfg(target_os = "windows")]
+fn do_memory_optimize_purge() -> Result<(), String> {
+    use std::ffi::c_void;
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn RtlAdjustPrivilege(
+            privilege: u32,
+            enable: i32,
+            current_thread: i32,
+            enabled: *mut i32,
+        ) -> i32;
+        fn NtSetSystemInformation(
+            system_information_class: i32,
+            system_information: *mut c_void,
+            system_information_length: i32,
+        ) -> i32;
+    }
+
+    const SE_INCREASE_QUOTA_PRIVILEGE: u32 = 5;
+    const SE_PROFILE_SINGLE_PROCESS_PRIVILEGE: u32 = 13;
+    const SYSTEM_MEMORY_LIST_INFORMATION: i32 = 80;
+    const SYSTEM_FILE_CACHE_INFORMATION_EX: i32 = 81;
+    const SYSTEM_COMBINE_PHYSICAL_MEMORY_INFORMATION: i32 = 130;
+    const SYSTEM_REGISTRY_RECONCILIATION_INFORMATION: i32 = 155;
+
+    unsafe {
+        // 启用内存优化所需特权
+        let mut enabled: i32 = 0;
+        for privilege in [SE_INCREASE_QUOTA_PRIVILEGE, SE_PROFILE_SINGLE_PROCESS_PRIVILEGE] {
+            let status = RtlAdjustPrivilege(privilege, 1, 0, &mut enabled);
+            if status != 0 {
+                return Err(format!("启用内存优化权限失败（错误代码：{}）", status));
+            }
+        }
+
+        // 内存列表操作：清空工作集(2)、刷新修改列表(3)、清理待机列表(4)、清理低优先级待机列表(5)
+        for op in [2i32, 3, 4, 5] {
+            let op_bytes: [u8; 4] = op.to_ne_bytes();
+            let status = NtSetSystemInformation(
+                SYSTEM_MEMORY_LIST_INFORMATION,
+                op_bytes.as_ptr() as *mut c_void,
+                4,
+            );
+            if status != 0 {
+                return Err(format!("内存优化操作 {} 失败（错误代码：{}）", op, status));
+            }
+        }
+
+        // 刷新系统文件缓存（最小/最大工作集设为 SIZE_MAX 触发缓存收缩）
+        #[repr(C)]
+        #[derive(Default)]
+        struct SystemFileCacheInformation {
+            current_size: usize,
+            peak_size: usize,
+            page_fault_count: usize,
+            minimum_working_set: usize,
+            maximum_working_set: usize,
+            current_size_including_transition_in_pages: usize,
+            peak_size_including_transition_in_pages: usize,
+            transition_re_purpose_count: usize,
+            flags: usize,
+        }
+        let mut file_cache = SystemFileCacheInformation::default();
+        file_cache.minimum_working_set = usize::MAX;
+        file_cache.maximum_working_set = usize::MAX;
+        let status = NtSetSystemInformation(
+            SYSTEM_FILE_CACHE_INFORMATION_EX,
+            &mut file_cache as *mut SystemFileCacheInformation as *mut c_void,
+            std::mem::size_of::<SystemFileCacheInformation>() as i32,
+        );
+        if status != 0 {
+            return Err(format!("刷新文件缓存失败（错误代码：{}）", status));
+        }
+
+        // 注册表内存对账
+        let status = NtSetSystemInformation(
+            SYSTEM_REGISTRY_RECONCILIATION_INFORMATION,
+            std::ptr::null_mut(),
+            0,
+        );
+        if status != 0 {
+            return Err(format!("注册表内存对账失败（错误代码：{}）", status));
+        }
+
+        // 物理内存合并
+        #[repr(C)]
+        #[derive(Default)]
+        struct MemoryCombineInformationEx {
+            handle: *mut c_void,
+            pages_combined: usize,
+            flags: u32,
+        }
+        let mut combine = MemoryCombineInformationEx::default();
+        let status = NtSetSystemInformation(
+            SYSTEM_COMBINE_PHYSICAL_MEMORY_INFORMATION,
+            &mut combine as *mut MemoryCombineInformationEx as *mut c_void,
+            std::mem::size_of::<MemoryCombineInformationEx>() as i32,
+        );
+        if status != 0 {
+            return Err(format!("合并物理内存失败（错误代码：{}）", status));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn do_memory_optimize_purge() -> Result<(), String> {
+    Err("内存优化仅支持 Windows".to_string())
+}
+
 /// POST /api/memory-optimize — 执行内存优化
-/// 对齐 Electron 端 memory-optimize IPC 的行为：
-/// 遍历所有进程调用 EmptyWorkingSet，将不活跃内存页交换出物理内存，
-/// 达到"降低约 1/3 物理内存占用"的效果（与 UI 提示一致）。
 fn handle_memory_optimize() -> ApiResult {
     let (_, before_avail) = get_system_memory_kb();
     let before_mb = before_avail / 1024 / 1024;
 
-    #[cfg(target_os = "windows")]
-    unsafe {
-        use std::ffi::c_void;
-        #[link(name = "psapi")]
-        unsafe extern "system" {
-            fn EnumProcesses(lpidProcess: *mut u32, cb: u32, lpcbNeeded: *mut u32) -> i32;
-            fn EmptyWorkingSet(hProcess: *mut c_void) -> i32;
+    match do_memory_optimize_purge() {
+        Ok(()) => {
+            let (_, after_avail) = get_system_memory_kb();
+            let after_mb = after_avail / 1024 / 1024;
+            let freed_mb = after_mb.saturating_sub(before_mb);
+            ApiResult::ok(json!({
+                "success": true,
+                "freedMB": freed_mb,
+                "beforeMB": before_mb,
+                "afterMB": after_mb
+            }))
         }
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> *mut c_void;
-            fn CloseHandle(hObject: *mut c_void) -> i32;
-            fn GetCurrentProcess() -> *mut c_void;
-        }
-
-        // EmptyWorkingSet 需要查询信息 + 设置配额权限
-        const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
-        const PROCESS_SET_QUOTA: u32 = 0x0100;
-        const ACCESS: u32 = PROCESS_QUERY_INFORMATION | PROCESS_SET_QUOTA;
-
-        let mut pids = [0u32; 1024];
-        let mut needed: u32 = 0;
-        let pid_size = std::mem::size_of::<u32>() as u32;
-
-        if EnumProcesses(pids.as_mut_ptr(), pids.len() as u32 * pid_size, &mut needed) != 0 {
-            let count = (needed / pid_size) as usize;
-            // 先压缩自身进程工作集
-            let self_handle = GetCurrentProcess();
-            EmptyWorkingSet(self_handle);
-            // 再遍历所有进程压缩工作集（无权限的进程自动跳过，不影响其它程序运行）
-            for i in 0..count.min(pids.len()) {
-                let pid = pids[i];
-                if pid == 0 {
-                    continue;
-                }
-                let handle = OpenProcess(ACCESS, 0, pid);
-                if !handle.is_null() {
-                    EmptyWorkingSet(handle);
-                    CloseHandle(handle);
-                }
-            }
-        }
+        Err(e) => ApiResult::err(500, e.as_str()),
     }
-
-    let (_, after_avail) = get_system_memory_kb();
-    let after_mb = after_avail / 1024 / 1024;
-    let freed_mb = after_mb.saturating_sub(before_mb);
-
-    ApiResult::ok(json!({
-        "success": true,
-        "freedMB": freed_mb,
-        "beforeMB": before_mb,
-        "afterMB": after_mb
-    }))
 }
 
 // ============== 清理功能 ==============

@@ -343,35 +343,88 @@ async fn stream_download(
     target: &Path,
     expected_size: u64,
 ) -> Result<(), String> {
+    let tmp = target.with_extension("part");
+    let mut resume = 0u64;
+    if let Ok(md) = fs::metadata(&tmp) {
+        resume = md.len();
+    }
+    if expected_size > 0 && resume >= expected_size {
+        return Ok(());
+    }
+
     let client = Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .get(url)
-        .send()
+    let mut req = client.get(url);
+    if resume > 0 {
+        req = req.header("Range", format!("bytes={}-", resume));
+    }
+    let resp = tokio::time::timeout(Duration::from_secs(20), req.send())
         .await
+        .map_err(|_| "TTFB 超时：服务器响应头迟迟未返回，切换镜像".to_string())?
         .map_err(|e| format!("连接失败: {}", e))?;
-    if !resp.status().is_success() {
+    let status_206 = resp.status().as_u16() == 206;
+    if !resp.status().is_success() && !status_206 {
         return Err(format!("HTTP {}", resp.status()));
     }
+    if resume > 0 && !status_206 {
+        let _ = fs::remove_file(&tmp);
+        resume = 0;
+    }
 
-    let total = resp.content_length().unwrap_or(expected_size);
-    let tmp = target.with_extension("part");
-    let mut f = tokio::fs::File::create(&tmp)
+    let total = if status_206 {
+        resp.headers()
+            .get("content-range")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split('/').nth(1))
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0)
+    } else {
+        resp.content_length().unwrap_or(0)
+    };
+    let total = if total > 0 { total } else { expected_size };
+
+    let mut f = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&tmp)
         .await
         .map_err(|e| format!("创建文件失败: {}", e))?;
 
     let mut stream = resp.bytes_stream();
-    let mut transferred: u64 = 0;
+    let mut transferred = resume;
     let mut last_report = Instant::now();
-    let mut last_bytes: u64 = 0;
+    let mut last_bytes = resume;
+    let mut window_bytes: u64 = 0;
+    let mut window_start = Instant::now();
+    let stall_detect = expected_size > 1024 * 1024;
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("下载中断: {}", e))?;
+    loop {
+        let waited = tokio::time::timeout(Duration::from_secs(30), stream.next()).await;
+        let chunk = match waited {
+            Ok(Some(r)) => r.map_err(|e| format!("下载中断: {}", e))?,
+            Ok(None) => break,
+            Err(_) => return Err("下载长时间无数据，切换镜像".to_string()),
+        };
         transferred += chunk.len() as u64;
         f.write_all(&chunk).await.map_err(|e| format!("写入失败: {}", e))?;
+        window_bytes += chunk.len() as u64;
+
+        let remaining = total.saturating_sub(transferred);
+        // 仅在剩余较多且一段时间内完全未收到任何字节时才判定该源失效，
+        // 避免把因瞬时速度波动仍在正常传输的源误判为失败而反复切换镜像。
+        if stall_detect && remaining > 1024 * 1024 {
+            let win_elapsed = window_start.elapsed().as_secs();
+            if win_elapsed >= 10 {
+                if window_bytes == 0 {
+                    return Err("源长时间无数据，切换镜像".to_string());
+                }
+                window_bytes = 0;
+                window_start = Instant::now();
+            }
+        }
 
         if last_report.elapsed().as_millis() >= 300 {
             let elapsed = last_report.elapsed().as_secs_f64().max(0.001);
@@ -395,9 +448,6 @@ async fn stream_download(
     f.sync_all().await.map_err(|e| e.to_string())?;
     drop(f);
 
-    let _ = fs::remove_file(target);
-    fs::rename(&tmp, target).map_err(|e| format!("下载完成但保存失败: {}", e))?;
-
     if total > 0 {
         emit(&app, "download-progress", &json!({
             "percent": 100.0,
@@ -416,7 +466,6 @@ async fn download_with_fallback(
     expected_size: u64,
     expected_sha: Option<&str>,
 ) -> Result<(), String> {
-    // 文件已完整且校验通过，直接复用
     if verify_file(target, expected_size, expected_sha) {
         if expected_size > 0 {
             emit(&app, "download-progress", &json!({
@@ -429,25 +478,31 @@ async fn download_with_fallback(
         return Ok(());
     }
     let _ = fs::remove_file(target);
-    let _ = fs::remove_file(target.with_extension("part"));
+    let part = target.with_extension("part");
 
-    for (i, murl) in build_download_sources(url).iter().enumerate() {
-        match stream_download(app, murl, target, expected_size).await {
+    let mut last_err = String::new();
+    for murl in build_download_sources(url) {
+        match stream_download(app, &murl, target, expected_size).await {
             Ok(()) => {
-                if verify_file(target, expected_size, expected_sha) {
+                if verify_file(&part, expected_size, expected_sha) {
+                    let _ = fs::remove_file(target);
+                    fs::rename(&part, target)
+                        .map_err(|e| format!("下载完成但保存失败: {}", e))?;
                     return Ok(());
                 }
                 let _ = fs::remove_file(target);
-                let _ = fs::remove_file(target.with_extension("part"));
+                let _ = fs::remove_file(&part);
             }
-            Err(_) => {
-                let _ = fs::remove_file(target);
-                let _ = fs::remove_file(target.with_extension("part"));
+            Err(e) => {
+                last_err = e;
             }
         }
-        let _ = i;
     }
-    Err("所有下载源均失败，请稍后重试或手动下载".into())
+    if last_err.is_empty() {
+        Err("所有下载源均失败，请稍后重试或手动下载".into())
+    } else {
+        Err(last_err)
+    }
 }
 
 #[tauri::command]

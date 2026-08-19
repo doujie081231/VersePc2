@@ -125,7 +125,12 @@ async function fetchFavProjects(projectIds) {
         const detail = await API.getModDetail(id, 'modrinth');
         return Object.assign({}, detail, { source: 'modrinth' });
       } catch (e) {
-        return { id: id, title: id, description: '加载失败', source: 'modrinth', projectType: 'mod' };
+        try {
+          const detail = await API.getModDetail(id, 'curseforge');
+          return Object.assign({}, detail, { source: 'curseforge' });
+        } catch (e2) {
+          return { id: id, title: id, description: '加载失败', source: 'modrinth', projectType: 'mod' };
+        }
       }
     });
     const batchResults = await Promise.all(promises);

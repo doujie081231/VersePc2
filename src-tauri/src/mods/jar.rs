@@ -210,15 +210,23 @@ pub fn parse_mod_jar(jar_path: &Path) -> ModMeta {
         }
     }
 
-    // 无 icon_path 时找 pack.png / logo.png / icon.png
+    // 无 icon_path 时找 pack.png / logo.png / icon.png（含 webp 等常见图标格式）
     if icon_path.is_none() {
         for i in 0..archive.len() {
             if let Ok(f) = archive.by_index_raw(i) {
                 let name = f.name().to_string();
-                if name == "pack.png"
-                    || name == "logo.png"
-                    || name == "icon.png"
-                    || name.ends_with("/icon.png")
+                let lower = name.to_lowercase();
+                if lower == "pack.png"
+                    || lower == "logo.png"
+                    || lower == "icon.png"
+                    || lower == "pack.webp"
+                    || lower == "logo.webp"
+                    || lower == "icon.webp"
+                    || lower == "pack.jpg"
+                    || lower == "logo.jpg"
+                    || lower == "icon.jpg"
+                    || lower.ends_with("/icon.png")
+                    || lower.ends_with("/icon.webp")
                 {
                     icon_path = Some(name);
                     break;
@@ -231,7 +239,7 @@ pub fn parse_mod_jar(jar_path: &Path) -> ModMeta {
     if let Some(ip) = icon_path {
         let normalized = ip.replace('\\', "/");
         for i in 0..archive.len() {
-            if let Ok(mut f) = archive.by_index_raw(i) {
+            if let Ok(mut f) = archive.by_index(i) {
                 if f.name().replace('\\', "/") == normalized {
                     // 读取图标数据
                     let mut buf = Vec::new();

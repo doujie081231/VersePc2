@@ -10,6 +10,7 @@ use super::jar::parse_mod_jar;
 use crate::storage;
 
 /// 获取已安装模组列表（含重复检测和冲突检测）
+/// 版本取当前选中版本（selectedVersion）
 pub fn get_installed_mods() -> Value {
     let settings = storage::load_settings();
     let version_id = settings
@@ -17,8 +18,17 @@ pub fn get_installed_mods() -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    build_installed_mods(&settings, &version_id)
+}
 
-    let mods_path = resolve_version_mods_dir(&settings, &version_id);
+/// 获取指定版本的已安装模组列表（对齐初代 /api/mods/installed）
+pub fn get_installed_mods_for_version(version_id: &str) -> Value {
+    let settings = storage::load_settings();
+    build_installed_mods(&settings, version_id)
+}
+
+fn build_installed_mods(settings: &Value, version_id: &str) -> Value {
+    let mods_path = resolve_version_mods_dir(settings, version_id);
     let mut mods: Vec<Value> = Vec::new();
     let mut seen_files: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -237,23 +247,15 @@ fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Option<PathBu
     }
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
-
-    let version_isolation = settings
-        .get("versionIsolation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    if version_isolation {
-        Some(versions_dir.join(version_id).join("mods"))
-    } else {
-        let game_dir = settings
-            .get("gameDir")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data_dir.clone());
-        Some(game_dir.join("mods"))
-    }
+    let game_dir = crate::launch::args_builder::resolve_game_dir(
+        version_id,
+        None,
+        None,
+        settings,
+        &versions_dir,
+        &data_dir,
+    );
+    Some(game_dir.join("mods"))
 }
 
 /// 解析存档目录（screenshots/saves 等用）
@@ -281,20 +283,12 @@ pub fn resolve_saves_dir(version_id: &str) -> PathBuf {
 fn resolve_version_game_dir(settings: &Value, version_id: &str) -> PathBuf {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
-
-    let version_isolation = settings
-        .get("versionIsolation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    if version_isolation {
-        versions_dir.join(version_id)
-    } else {
-        settings
-            .get("gameDir")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data_dir.clone())
-    }
+    crate::launch::args_builder::resolve_game_dir(
+        version_id,
+        None,
+        None,
+        settings,
+        &versions_dir,
+        &data_dir,
+    )
 }

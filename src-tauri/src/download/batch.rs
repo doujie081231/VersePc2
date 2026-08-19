@@ -16,6 +16,7 @@ const ASSET_PROBE_TIMEOUT: u64 = 3;
 const ASSET_DOWNLOAD_TIMEOUT: u64 = 30;
 
 /// 单个资源对象
+#[derive(Clone)]
 pub struct AssetObject {
     pub name: String,
     pub hash: String,
@@ -173,6 +174,69 @@ where
     while let Some(_) = tasks.join_next().await {}
 
     (completed.load(Ordering::SeqCst), failed.load(Ordering::SeqCst))
+}
+
+/// 确保游戏语言资源（minecraft/lang/*.json）完整。
+/// 语言文件缺失会导致游戏内只剩英文可选。批量下载后再核对这些关键资源，
+/// 仍缺失的先单独重试一批，依旧失败则返回错误，避免静默导入成"只有英文"。
+pub async fn ensure_language_assets(
+    objects: &serde_json::Map<String, serde_json::Value>,
+    assets_dir: &Path,
+    base_urls: &[String],
+    max_parallel: usize,
+) -> Result<(), String> {
+    let mut lang_objects: Vec<AssetObject> = Vec::new();
+    for (name, info) in objects {
+        if !name.starts_with("minecraft/lang/") {
+            continue;
+        }
+        let hash = info
+            .get("hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if hash.is_empty() {
+            continue;
+        }
+        let sub_dir = &hash[..2.min(hash.len())];
+        let a_path = assets_dir.join("objects").join(sub_dir).join(hash);
+        if !a_path.exists() {
+            lang_objects.push(AssetObject {
+                name: name.clone(),
+                hash: hash.to_string(),
+                size: info.get("size").and_then(|v| v.as_u64()).unwrap_or(0),
+            });
+        }
+    }
+    if lang_objects.is_empty() {
+        return Ok(());
+    }
+    let (_done, _failed) = download_asset_objects(
+        lang_objects.clone(),
+        assets_dir,
+        base_urls,
+        max_parallel.max(4),
+        |_, _, _| {},
+    )
+    .await;
+    let still_missing: Vec<String> = lang_objects
+        .iter()
+        .filter(|o| {
+            !assets_dir
+                .join("objects")
+                .join(&o.hash[..2.min(o.hash.len())])
+                .join(&o.hash)
+                .exists()
+        })
+        .map(|o| o.name.clone())
+        .collect();
+    if still_missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "部分游戏语言资源下载失败，将导致游戏语言不全: {}",
+            still_missing.join(", ")
+        ))
+    }
 }
 
 /// 下载单个资源文件到临时文件，完成后重命名。

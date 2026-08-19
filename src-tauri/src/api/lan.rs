@@ -65,9 +65,12 @@ pub async fn handle(
         "GET /api/easytier/filelog" => Some(handle_et_filelog()),
         "POST /api/easytier/download" => Some(handle_et_download().await),
         "GET /api/easytier/download-status" => Some(handle_et_download_status()),
+        "POST /api/easytier/ide" => Some(handle_et_idle().await),
+        // profiles：内核经 /state 下发的玩家档案列表（machineID/name/vendor/kind）
+        "GET /api/easytier/profiles" => Some(handle_et_profiles()),
 
-        // ===== 占位：profile 管理尚未实现 =====
-        "POST /api/easytier/profiles" | "GET /api/easytier/profiles" | "DELETE /api/easytier/profiles" => {
+        // ===== 占位：profile 管理（增/删/改）尚未实现，仅提供只读查询 =====
+        "POST /api/easytier/profiles" | "DELETE /api/easytier/profiles" => {
             Some(ApiResult::err(501, "EasyTier profile 管理功能尚未实现"))
         }
 
@@ -572,4 +575,33 @@ fn handle_et_download_status() -> ApiResult {
     } else {
         ApiResult::ok(json!({ "status": "error", "progress": 0, "message": "陶瓦联机内核下载失败，请检查网络后重试" }))
     }
+}
+
+/// POST /api/easytier/ide — 切换到 IDE 待命状态
+async fn handle_et_idle() -> ApiResult {
+    match easytier::set_idle().await {
+        Ok(()) => ApiResult::ok(json!({ "success": true })),
+        Err(e) => ApiResult::err(500, &e),
+    }
+}
+
+/// GET /api/easytier/profiles — 查询玩家档案列表
+/// 档案由内核经 /state（host-ok/guest-ok 的 profiles + profile_index）下发，
+/// 字段含 machineID/name/vendor/kind(HOST|LOCAL|GUEST)
+fn handle_et_profiles() -> ApiResult {
+    let status = et_state::get_status();
+    let profiles = status
+        .get("profiles")
+        .and_then(|p| p.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let profile_index = status
+        .get("profileIndex")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    ApiResult::ok(json!({
+        "success": true,
+        "profiles": profiles,
+        "profileIndex": profile_index
+    }))
 }

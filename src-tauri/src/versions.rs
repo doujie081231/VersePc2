@@ -1459,14 +1459,28 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             let versions_dir = data_dir.join("versions");
             let version_dir = versions_dir.join(storage::sanitize_version_id(&clean_id));
 
+            let game_root = if is_external {
+                version_dir.clone()
+            } else {
+                let settings = storage::load_settings();
+                crate::launch::args_builder::resolve_game_dir(
+                    &clean_id,
+                    None,
+                    None,
+                    &settings,
+                    &versions_dir,
+                    &data_dir,
+                )
+            };
+
             let target = match folder_type {
                 "version" => version_dir,
-                "saves" => version_dir.join("saves"),
-                "mods" => version_dir.join("mods"),
-                "resourcepacks" => version_dir.join("resourcepacks"),
-                "shaderpacks" => version_dir.join("shaderpacks"),
-                "logs" => version_dir.join("logs"),
-                "crash-reports" => version_dir.join("crash-reports"),
+                "saves" => game_root.join("saves"),
+                "mods" => game_root.join("mods"),
+                "resourcepacks" => game_root.join("resourcepacks"),
+                "shaderpacks" => game_root.join("shaderpacks"),
+                "logs" => game_root.join("logs"),
+                "crash-reports" => game_root.join("crash-reports"),
                 _ => version_dir,
             };
 
@@ -2145,60 +2159,73 @@ async fn run_repair_session(session_id: &str, version_id: &str, abort: Arc<Atomi
         return;
     }
 
-    let mut repaired: u32 = 0;
-    for (idx, file) in missing_files.iter().enumerate() {
-        if is_aborted() {
-            finalize_repair_session(session_id, "cancelled", "修复已取消");
-            schedule_repair_cleanup(session_id);
-            return;
-        }
+    // 并发下载缺失文件（对齐初代 downloadOne 并发数 8 + cache-buster/完整性重试）
+    const PARALLEL: usize = 8;
+    let repaired = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+    // 为并发流克隆引用，保留原变量供完成阶段使用
+    let abort_stream = abort.clone();
+    let repaired_stream = repaired.clone();
 
-        let checked = (idx + 1) as u32;
-        let progress = 5.0 + (checked as f64 / total.max(1) as f64) * 90.0;
-
-        {
-            let mut guard = REPAIR_SESSIONS.lock().unwrap();
-            if let Some(s) = guard.get_mut(session_id) {
-                s.checked_files = checked;
-                s.progress = progress;
-                s.current_file = file.name.clone();
-                s.message = format!("正在修复: {}", file.name);
-            }
-        }
-
-        let dest = std::path::PathBuf::from(&file.path);
-        if let Some(parent) = dest.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("[repair] 创建目录失败 {}: {}", parent.display(), e);
-                continue;
-            }
-        }
-
-        let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.as_str()) };
-        let size = if file.size > 0 { Some(file.size) } else { None };
-
-        match crate::download::download_with_mirror(
-            &file.url,
-            &dest,
-            sha1,
-            size,
-            &download_source,
-            120,
-            None,
-        ).await {
-            Ok(()) => {
-                repaired += 1;
-                let mut guard = REPAIR_SESSIONS.lock().unwrap();
-                if let Some(s) = guard.get_mut(session_id) {
-                    s.repaired_files = repaired;
+    use futures_util::StreamExt;
+    let files: Vec<_> = missing_files
+        .into_iter()
+        .map(|f| {
+            let d = std::path::PathBuf::from(&f.path);
+            (f, d)
+        })
+        .collect();
+    futures_util::stream::iter(files)
+        .for_each_concurrent(PARALLEL, move |(file, dest)| {
+            let repaired_cur = repaired_stream.clone();
+            let abort_cur = abort_stream.clone();
+            let source_cur = download_source.clone();
+            async move {
+                if abort_cur.load(Ordering::SeqCst) {
+                    return;
+                }
+                if let Some(parent) = dest.parent() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        eprintln!("[repair] 创建目录失败 {}: {}", parent.display(), e);
+                        return;
+                    }
+                }
+                let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.clone()) };
+                let size = if file.size > 0 { Some(file.size) } else { None };
+                match crate::download::download_with_mirror_retry(
+                    &file.url,
+                    &dest,
+                    sha1.as_deref(),
+                    size,
+                    &source_cur,
+                    120,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        let r = {
+                            let mut rc = repaired_cur.lock().unwrap();
+                            *rc += 1;
+                            *rc
+                        };
+                        let prog = 5.0 + (r as f64 / total.max(1) as f64) * 90.0;
+                        let mut guard = REPAIR_SESSIONS.lock().unwrap();
+                        if let Some(s) = guard.get_mut(session_id) {
+                            s.repaired_files = r;
+                            s.checked_files = r;
+                            s.progress = prog;
+                            s.current_file = file.name.clone();
+                            s.message = format!("正在修复: {}", file.name);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[repair] 下载失败 {}: {}", file.name, e);
+                    }
                 }
             }
-            Err(e) => {
-                eprintln!("[repair] 下载失败 {}: {}", file.name, e);
-            }
-        }
-    }
+        })
+        .await;
 
+    let repaired = { *repaired.lock().unwrap() };
     let remaining = total as u32 - repaired;
     if is_aborted() {
         finalize_repair_session(session_id, "cancelled", "修复已取消");
@@ -2533,10 +2560,11 @@ async fn handle_export_script(body: &Option<Value>) -> crate::api::ApiResult {
     }
 }
 
-/// POST /api/version/export-modpack — 导出整合包（简化版 ZIP）
+/// POST /api/version/export-modpack — 导出整合包（按 PCL2 导出内容规则生成 overrides + modpack.json）
 ///
-/// 参数：versionId（必填）、format（仅 zip 实现，其他忽略）
-/// 简化版：直接打包版本目录所有文件为 ZIP（排除版本 JSON 自身）
+/// 参数：versionId（必填）、name、version、author、description、selectedKeys（导出内容 key 数组）
+/// 对齐 PCL2 PageInstanceExport 的导出内容规则：将选中的游戏内容写入 overrides/ 目录，
+/// 排除系统/缓存目录、日志与临时文件、版本自身 JAR/JSON，并写入 modpack.json 元信息。
 /// 写入 DATA_DIR/temp/<versionId>-export.zip
 /// 返回：{ success, path, fileName }
 fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResult {
@@ -2547,6 +2575,15 @@ fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResult {
     if version_id.is_empty() {
         return ApiResult::err(400, "Missing versionId");
     }
+    let pack_name = utils::get_str(&data, "name");
+    let pack_version = utils::get_str(&data, "version");
+    let author = utils::get_str(&data, "author");
+    let description = utils::get_str(&data, "description");
+    let selected_keys: Vec<String> = data
+        .get("selectedKeys")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .unwrap_or_default();
 
     let is_external = is_external_version(&version_id);
     let clean_id = if is_external {
@@ -2568,10 +2605,16 @@ fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResult {
     let file_name = format!("{}-export.zip", clean_id);
     let zip_path = temp_dir.join(&file_name);
 
-    // 排除版本 JSON 自身
-    let exclude_names: Vec<String> = vec![format!("{}.json", clean_id)];
-
-    match create_zip_from_dir(&version_dir, &zip_path, &exclude_names) {
+    match create_modpack_zip(
+        &version_dir,
+        &clean_id,
+        &pack_name,
+        &pack_version,
+        &author,
+        &description,
+        &selected_keys,
+        &zip_path,
+    ) {
         Ok(_) => ApiResult::ok(json!({
             "success": true,
             "path": zip_path.to_string_lossy(),
@@ -2581,25 +2624,93 @@ fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResult {
     }
 }
 
-/// 把一个目录递归打包成 ZIP（排除指定文件名的根级文件）
-fn create_zip_from_dir(
+/// 生成 PCL2 风格整合包 ZIP：overrides/ 保存游戏内容，modpack.json 记录元信息
+///
+/// 对齐 PCL2 ModModpack 的导入结构与 PageInstanceExport 的导出内容规则。
+/// 若未提供 selectedKeys，则使用与 PCL2 默认一致的完整内容集。
+#[allow(clippy::too_many_arguments)]
+fn create_modpack_zip(
     src_dir: &Path,
+    version_id: &str,
+    pack_name: &str,
+    pack_version: &str,
+    author: &str,
+    description: &str,
+    selected_keys: &[String],
     zip_path: &Path,
-    exclude_root_files: &[String],
 ) -> std::io::Result<()> {
+    use std::collections::HashSet;
     use std::fs::File;
     use std::io::{Read, Write};
     use zip::write::SimpleFileOptions;
     use zip::CompressionMethod;
     use zip::ZipWriter;
 
+    // 选中 key 映射到游戏内容目录/文件（对应前端导出树 data-key）
+    let mut include_dirs: HashSet<String> = HashSet::new();
+    let mut include_files: HashSet<String> = HashSet::new();
+    if selected_keys.is_empty() {
+        // 未指定内容时使用 PCL2 默认全量内容
+        for d in ["mods", "config", "resourcepacks", "texturepacks", "shaderpacks",
+                  "saves", "screenshots", "defaultconfigs", "kubejs", "scripts",
+                  "openloader", "serverconfig", "custom"] {
+            include_dirs.insert(d.to_string());
+        }
+        for f in ["options.txt", "optionsof.txt", "servers.dat"] {
+            include_files.insert(f.to_string());
+        }
+    } else {
+        for key in selected_keys {
+            match key.as_str() {
+                "mods" | "mod_files" => { include_dirs.insert("mods".to_string()); }
+                "mod_configs" => { include_dirs.insert("config".to_string()); }
+                "resourcepacks" => {
+                    include_dirs.insert("resourcepacks".to_string());
+                    include_dirs.insert("texturepacks".to_string());
+                }
+                "shaderpacks" => { include_dirs.insert("shaderpacks".to_string()); }
+                "saves" => { include_dirs.insert("saves".to_string()); }
+                "screenshots" => { include_dirs.insert("screenshots".to_string()); }
+                "defaultconfigs" => { include_dirs.insert("defaultconfigs".to_string()); }
+                "kubejs" => { include_dirs.insert("kubejs".to_string()); }
+                "game_settings" => { include_files.insert("options.txt".to_string()); }
+                "servers" => { include_files.insert("servers.dat".to_string()); }
+                _ => {}
+            }
+        }
+    }
+
+    // 系统/缓存/无用目录（PCL2 跳过列表 + 常规无用目录）
+    let skip_dirs: HashSet<&str> = [
+        "assets", "versions", "libraries", "structureCacheV1", ".fabric", ".git",
+        "avatar-cache", "cosmetic-cache", "downloads", "logs", "crash-reports",
+    ].iter().cloned().collect();
+    // 排除的垃圾文件（PCL2 排除行）
+    let junk_names: HashSet<&str> = ["hmclversion.cfg", "log4j2.xml", "BakaCoreInfo"]
+        .iter().cloned().collect();
+    let version_json_name = format!("{}.json", version_id);
+    let version_jar_name = format!("{}.jar", version_id);
+
     let file = File::create(zip_path)?;
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated);
 
-    let mut stack: Vec<(PathBuf, String)> = vec![(src_dir.to_path_buf(), String::new())];
+    let meta = serde_json::json!({
+        "name": if pack_name.is_empty() { version_id } else { pack_name },
+        "version": if pack_version.is_empty() { "1.0.0" } else { pack_version },
+        "author": author,
+        "description": description,
+        "versionId": version_id,
+        "overrides": "overrides"
+    });
+    zip.start_file("modpack.json", options)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    zip.write_all(serde_json::to_string_pretty(&meta).unwrap_or_default().as_bytes())?;
 
+    // 递归遍历 src_dir，把符合规则的内容写入 overrides/ 下
+    // stack 元素： (目录绝对路径, 相对 src_dir 的目录前缀)
+    let mut stack: Vec<(PathBuf, String)> = vec![(src_dir.to_path_buf(), String::new())];
     while let Some((dir, prefix)) = stack.pop() {
         let entries = std::fs::read_dir(&dir)?;
         for entry in entries.flatten() {
@@ -2608,29 +2719,35 @@ fn create_zip_from_dir(
                 Some(n) => n.to_string(),
                 None => continue,
             };
-
-            // 仅排除根级文件（prefix 为空时）
-            if prefix.is_empty() && exclude_root_files.iter().any(|f| f == &name) {
+            if name == version_json_name || name == version_jar_name {
                 continue;
             }
-
-            let zip_entry = if prefix.is_empty() {
-                name.clone()
-            } else {
-                format!("{}/{}", prefix, name)
-            };
-
+            if junk_names.contains(name.as_str()) || has_junk_ext(&name) {
+                continue;
+            }
             let meta = match entry.metadata() {
                 Ok(m) => m,
                 Err(_) => continue,
             };
-
+            let zip_name = if prefix.is_empty() {
+                name.clone()
+            } else {
+                format!("{}/{}", prefix, name)
+            };
+            let overrides_name = format!("overrides/{}", zip_name);
             if meta.is_dir() {
-                zip.add_directory(&zip_entry, options)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                stack.push((path, zip_entry));
+                if prefix.is_empty() && !include_dirs.contains(name.as_str()) {
+                    continue;
+                }
+                if !prefix.is_empty() && skip_dirs.contains(name.as_str()) {
+                    continue;
+                }
+                stack.push((path, zip_name));
             } else if meta.is_file() {
-                zip.start_file(&zip_entry, options)
+                if prefix.is_empty() && !include_files.contains(name.as_str()) {
+                    continue;
+                }
+                zip.start_file(&overrides_name, options)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
                 let mut f = File::open(&path)?;
                 let mut buf = Vec::new();
@@ -2643,6 +2760,15 @@ fn create_zip_from_dir(
     zip.finish()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     Ok(())
+}
+
+/// 文件名是否命中常见的日志/临时垃圾后缀
+fn has_junk_ext(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".log")
+        || lower.ends_with(".dat_old")
+        || lower.ends_with(".bakacoreinfo")
+        || lower.ends_with(".tmp")
 }
 
 /// GET /api/version-icon — 读取版本图标文件（base64 data URL）

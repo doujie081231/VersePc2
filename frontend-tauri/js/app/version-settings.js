@@ -685,9 +685,16 @@ function renderModMgrList(mods) {
       const toggleLabel = isDisabled ? '启用' : '禁用';
       const toggleClass = isDisabled ? 'btn-primary' : 'btn-secondary';
       const nameStyle = isDisabled ? 'opacity:0.5;text-decoration:line-through;' : '';
-      const iconHtml = iconUrl
-        ? `<div class="modmgr-icon"><img src="${iconUrl}" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('modmgr-icon--fallback')"></div>`
-        : '<div class="modmgr-icon modmgr-icon--fallback"></div>';
+      const isApiIcon = iconUrl.startsWith('/api/');
+      const iconHash = isApiIcon
+        ? (() => { const mm = iconUrl.match(/hash=([^&]+)/); return mm ? decodeURIComponent(mm[1]) : ''; })()
+        : '';
+      let iconHtml;
+      if (iconUrl && !isApiIcon) {
+        iconHtml = `<div class="modmgr-icon"><img src="${iconUrl}" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('modmgr-icon--fallback')"></div>`;
+      } else {
+        iconHtml = `<div class="modmgr-icon modmgr-icon--fallback"${iconHash ? ` data-icon-hash="${escapeHtml(iconHash)}"` : ''}></div>`;
+      }
       const wrapper = document.createElement('div');
       wrapper.className = `modmgr-item${isDisabled ? ' mod-disabled' : ''}`;
       wrapper.dataset.name = m.name || '';
@@ -707,6 +714,17 @@ function renderModMgrList(mods) {
       fragment.appendChild(wrapper);
     }
     container.appendChild(fragment);
+    container.querySelectorAll('.modmgr-icon[data-icon-hash]').forEach(el => {
+      const hash = el.getAttribute('data-icon-hash');
+      API.getModIcon(hash).then(r => {
+        console.warn('[modmgr-icon] ok', hash, (r && r.dataUrl) ? ('len=' + r.dataUrl.length) : JSON.stringify(r));
+        if (r && r.dataUrl) {
+          el.classList.remove('modmgr-icon--fallback');
+          el.removeAttribute('data-icon-hash');
+          el.innerHTML = `<img src="${r.dataUrl}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
+        }
+      }).catch(e => console.warn('[modmgr-icon] err', hash, String(e && e.message || e)));
+    });
     if (end < total) {
       requestAnimationFrame(() => renderBatch(end));
     }

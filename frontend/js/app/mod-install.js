@@ -2,6 +2,66 @@
  * @file mod-install.js
  * @description 模组安装 - 模组文件安装、整合包安装、资源快速安装、依赖处理、批量下载
  */
+// 当前模组的目标游戏版本/加载器（在 installModFile 中按所选版本捕获）
+let _mdSaveGame = '';
+let _mdSaveLoader = '';
+
+/// 从版本的 gameVersions/loaders 中识别目标游戏版本与加载器
+function resolveModTarget(gameVersions, loaders) {
+  const gvs = (gameVersions || []).map(String);
+  const lds = (loaders || []).map(String).map(l => l.toLowerCase());
+  const LD = ['forge', 'fabric', 'neoforge', 'quilt'];
+  let loader = lds.find(l => LD.includes(l)) || '';
+  if (!loader) {
+    loader = gvs.find(g => LD.includes(g.toLowerCase())) || '';
+  }
+  let game = gvs.find(g => /^\d+(\.\d+)+$/.test(g)) || '';
+  return { game, loader };
+}
+
+/// 确保已安装版本列表已加载（installedVersions 仅在访问版本页时填充，
+/// 直接从模组页进入时为空会导致路径匹配失败，需主动拉取）
+async function ensureInstalledVersions() {
+  if (Array.isArray(installedVersions) && installedVersions.length > 0) return true;
+  try {
+    const data = await API.getVersions(false);
+    installedVersions = (data && data.installed) || [];
+    if (!Array.isArray(installedVersions)) installedVersions = [];
+    allVersions = (data && data.versions) || [];
+    if (!Array.isArray(allVersions)) allVersions = [];
+    return installedVersions.length > 0;
+  } catch (e) {
+    console.warn('[matchInstalledVersion] 拉取已安装版本失败:', e);
+    return false;
+  }
+}
+
+/// 按(游戏版本,加载器)匹配已安装版本 id
+function matchInstalledVersion(game, loader) {
+  const gl = String(game || '').toLowerCase();
+  const lc = String(loader || '').toLowerCase();
+  if (!Array.isArray(installedVersions) || installedVersions.length === 0) return '';
+  const isL = v => {
+    if (lc === 'forge') return !!v.isForge;
+    if (lc === 'neoforge') return !!v.isNeoForge;
+    if (lc === 'fabric') return !!v.isFabric;
+    if (lc === 'quilt') return !!v.isFabric;
+    return true;
+  };
+  const arr = installedVersions.filter(v => v && isL(v));
+  if (!arr.length) return '';
+  // 优先精确匹配游戏版本；游戏版本未知时退化为仅按加载器匹配
+  const glArr = gl ? arr.filter(v => (
+    (v.baseVersion || '').toLowerCase() === gl ||
+    (v.id || '').toLowerCase().includes(gl)
+  )) : arr;
+  const pool = glArr.length ? glArr : arr;
+  const baseMatch = gl ? pool.filter(v => (v.baseVersion || '').toLowerCase() === gl) : [];
+  const usePool = baseMatch.length ? baseMatch : pool;
+  const pref = usePool.filter(v => (v.id || '').toLowerCase().startsWith(gl || (v.baseVersion || '').toLowerCase()));
+  return (pref[0] || usePool[0]).id || '';
+}
+
 function installModFileSafe(el) {
   if (!el) return;
   const vid = decodeURIComponent(atob(el.dataset.vid || ''));
@@ -120,6 +180,16 @@ function getLoaderFileIcon(filename) {
 }
 
 function installModFile(projectId, source, versionId, fileId) {
+  // 捕获当前模组目标游戏版本/加载器，用于保存路径定位（Forge/Fabric 同版本号不混淆）
+  try {
+    const versions = (typeof mdAllVersions !== 'undefined') ? mdAllVersions : [];
+    const v = versions.find(x => x && x.id === versionId);
+    if (v) {
+      const t = resolveModTarget(v.gameVersions, v.loaders);
+      _mdSaveGame = t.game || _mdSaveGame;
+      _mdSaveLoader = t.loader || _mdSaveLoader;
+    }
+  } catch (e) {}
   showModInstallConfirm(projectId, source, versionId, fileId);
 }
 
@@ -370,37 +440,35 @@ function getDownloadStageText(data) {
 
 async function resolveModSavePath(versionId) {
   try {
-    const vid = versionId || _modDownloadVersionId || '';
-    // Tauri 下原生 fetch('/api/...') 无本地 HTTP 服务器会失败，
-    // 统一走 API 代理（invoke 通道）；非 Tauri 走原生 fetch。
-    if (window.__TAURI_PROXY__) {
-      const params = vid ? { versionId: vid } : {};
-      const r = await window.__TAURI_PROXY__.apiProxy('GET', '/api/filesystem/default-mod-path', params, null);
-      if (r.ok) {
-        const gpRes = await r.json();
-        let path = '';
-        if (typeof gpRes === 'string') {
-          path = gpRes;
-        } else if (gpRes && typeof gpRes === 'object') {
-          path = gpRes.path || gpRes.data || '';
-        }
-        if (path) return path;
-      }
-    } else {
-      const url = vid ? `/api/filesystem/default-mod-path?versionId=${encodeURIComponent(vid)}` : '/api/filesystem/default-mod-path';
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const gpRes = await resp.json();
-        let path = '';
-        if (typeof gpRes === 'string') {
-          path = gpRes;
-        } else if (gpRes && typeof gpRes === 'object') {
-          path = gpRes.path || gpRes.data || '';
-        }
-        if (path) return path;
+    const filterVersion = getCustomSelectValue('mod-filter-version');
+    const filterLoader = getCustomSelectValue('mod-filter-loader');
+    const targetGame = _mdSaveGame || filterVersion || '';
+    const targetLoader = _mdSaveLoader || filterLoader || '';
+    await ensureInstalledVersions();
+    const matched = matchInstalledVersion(targetGame, targetLoader);
+    const vid = matched || versionId || _modDownloadVersionId || filterVersion || '';
+    console.warn('[resolveModSavePath] targetGame=', targetGame, 'targetLoader=', targetLoader,
+      'installedCount=', (installedVersions || []).length, 'matched=', matched, 'vid=', vid);
+    // 版本感知解析：优先调用支持 versionId 的后端命令，目录以传入版本为准，
+    // 避免 HTTP 路由回退到 selectedVersion 导致 Forge 模组落到其它目录
+    let path = '';
+    if (vid && window.electronAPI && typeof window.electronAPI.getDefaultModPath === 'function') {
+      const r = await window.electronAPI.getDefaultModPath(vid).catch(() => null);
+      if (typeof r === 'string' && r) path = r;
+    }
+    if (!path) {
+      const res = await API.getDefaultModPath(vid).catch(e => { console.warn('[resolveModSavePath] getDefaultModPath error:', e); return null; });
+      if (typeof res === 'string') {
+        path = res;
+      } else if (res && typeof res === 'object') {
+        path = res.path || res.data || '';
       }
     }
-  } catch (e) {}
+    console.warn('[resolveModSavePath] path=', path);
+    if (path) return path;
+  } catch (e) {
+    console.warn('[resolveModSavePath] error:', e);
+  }
   return localStorage.getItem('lastModSavePath') || '';
 }
 
@@ -427,6 +495,7 @@ async function showModInstallConfirm(projectId, source, versionId, fileId) {
   showToast('请选择保存文件夹...', 'info');
   try {
     const defaultPath = await resolveModSavePath();
+    console.warn('[mod-install] dialog defaultPath=', JSON.stringify(defaultPath));
     const folderResult = await API.selectSaveFolder(defaultPath);
     if (folderResult.cancelled) {
       if (folderResult.error) {

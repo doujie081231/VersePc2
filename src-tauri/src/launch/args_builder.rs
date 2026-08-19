@@ -121,6 +121,8 @@ pub fn build_launch_arguments(
         player_name
     };
     let raw_access_token = utils::get_str(account, "accessToken");
+    // 存储的 accessToken 为密文（enc: 前缀），注入启动参数前必须解密（离线为 "0"/空，解密函数原样返回）
+    let raw_access_token = crate::auth::token::decrypt_account_token(&raw_access_token);
     let uuid = if let Some(u) = account.get("uuid").and_then(|v| v.as_str()) {
         if u.is_empty() {
             utils::offline_uuid(&player_name)
@@ -495,6 +497,7 @@ pub fn build_launch_arguments(
     // "E:\Verse Explorer X\..."）会被拆成多段，这里用权威值整体覆盖并清理残留。
     ensure_flag_arg(&mut game_args, "--gameDir", &game_dir.to_string_lossy());
     ensure_flag_arg(&mut game_args, "--assetsDir", &assets_root.to_string_lossy());
+    ensure_flag_arg(&mut game_args, "--assetIndex", &asset_index);
     ensure_flag_arg(&mut game_args, "--username", &player_name);
     ensure_flag_arg(&mut game_args, "--uuid", &uuid);
     ensure_flag_arg(&mut game_args, "--accessToken", &access_token);
@@ -1291,25 +1294,16 @@ fn num_cpus() -> u32 {
 
 /// 获取物理内存总量（MB）
 fn total_physical_memory_mb() -> u64 {
-    // 通过 sysinfo 风格的读取（这里用 std 兜底，平台差异较大）
-    // Windows: 用 GetProcessMemoryInfo / GlobalMemoryStatusEx（暂用简化版）
-    #[cfg(target_os = "windows")]
-    {
-        // 使用 windows-sys 风格的 API（暂用 sysinfo 兜底）
-        // 这里简单返回 8GB（兜底值），实际应调用系统 API
-        // TODO: 接入 sysinfo crate 获取准确值
-        8192
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        8192
-    }
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    (sys.total_memory() / (1024 * 1024)) as u64
 }
 
 /// 获取当前可用物理内存（MB）
 fn free_physical_memory_mb() -> u64 {
-    // TODO: 接入 sysinfo crate 获取准确值
-    4096
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    (sys.available_memory() / (1024 * 1024)) as u64
 }
 
 /// 推送用户自定义 JVM 参数（去重）

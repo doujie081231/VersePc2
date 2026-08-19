@@ -106,6 +106,20 @@ pub async fn http_get(http_port: u16, path: &str) -> Result<Value, String> {
     http_get_raw(http_port, path).await
 }
 
+/// 切换到 IDE 待命状态（对应内核 /state/ide）
+/// 用于在未进入主机/客户端模式前让内核处于空闲准备状态，便于后续快速 scanning/guesting
+pub async fn set_idle() -> Result<(), String> {
+    let port = state::get_status()
+        .get("httpPort")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u16;
+    if port == 0 {
+        return Err("陶瓦联机尚未运行".to_string());
+    }
+    http_get_raw(port, "/state/ide").await?;
+    Ok(())
+}
+
 async fn http_get_raw(http_port: u16, path: &str) -> Result<Value, String> {
     let url = format!("http://127.0.0.1:{}{}", http_port, path);
     let client = reqwest::Client::builder()
@@ -691,14 +705,26 @@ async fn try_recover_saved() -> Result<(), String> {
 }
 
 /// 解析 /state 响应并写入全局状态
-fn update_state_from_api(v: Value) {
+/// 返回 true 表示状态已更新；false 表示 index 未前进（旧/重复状态被忽略，对齐 HMCL daemon 的单调 index 保护）
+fn update_state_from_api(v: Value) -> bool {
     let sv = v.get("state").and_then(|x| x.as_str()).unwrap_or("").to_string();
     let idx = v.get("index").and_then(|x| x.as_i64()).unwrap_or(-1);
+    // HMCL 用 index 单调递增判断：新的状态序号必须大于上次已应用序号，否则丢弃，避免旧状态回退覆盖
+    if idx >= 0 {
+        let last = state::get_state_index();
+        if idx <= last {
+            return false;
+        }
+    }
     let profiles = v
         .get("profiles")
         .and_then(|p| p.as_array())
         .cloned()
         .unwrap_or_default();
+    let profile_index = v
+        .get("profile_index")
+        .and_then(|x| x.as_i64())
+        .unwrap_or(-1);
     let difficulty = v.get("difficulty").and_then(|d| d.as_str()).map(String::from);
 
     let room_code = if sv == "host-ok" {
@@ -733,6 +759,7 @@ fn update_state_from_api(v: Value) {
         s.state = Some(v.clone());
         s.state_index = idx;
         s.profiles = profiles;
+        s.profile_index = profile_index;
         s.difficulty = difficulty;
         if sv == "host-ok" && !room_code.is_empty() {
             s.room_code = room_code;
@@ -748,4 +775,5 @@ fn update_state_from_api(v: Value) {
             s.error_message = None;
         }
     });
+    true
 }

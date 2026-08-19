@@ -369,7 +369,10 @@ fn get_external_version_folders(state: tauri::State<storage::Store>) -> Value {
 }
 
 #[tauri::command]
-fn get_default_mod_path(state: tauri::State<storage::Store>) -> Value {
+fn get_default_mod_path(
+    state: tauri::State<storage::Store>,
+    version_id: Option<String>,
+) -> Value {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
     let settings_file = data_dir.join("settings.json");
@@ -382,6 +385,8 @@ fn get_default_mod_path(state: tauri::State<storage::Store>) -> Value {
         .ok()
         .and_then(|c| serde_json::from_str(&c).ok())
         .unwrap_or(Value::Null);
+
+    let requested = version_id.unwrap_or_default();
 
     let mut version_id = settings
         .get("selectedVersion")
@@ -400,6 +405,14 @@ fn get_default_mod_path(state: tauri::State<storage::Store>) -> Value {
                     }
                 }
             }
+        }
+    }
+
+    // 显式传入且为已安装版本目录时，以传入版本为准
+    if !requested.is_empty() {
+        let cand = versions_dir.join(&requested);
+        if cand.is_dir() {
+            version_id = requested;
         }
     }
 
@@ -478,6 +491,7 @@ fn get_default_mod_path(state: tauri::State<storage::Store>) -> Value {
 
     let default_path = game_dir.join("mods");
     let _ = std::fs::create_dir_all(&default_path);
+    eprintln!("[get_default_mod_path] version={} path={}", version_id, default_path.display());
     json!({ "success": true, "path": default_path.to_string_lossy() })
 }
 
@@ -561,6 +575,13 @@ pub fn run() {
 
             app.manage(store);
             println!("[boot] after manage {}\n", chrono::Local::now().format("%H:%M:%S%.3f"));
+
+            // 后台预热 Java 探测缓存（对齐 PCL 的 JavaInit：在启动时后台刷新 Java 列表，
+            // 避免真正启动游戏时才在启动流程里同步跑每个 Java 的 -version 探测，造成卡顿）
+            tauri::async_runtime::spawn_blocking(|| {
+                let list = crate::java::detect_all();
+                println!("[boot] 后台预热 Java 列表完成: {} 个", list.len());
+            });
 
             // 窗口默认隐藏（visible:false），等前端 splash 首屏渲染后调用 window_show 显示，避免启动黑屏闪一下。
             // 兜底：若前端因脚本异常始终未调用 show，延迟强制显示，确保窗口不会一直不出现。

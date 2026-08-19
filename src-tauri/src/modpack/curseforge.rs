@@ -2131,10 +2131,13 @@ async fn download_assets(
         eprintln!("[CurseForge] {} 个资源文件下载失败", failed);
     }
 
+    crate::download::ensure_language_assets(objects, &assets_dir, &sources, asset_parallel)
+        .await?;
+
     emit_progress(
         app,
         97,
-        &format!("游戏资源下载完成 ({}/{ })", asset_total, asset_total),
+        &format!("游戏资源下载完成 ({}/{})", asset_total, asset_total),
         "assets",
     );
 

@@ -69,7 +69,7 @@ pub async fn handle(
         "GET /api/mods" => Some(handle_list()),
         "GET /api/mod-icon" => Some(handle_icon(params)),
         "GET /api/mods/open-save-folder" => Some(handle_open_save_folder(params)),
-        "GET /api/mods/installed" => Some(handle_installed()),
+        "GET /api/mods/installed" => Some(handle_installed(params)),
         "GET /api/mods/categories" => Some(handle_categories()),
         "GET /api/mods/featured" => Some(handle_featured().await),
         // ===== 搜索 =====
@@ -129,12 +129,40 @@ fn handle_icon(params: &Option<Value>) -> ApiResult {
 
     match std::fs::read(&icon_path) {
         Ok(data) => {
-            // 返回 base64 data URL
-            let data_url = crate::utils::bytes_to_data_url(&data, "image/png");
+            // 图标缓存字节可能是 PNG/WebP/JPEG 等任意格式（JAR 内图标常为 WebP），
+            // 按文件魔数识别真实 MIME，避免以 image/png 声明导致浏览器解码失败显示破损图
+            let mime = detect_image_mime(&data);
+            let data_url = crate::utils::bytes_to_data_url(&data, &mime);
             ApiResult::ok(json!({ "dataUrl": data_url }))
         }
         Err(e) => ApiResult::err(500, &format!("读取图标失败: {}", e)),
     }
+}
+
+/// 按魔数识别图片真实格式并返回 MIME 类型
+fn detect_image_mime(data: &[u8]) -> String {
+    if data.len() >= 8 && &data[0..4] == b"\x89PNG" {
+        return "image/png".to_string();
+    }
+    if data.len() >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+        return "image/jpeg".to_string();
+    }
+    if data.len() >= 6 && &data[0..6] == b"GIF87a" || (data.len() >= 6 && &data[0..6] == b"GIF89a") {
+        return "image/gif".to_string();
+    }
+    if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        return "image/webp".to_string();
+    }
+    if data.len() >= 12 && &data[4..8] == b"ftyp" {
+        return "image/avif".to_string();
+    }
+    if data.len() >= 4 && data[0] == 0x00 && data[1] == 0x00 && data[2] == 0x01 && data[3] == 0x00 {
+        return "image/x-icon".to_string();
+    }
+    if data.len() >= 2 && data[0] == 0x42 && data[1] == 0x4D {
+        return "image/bmp".to_string();
+    }
+    "image/png".to_string()
 }
 
 /// GET /api/mods/open-save-folder — 打开存档文件夹
@@ -152,11 +180,20 @@ fn handle_open_save_folder(params: &Option<Value>) -> ApiResult {
     ApiResult::ok(json!({ "success": true, "path": saves_dir.to_string_lossy() }))
 }
 
-/// GET /api/mods/installed — 已安装模组（简化版，返回 mods 数组）
-fn handle_installed() -> ApiResult {
-    let result = mods::get_installed_mods();
+/// GET /api/mods/installed — 已安装模组（简化为纯数组，对齐初代）
+fn handle_installed(params: &Option<Value>) -> ApiResult {
+    let version_id = params
+        .as_ref()
+        .and_then(|p| p.get("versionId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if version_id.is_empty() {
+        return ApiResult::err(400, "Missing versionId");
+    }
+    let result = mods::get_installed_mods_for_version(&version_id);
     let mods_arr = result.get("mods").cloned().unwrap_or(json!([]));
-    ApiResult::ok(json!({ "mods": mods_arr }))
+    ApiResult::ok(mods_arr)
 }
 
 /// GET /api/mods/categories — 模组分类列表
@@ -780,7 +817,15 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                     "datePublished": v.get("date_published").and_then(|d| d.as_str()).unwrap_or(""),
                                     "downloads": v.get("downloads").and_then(|d| d.as_u64()).unwrap_or(0),
                                     "changelog": v.get("changelog").and_then(|c| c.as_str()).unwrap_or(""),
-                                    "files": files
+                                    "files": files,
+                                    "dependencies": v.get("dependencies").and_then(|d| d.as_array()).map(|arr| {
+                                        arr.iter().map(|de| json!({
+                                            "projectId": de.get("project_id").and_then(|p| p.as_str()).unwrap_or(""),
+                                            "versionId": de.get("version_id").and_then(|x| x.as_str()).unwrap_or(""),
+                                            "fileName": de.get("file_name").and_then(|x| x.as_str()).unwrap_or(""),
+                                            "dependencyType": de.get("dependency_type").and_then(|x| x.as_str()).unwrap_or("")
+                                        })).collect::<Vec<_>>()
+                                    }).unwrap_or_default()
                                 })
                             })
                             .collect();
@@ -1301,16 +1346,268 @@ async fn handle_get_dependencies_recursive(body: &Option<Value>) -> ApiResult {
     handle_get_dependencies(body).await
 }
 
-/// GET /api/mods/resolve-deps — 解析依赖
+/// GET /api/mods/resolve-deps — 解析依赖（仅项目元信息，不查兼容版本）
+/// 入参： ids（逗号分隔的 projectId 串）
+/// 返回： { [projectId]: { id,title,icon,description,downloads } }
 async fn handle_resolve_deps(params: &Option<Value>) -> ApiResult {
-    // 简化：复用 get-dependencies 的逻辑
-    handle_get_dependencies(params).await
+    let ids_str = params
+        .as_ref()
+        .and_then(|p| p.get("ids"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let ids: Vec<String> = ids_str
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if ids.is_empty() {
+        return ApiResult::ok(json!({}));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("VersePC/1.0")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let mut result = serde_json::Map::new();
+
+    // 批量查询项目信息
+    let batch_url = format!("{}/projects?ids={}", MODRINTH_API, serde_json::to_string(&ids).unwrap_or_default());
+    let batch_resp = client.get(&batch_url).send().await.ok();
+    if let Some(resp) = batch_resp {
+        if resp.status().is_success() {
+            if let Ok(arr) = resp.json::<Vec<Value>>().await {
+                for p in arr {
+                    let pid = p.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    if pid.is_empty() {
+                        continue;
+                    }
+                    result.insert(pid.to_string(), json!({
+                        "id": pid,
+                        "title": p.get("title").and_then(|v| v.as_str()).unwrap_or(pid),
+                        "icon": p.get("icon_url").and_then(|v| v.as_str()).unwrap_or(""),
+                        "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("").chars().take(100).collect::<String>(),
+                        "downloads": p.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0)
+                    }));
+                }
+            }
+        }
+    }
+
+    // 批量失败或缺失时逐个兜底
+    for id in &ids {
+        if result.contains_key(id) {
+            continue;
+        }
+        let url = format!("{}/project/{}", MODRINTH_API, id);
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(p) = resp.json::<Value>().await {
+                    let pid = p.get("id").and_then(|v| v.as_str()).unwrap_or(id.as_str());
+                    result.insert(pid.to_string(), json!({
+                        "id": pid,
+                        "title": p.get("title").and_then(|v| v.as_str()).unwrap_or(id.as_str()),
+                        "icon": p.get("icon_url").and_then(|v| v.as_str()).unwrap_or(""),
+                        "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("").chars().take(100).collect::<String>(),
+                        "downloads": p.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0)
+                    }));
+                }
+            }
+        }
+        // 仍然缺：补占位
+        result.entry(id.clone()).or_insert(json!({
+            "id": id,
+            "title": id,
+            "icon": "",
+            "description": "",
+            "downloads": 0
+        }));
+    }
+
+    ApiResult::ok(Value::Object(result))
 }
 
-/// POST /api/mods/resolve-deps-versions — 解析依赖版本
+/// POST /api/mods/resolve-deps-versions — 解析依赖，并匹配每个前置在当前游戏版本/加载器下的兼容版本
+/// 入参： ids（projectId 数组）、gameVersion、loader、source
+/// 返回： { [projectId]: { id,title,slug,icon,description,downloads,hasCompatibleVersion,
+///                          versionId,versionNumber,fileName,gameVersions,loaders } }
 async fn handle_resolve_deps_versions(body: &Option<Value>) -> ApiResult {
-    // 简化：复用 get-dependencies 的逻辑
-    handle_get_dependencies(body).await
+    let data = body.clone().unwrap_or(Value::Null);
+    let ids: Vec<String> = data
+        .get("ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let game_version = data.get("gameVersion").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let loader = data.get("loader").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    if ids.is_empty() {
+        return ApiResult::ok(json!({}));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent("VersePC/1.0")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    // 该项目信息：批量，失败则逐个兜底
+    let mut project_map: serde_json::Map<String, Value> = serde_json::Map::new();
+    let batch_url = format!("{}/projects?ids={}", MODRINTH_API, serde_json::to_string(&ids).unwrap_or_default());
+    if let Ok(resp) = client.get(&batch_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(arr) = resp.json::<Vec<Value>>().await {
+                for p in arr {
+                    if let Some(pid) = p.get("id").and_then(|v| v.as_str()) {
+                        project_map.insert(pid.to_string(), p);
+                    }
+                }
+            }
+        }
+    }
+    for id in &ids {
+        if project_map.contains_key(id) {
+            continue;
+        }
+        let url = format!("{}/project/{}", MODRINTH_API, id);
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(p) = resp.json::<Value>().await {
+                    if let Some(pid) = p.get("id").and_then(|v| v.as_str()) {
+                        project_map.insert(pid.to_string(), p);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut resolve = serde_json::Map::new();
+
+    // 对每个依赖查版本
+    for pid in &ids {
+        let project = project_map.get(pid);
+        let base: Value = project.map(|p| {
+            json!({
+                "id": p.get("id").and_then(|v| v.as_str()).unwrap_or(pid.as_str()),
+                "title": p.get("title").and_then(|v| v.as_str()).unwrap_or(pid.as_str()),
+                "slug": p.get("slug").and_then(|v| v.as_str()).unwrap_or(""),
+                "icon": p.get("icon_url").and_then(|v| v.as_str()).unwrap_or(""),
+                "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("").chars().take(100).collect::<String>(),
+                "downloads": p.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0)
+            })
+        }).unwrap_or_else(|| json!({
+            "id": pid,
+            "title": pid,
+            "slug": "",
+            "icon": "",
+            "description": "",
+            "downloads": 0
+        }));
+
+        // 查询该项目的版本列表，按 gameVersion + loader 过滤
+        let mut url = format!("{}/project/{}/version", MODRINTH_API, pid);
+        let mut params_list: Vec<String> = Vec::new();
+        if !loader.is_empty() {
+            params_list.push(format!("loaders=[\"{}\"]", loader));
+        }
+        if !game_version.is_empty() {
+            params_list.push(format!("game_versions=[\"{}\"]", game_version));
+        }
+        if !params_list.is_empty() {
+            url.push('?');
+            url.push_str(&params_list.join("&"));
+        }
+
+        let mut compatible: Option<Value> = None;
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(versions) = resp.json::<Vec<Value>>().await {
+                    if let Some(first) = versions.first() {
+                        compatible = Some(first.clone());
+                    }
+                }
+            }
+        }
+
+        // 客户端二次过滤兜底：服务端过滤可能不生效时（如空版本列表），重查全部再本地过滤
+        if compatible.is_none() && (!game_version.is_empty() || !loader.is_empty()) {
+            let full_url = format!("{}/project/{}/version", MODRINTH_API, pid);
+            if let Ok(resp) = client.get(&full_url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(versions) = resp.json::<Vec<Value>>().await {
+                        let match_ver = |v: &Value| -> bool {
+                            let gv_ok = if game_version.is_empty() {
+                                true
+                            } else {
+                                v.get("game_versions")
+                                    .and_then(|x| x.as_array())
+                                    .map(|a| a.iter().any(|g| g.as_str() == Some(game_version.as_str())))
+                                    .unwrap_or(false)
+                            };
+                            let l_ok = if loader.is_empty() {
+                                true
+                            } else {
+                                v.get("loaders")
+                                    .and_then(|x| x.as_array())
+                                    .map(|a| {
+                                        a.iter().any(|l| {
+                                            l.as_str().map(|ls| ls.eq_ignore_ascii_case(loader.as_str())).unwrap_or(false)
+                                        })
+                                    })
+                                    .unwrap_or(false)
+                            };
+                            gv_ok && l_ok
+                        };
+                        if let Some(matched) = versions.iter().find(|v| match_ver(v)) {
+                            compatible = Some(matched.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut entry = base;
+        let has_compatible = compatible.is_some();
+        if let Some(c) = compatible.as_ref() {
+            let file_name = c
+                .get("files")
+                .and_then(|f| f.as_array())
+                .and_then(|files| {
+                    files.iter()
+                        .find(|fa| fa.get("primary").and_then(|pr| pr.as_bool()).unwrap_or(false))
+                        .or_else(|| files.first())
+                        .and_then(|fa| fa.get("filename").and_then(|fnm| fnm.as_str()))
+                })
+                .unwrap_or("");
+            if let Some(mut e) = entry.as_object_mut() {
+                e.insert("hasCompatibleVersion".to_string(), json!(has_compatible));
+                e.insert("versionId".to_string(), json!(c.get("id").and_then(|v| v.as_str()).unwrap_or("")));
+                e.insert("versionNumber".to_string(), json!(c.get("version_number").and_then(|v| v.as_str()).unwrap_or("")));
+                e.insert("fileName".to_string(), json!(file_name));
+                e.insert("gameVersions".to_string(), Value::Array(c.get("game_versions").and_then(|v| v.as_array()).cloned().unwrap_or_default()));
+                e.insert("loaders".to_string(), Value::Array(c.get("loaders").and_then(|v| v.as_array()).cloned().unwrap_or_default()));
+            }
+        } else {
+            if let Some(mut e) = entry.as_object_mut() {
+                e.insert("hasCompatibleVersion".to_string(), json!(false));
+                e.insert("versionId".to_string(), json!(""));
+                e.insert("versionNumber".to_string(), json!(""));
+                e.insert("fileName".to_string(), json!(""));
+                e.insert("gameVersions".to_string(), json!([]));
+                e.insert("loaders".to_string(), json!([]));
+            }
+        }
+
+        resolve.insert(pid.clone(), entry);
+    }
+
+    ApiResult::ok(Value::Object(resolve))
 }
 
 // ============== 管理路由 ==============

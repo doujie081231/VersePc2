@@ -190,7 +190,7 @@
     selectSaveFolder: function (defaultPath) {
       return invoke('select_folder', {
         title: '选择保存位置',
-        default_path: defaultPath || null
+        defaultPath: defaultPath || null
       }).then(function (result) {
         if (result && result.cancelled === false && result.path) {
           return { cancelled: false, path: result.path, error: null };
@@ -266,12 +266,12 @@
   var system = {
     platform: platform,
     memoryOptimize: function () {
-      // Tauri 中通过 api_proxy 调用 /api/system/memory
+      // Tauri 中通过 api_proxy 调用 POST /api/memory-optimize 执行内存优化
       return invoke('api_proxy', {
-        method: 'GET',
-        path: '/api/system/memory',
+        method: 'POST',
+        path: '/api/memory-optimize',
         params: {},
-        body: null
+        body: {}
       }).then(function (result) {
         return result && result.body;
       });
@@ -279,8 +279,8 @@
     openExternal: function (url) {
       return invoke('open_external', { url: url });
     },
-    getDefaultModPath: function () {
-      return invoke('get_default_mod_path').then(function (result) {
+    getDefaultModPath: function (versionId) {
+      return invoke('get_default_mod_path', versionId ? { versionId: versionId } : {}).then(function (result) {
         if (result && result.success) return result.path;
         return '';
       });

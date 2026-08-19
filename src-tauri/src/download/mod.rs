@@ -7,5 +7,5 @@ pub mod mirror;
 pub mod resources_session;
 pub mod single;
 
-pub use batch::{download_asset_objects, select_asset_sources, AssetObject};
-pub use single::{download_single, download_with_mirror, compute_sha1, DownloadProgress, ProgressCb};
+pub use batch::{download_asset_objects, ensure_language_assets, select_asset_sources, AssetObject};
+pub use single::{download_single, download_with_mirror, download_with_mirror_retry, compute_sha1, DownloadProgress, ProgressCb};

@@ -541,11 +541,19 @@
 }
 
 .modmgr-icon--fallback {
-    background: var(--bg-secondary);
-    background-image: url('/img/icon.svg');
-    background-size: 60% 60%;
-    background-position: center;
-    background-repeat: no-repeat;
+    background: #7f8792;
+    background-image: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modmgr-icon--fallback::after {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    border-radius: 3px;
 }
 
 .modmgr-info {

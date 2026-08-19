@@ -1,13 +1,13 @@
 {
-  "version": "0.6.2",
-  "releaseName": "v0.6.2",
-  "releaseDate": "2026-08-18",
-  "releaseNotes": "VersePC2 v0.6.2\n\n修复:\n- 修复启动 Forge 整合包时缺少标准会话参数(--username/--uuid/--accessToken/--userType/--version)导致的启动崩溃\n- 修复微软账号 accessToken 未解密导致在线认证异常",
+  "version": "0.7.0",
+  "releaseName": "v0.7.0",
+  "releaseDate": "2026-08-19",
+  "releaseNotes": "VersePC2 v0.7.0\n\n修复:\n- 修复更新下载失败：不再因 Gitee 下载途中瞬时速度波动被误判低速而反复回退镜像源，最终导致下载失败\n- 修复设置-其它中内存使用率卡片无法显示（后端返回字段与前端期望不一致）\n- 修复内存优化按钮点击提示失败：正确调用 POST /api/memory-optimize 路由\n- 内存优化按 PCL 社区版实现对齐（完整清理工作集/修改列表/待机列表/文件缓存/注册表/物理内存合并）\n- 修复下载的模组图标破损：按文件真实格式解压识别，无图标时显示灰色占位\n- 修复 Forge 模组下载错误定位到 Fabric 整合包目录\n\n改进:\n- 版本设置页整体改造为真正的 Vue 组件（数据驱动，卡片模板渲染）",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.6.2/VersePC2-0.6.2.exe",
-      "size": 71862784,
-      "sha256": "CDCBA777A998845809BAA72E67DDD4F051021DDD7A7534AE958E34CBCCA78A6A"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.7.0/VersePC2-0.7.0.exe",
+      "size": 72030208,
+      "sha256": "418C630BFD950B83BA8DF04436976C82553E6D25BBDD0C1E05C562D8CE89A778"
     }
   }
 }

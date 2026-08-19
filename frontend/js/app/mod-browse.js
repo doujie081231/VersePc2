@@ -18,8 +18,16 @@ async function loadInstalledMods() {
                 ).join('');
             }
             container.innerHTML = warningHtml + mods.map(function (mod) {
-                return '<div class="mod-item">' +
-                    '<div class="mod-icon"><img src="' + escapeHtml(mod.icon || '') + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'mod-icon--fallback\')"></div>' +
+                const icon = mod.icon || '';
+                const isApiIcon = icon.indexOf('/api/') === 0;
+                const hash = isApiIcon && icon.match(/hash=([^&]+)/) ? decodeURIComponent(icon.match(/hash=([^&]+)/)[1]) : '';
+                let iconHtml;
+                if (icon && !isApiIcon) {
+                    iconHtml = '<div class="mod-icon"><img src="' + escapeHtml(icon) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'mod-icon--fallback\')"></div>';
+                } else {
+                    iconHtml = '<div class="mod-icon mod-icon--fallback"' + (hash ? ' data-sh="' + escapeHtml(hash) + '"' : '') + '></div>';
+                }
+                return '<div class="mod-item">' + iconHtml +
                     '<div class="mod-info">' +
                         '<div class="mod-name">' + escapeHtml(formatModNameWithChinese(mod.slug || mod.id || mod.fileName, mod.name)) + '</div>' +
                         '<div class="mod-desc">' + escapeHtml(mod.description) + '</div>' +
@@ -36,6 +44,16 @@ async function loadInstalledMods() {
                     '</div>' +
                 '</div>';
             }).join('');
+            container.querySelectorAll('.mod-icon[data-sh]').forEach(function (el) {
+                API.getModIcon(el.getAttribute('data-sh')).then(function (r) {
+                    console.warn('[modinst-icon] ok', el.getAttribute('data-sh'), (r && r.dataUrl) ? ('len=' + r.dataUrl.length) : JSON.stringify(r));
+                    if (r && r.dataUrl) {
+                        el.classList.remove('mod-icon--fallback');
+                        el.removeAttribute('data-sh');
+                        el.innerHTML = '<img src="' + r.dataUrl + '" alt="" style="width:100%;height:100%;object-fit:cover;">';
+                    }
+                }).catch(function (e) { console.warn('[modinst-icon] err', el.getAttribute('data-sh'), String(e && e.message || e)); });
+            });
         }
         document.getElementById('stat-mods').textContent = mods.length;
     } catch (e) { console.error('[Mods] Failed to load installed mods:', e); }

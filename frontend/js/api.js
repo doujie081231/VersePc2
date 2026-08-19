@@ -125,7 +125,7 @@ const ErrorHandler = {
 const API_BASE = '';
 
 /* Tauri 环境检测 — 在 Tauri 下 API 走 invoke('api_proxy') 而非 fetch */
-const _isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+const _isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_PROXY__);
 
 async function _tauriApiProxy(method, path, params, body) {
     // 30 秒超时，防止 Rust 端卡住时 init 流程永远阻塞
@@ -375,6 +375,7 @@ const API = {
     getModDownloadStatus: (sessionId) => apiGet('/api/mods/download-status', { sessionId }),
     getModDetail: (projectId, source = 'modrinth') => apiGet('/api/mods/detail', { projectId, source }),
     getResourceImage: (url) => apiGet('/api/resource-image', { url }),
+    getModIcon: (hash) => apiGet('/api/mod-icon', { hash }),
     getModVersions: (projectId, source = 'modrinth', loader = '', gameVersion = '') =>
         apiGet('/api/mods/versions', { projectId, source, loader, gameVersion }),
     getModCategories: (source = 'modrinth') => apiGet('/api/mods/categories', { source }),
@@ -562,7 +563,7 @@ const API = {
     // === 文件系统操作 ===
     openFolder: (folder) => apiPost('/api/open-folder', { folder }),
     openInExplorer: (targetPath) => apiPost('/api/filesystem/open-in-explorer', { targetPath }),
-    getDefaultModPath: () => apiGet('/api/filesystem/default-mod-path'),
+    getDefaultModPath: (versionId) => apiGet('/api/filesystem/default-mod-path', versionId ? { versionId } : {}),
     getDefaultResourcePath: (type) => apiGet('/api/filesystem/default-resource-path', { type }),
     getQuickAccessPaths: () => apiGet('/api/filesystem/quick-access'),
     getDrives: () => apiGet('/api/filesystem/drives'),
@@ -633,6 +634,8 @@ const API = {
     easytierStop: () => apiPost('/api/easytier/stop', {}),
     easytierDiagnose: () => apiGet('/api/easytier/diagnose'),
     easytierPeers: () => apiGet('/api/easytier/peers'),
+    easytierProfiles: () => apiGet('/api/easytier/profiles'),
+    easytierIdle: () => apiPost('/api/easytier/ide', {}),
     easytierLog: () => apiGet('/api/easytier/log'),
 
     checkModUpdates: (versionId) => apiPost('/api/mods/check-updates', { versionId }),

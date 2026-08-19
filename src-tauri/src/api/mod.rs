@@ -218,6 +218,7 @@ pub async fn api_proxy(
         || path == "/api/status"
         || path.starts_with("/api/jvm")
         || path.starts_with("/api/cleanup")
+        || path == "/api/memory-optimize"
     {
         system::handle(&method, &path, &params, &body)
     } else if path.starts_with("/api/sponsor") {

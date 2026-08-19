@@ -349,6 +349,68 @@ pub async fn download_file_race(
     Err(last_err)
 }
 
+/// 带 cache-buster 重试 + JAR 完整性校验的镜像下载（对齐初代 performRepair 的 downloadOne）
+/// - 至多重试 3 轮，第 2 轮起在原 URL 追加 `_cb=时间戳_第几轮` 强制 CDN 换路由
+/// - 下载完成后若是 .jar 且结构损坏，删除并重试
+pub async fn download_with_mirror_retry(
+    original_url: &str,
+    dest: &Path,
+    sha1: Option<&str>,
+    expected_size: Option<u64>,
+    download_source: &str,
+    timeout_secs: u64,
+) -> Result<(), String> {
+    const MAX_ATTEMPTS: usize = 3;
+    let mut last_err = String::new();
+    for attempt in 0..MAX_ATTEMPTS {
+        let url = if attempt == 0 {
+            original_url.to_string()
+        } else {
+            let cb = format!("_cb={}_{}", now_millis(), attempt);
+            if original_url.contains('?') {
+                format!("{}&{}", original_url, cb)
+            } else {
+                format!("{}?{}", original_url, cb)
+            }
+        };
+        match download_with_mirror(
+            &url,
+            dest,
+            sha1,
+            expected_size,
+            download_source,
+            timeout_secs,
+            None,
+        )
+        .await
+        {
+            Ok(()) => {
+                if dest.extension().and_then(|e| e.to_str()) == Some("jar")
+                    && !crate::utils::is_jar_intact(dest)
+                {
+                    let _ = std::fs::remove_file(dest);
+                    last_err = format!("JAR 结构不完整: {}", original_url);
+                    continue;
+                }
+                return Ok(());
+            }
+            Err(e) => {
+                last_err = e;
+                let _ = std::fs::remove_file(dest);
+            }
+        }
+    }
+    Err(last_err)
+}
+
+/// 当前毫秒时间戳（cache-buster 用）
+fn now_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
 pub async fn download_single(
     url: &str,
     dest: &Path,

@@ -20,7 +20,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tauri::AppHandle;
 
@@ -53,6 +53,15 @@ struct LaunchSession {
     failed_files: Vec<String>,
     active_downloads: Vec<String>,
     launch_result: Option<Value>,
+}
+
+/// 并发下载统计
+#[derive(Clone, Default)]
+struct LaunchDlStats {
+    completed: u32,
+    failed: u32,
+    failed_files: Vec<String>,
+    errors: Vec<String>,
 }
 
 impl LaunchSession {
@@ -289,11 +298,26 @@ async fn handle_launch(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     };
 
     // 依赖完整性检查
-    let dep_check_result = dep_check::check_dependencies(
-        &clean_id,
-        &settings,
-        external_path.as_deref(),
-    );
+    // 对齐 PCL：检查为纯同步重活（对每个 library/native/asset 逐一下文件系统 exists），
+    // 挪到阻塞线程池执行，避免占住 async 运行时导致启动流程卡顿
+    let dep_check_result = {
+        let clean_id = clean_id.clone();
+        let settings = settings.clone();
+        let external_path = external_path.clone();
+        match tokio::task::spawn_blocking(move || {
+            dep_check::check_dependencies(&clean_id, &settings, external_path.as_deref())
+        })
+        .await
+        {
+            Ok(r) => r,
+            Err(_) => {
+                return ApiResult::ok(json!({
+                    "success": false,
+                    "error": "依赖检查任务异常，请重试"
+                }));
+            }
+        }
+    };
 
     if !dep_check_result.java.ok {
         return ApiResult::ok(json!({
@@ -881,94 +905,121 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
 
     tauri::async_runtime::spawn(async move {
         let total = missing_files.len() as u32;
-        let mut completed: u32 = 0;
-        let mut failed: u32 = 0;
-        let mut failed_files: Vec<String> = Vec::new();
-        let mut errors: Vec<String> = Vec::new();
+        // 并发下载池（对齐初代 downloadOne 并发数 8）
+        const PARALLEL: usize = 8;
+        // (completed, failed, failed_files, errors)
+        let stats = std::sync::Arc::new(Mutex::new(LaunchDlStats::default()));
 
         eprintln!("[launch/download-deps] 后台开始下载 {} 个缺失文件 (session={})", total, sid);
 
-        for (i, file) in missing_files.iter().enumerate() {
-            // 更新会话状态
-            {
-                let mut s = sessions();
-                if let Some(sess) = s.get_mut(&sid) {
-                    let progress = (i as u32 * 100) / total.max(1);
-                    sess.status = "downloading".into();
-                    sess.progress = progress;
-                    sess.message = format!("下载文件 ({}/{}): {}", i + 1, total, file.name);
-                    sess.current_file = file.name.clone();
-                    sess.completed_files = completed;
-                    sess.completed = completed;
-                    sess.failed = failed;
-                    sess.queued = total - i as u32;
-                    sess.concurrent_downloads = 1;
-                    sess.active_downloads = vec![file.name.clone()];
-                    sess.failed_files = failed_files.clone();
-                    sess.last_activity = now_ms();
-                }
-            }
-            let progress = (i as u32 * 100) / total.max(1);
-            let _ = app_cloned.emit(
-                "launch-download-progress",
-                json!({
-                    "sessionId": sid,
-                    "status": "downloading",
-                    "progress": progress,
-                    "message": format!("下载文件 ({}/{}): {}", i + 1, total, file.name),
-                    "currentFile": file.name,
-                    "completed": completed,
-                    "failed": failed,
-                    "total": total
-                }),
-            );
+        let files: Vec<_> = missing_files
+            .into_iter()
+            .map(|f| {
+                let d = std::path::PathBuf::from(&f.path);
+                (f, d)
+            })
+            .collect();
 
-            // 创建父目录
-            let dest = std::path::PathBuf::from(&file.path);
-            if let Some(parent) = dest.parent() {
-                if !parent.exists() {
-                    if let Err(e) = std::fs::create_dir_all(parent) {
-                        eprintln!("[launch/download-deps] 创建目录失败 {}: {}", parent.display(), e);
-                        errors.push(format!("创建目录失败: {}", e));
-                        failed += 1;
-                        failed_files.push(file.name.clone());
-                        continue;
+        // 为并发流克隆引用，保留原变量供完成阶段使用
+        let app_stream = app_cloned.clone();
+        let sid_stream = sid.clone();
+        let src_stream = download_source.clone();
+        let stats_stream = stats.clone();
+
+        use futures_util::StreamExt;
+        futures_util::stream::iter(files)
+            .for_each_concurrent(PARALLEL, move |(file, dest)| {
+                let app_cur = app_stream.clone();
+                let sid_cur = sid_stream.clone();
+                let source_cur = src_stream.clone();
+                let stats_cur = stats_stream.clone();
+                async move {
+                    // 跳过 java 类型（用户自行安装）
+                    if file.kind == "java" {
+                        eprintln!("[launch/download-deps] 跳过 Java 依赖: {}", file.name);
+                        return;
                     }
+                    // 创建父目录
+                    if let Some(parent) = dest.parent() {
+                        if !parent.exists() {
+                            if let Err(e) = std::fs::create_dir_all(parent) {
+                                eprintln!("[launch/download-deps] 创建目录失败 {}: {}", parent.display(), e);
+                                let mut st = stats_cur.lock().unwrap();
+                                st.failed += 1;
+                                st.failed_files.push(file.name.clone());
+                                st.errors.push(format!("创建目录失败: {}", e));
+                                return;
+                            }
+                        }
+                    }
+                    let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.clone()) };
+                    let size = if file.size > 0 { Some(file.size) } else { None };
+                    match crate::download::download_with_mirror_retry(
+                        &file.url,
+                        &dest,
+                        sha1.as_deref(),
+                        size,
+                        &source_cur,
+                        120,
+                    )
+                    .await
+                    {
+                        Ok(()) => {
+                            stats_cur.lock().unwrap().completed += 1;
+                            eprintln!("[launch/download-deps] 下载成功: {}", file.name);
+                        }
+                        Err(e) => {
+                            let mut st = stats_cur.lock().unwrap();
+                            st.failed += 1;
+                            st.failed_files.push(file.name.clone());
+                            st.errors.push(format!("{}: {}", file.name, e));
+                            eprintln!("[launch/download-deps] 下载失败 {}: {}", file.name, e);
+                        }
+                    }
+                    // 推送进度 + 更新 session（每个文件完成后）
+                    let (completed, failed) = {
+                        let st = stats_cur.lock().unwrap();
+                        (st.completed, st.failed)
+                    };
+                    {
+                        let mut s = sessions();
+                        if let Some(sess) = s.get_mut(&sid_cur) {
+                            let progress = (completed + failed) * 100 / total.max(1);
+                            sess.status = "downloading".into();
+                            sess.progress = progress;
+                            sess.message = format!("下载完成 {}/{} 个文件", completed + failed, total);
+                            sess.current_file = file.name.clone();
+                            sess.completed_files = completed;
+                            sess.completed = completed;
+                            sess.failed = failed;
+                            sess.queued = total.saturating_sub(completed + failed);
+                            sess.concurrent_downloads = PARALLEL as u32;
+                            sess.last_activity = now_ms();
+                        }
+                    }
+                    let _ = app_cur.emit(
+                        "launch-download-progress",
+                        json!({
+                            "sessionId": sid_cur,
+                            "status": "downloading",
+                            "progress": (completed + failed) * 100 / total.max(1),
+                            "message": format!("下载完成 {}/{} 个文件", completed + failed, total),
+                            "currentFile": file.name,
+                            "completed": completed,
+                            "failed": failed,
+                            "total": total
+                        }),
+                    );
                 }
-            }
+            })
+            .await;
 
-            // 跳过 java 类型（用户自行安装）
-            if file.kind == "java" {
-                eprintln!("[launch/download-deps] 跳过 Java 依赖: {}", file.name);
-                continue;
-            }
-
-            // 调用统一下载器（用户选择的镜像源，默认 china-first 走国内 BMCLAPI）
-            let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.as_str()) };
-            let size = if file.size > 0 { Some(file.size) } else { None };
-            match crate::download::download_with_mirror(
-                &file.url,
-                &dest,
-                sha1,
-                size,
-                &download_source,
-                120,
-                None,
-            ).await {
-                Ok(()) => {
-                    completed += 1;
-                    eprintln!("[launch/download-deps] 下载成功: {}", file.name);
-                }
-                Err(e) => {
-                    failed += 1;
-                    failed_files.push(file.name.clone());
-                    errors.push(format!("{}: {}", file.name, e));
-                    eprintln!("[launch/download-deps] 下载失败 {}: {}", file.name, e);
-                }
-            }
-        }
-
-        // 完成：写入 session
+        // 完成：读取最终统计并写入 session
+        let final_stats = stats.lock().unwrap().clone();
+        let completed = final_stats.completed;
+        let failed = final_stats.failed;
+        let failed_files = final_stats.failed_files;
+        let errors = final_stats.errors;
         let final_status: &str = if failed > 0 && completed == 0 { "failed" } else { "completed" };
         {
             let mut s = sessions();
@@ -1003,7 +1054,6 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
             }),
         );
 
-        // 刷新 dep-check 缓存（java 版没迁移但留占位）
         eprintln!("[launch/download-deps] 完成: 成功 {} / 失败 {} / 总 {}", completed, failed, total);
     });
 

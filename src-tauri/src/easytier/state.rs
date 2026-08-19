@@ -38,6 +38,8 @@ pub struct EasyTierStatus {
     pub http_port: u16, // Terracotta HTTP API 端口
     pub player_name: String,
     pub profiles: Vec<Value>,
+    /// 当前所选 profile 下标（来自 /state 的 profile_index）
+    pub profile_index: i64,
     pub difficulty: Option<String>,
     pub error_type: Option<String>,
     pub error_message: Option<String>,
@@ -65,6 +67,7 @@ impl Default for EasyTierStatus {
             http_port: 0,
             player_name: String::new(),
             profiles: Vec::new(),
+            profile_index: -1,
             difficulty: None,
             error_type: None,
             error_message: None,
@@ -91,6 +94,7 @@ impl EasyTierStatus {
             "httpPort": self.http_port,
             "playerName": self.player_name,
             "profiles": self.profiles,
+            "profileIndex": self.profile_index,
             "difficulty": self.difficulty,
             "errorType": self.error_type,
             "errorMessage": self.error_message,

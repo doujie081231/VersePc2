@@ -28,6 +28,23 @@ fn resolve_default_path(default_path: Option<String>) -> Option<std::path::PathB
     None
 }
 
+/// 兜底解析选中版本的 mods 目录（前端传参丢失时保证对话框定位正确）
+fn resolve_default_mods_dir() -> Option<std::path::PathBuf> {
+    let settings = crate::storage::load_settings();
+    let version_id = settings
+        .get("selectedVersion")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let dir = crate::api::mods::resolve_mods_dir(&settings, &version_id, "")?;
+    let _ = std::fs::create_dir_all(&dir);
+    if dir.exists() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
 /// Tauri 命令：dialog_open
 /// 兼容 Electron dialog.showOpenDialog(options)
 #[tauri::command]
@@ -120,10 +137,29 @@ pub async fn dialog_open(app: tauri::AppHandle, options: Option<Value>) -> Value
 #[tauri::command]
 pub async fn select_folder(app: tauri::AppHandle, title: Option<String>, default_path: Option<String>) -> Value {
     let title = title.unwrap_or_else(|| "选择文件夹".to_string());
+    eprintln!("[dialog] select_folder default_path: {:?}", default_path);
+    let effective = resolve_default_path(default_path.clone()).or_else(resolve_default_mods_dir);
+    eprintln!("[dialog] select_folder effective: {:?}", effective);
+    {
+        let _ = std::fs::create_dir_all(crate::storage::resolve_data_dir().join("logs"));
+        let log_path = crate::storage::resolve_data_dir().join("logs").join("mod-save-dialog.log");
+        let line = format!(
+            "default_path={:?} effective={:?}\n",
+            default_path, effective
+        );
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_path)
+            .map(|mut f| {
+                use std::io::Write;
+                let _ = f.write_all(line.as_bytes());
+            });
+    }
     let result = tokio::task::spawn_blocking(move || -> Value {
         let mut builder = app.dialog().file();
         builder = builder.set_title(&title);
-        if let Some(ref dp) = resolve_default_path(default_path) {
+        if let Some(ref dp) = effective {
             if dp.exists() {
                 builder = builder.set_directory(dp);
             }
@@ -150,11 +186,12 @@ pub async fn select_folder_api(
 ) -> crate::api::ApiResult {
     let title = title.unwrap_or_else(|| "选择文件夹".to_string());
     let app_clone = app.clone();
+    let effective = resolve_default_path(default_path).or_else(resolve_default_mods_dir);
 
     let body = tokio::task::spawn_blocking(move || -> Value {
         let mut builder = app_clone.dialog().file();
         builder = builder.set_title(&title);
-        if let Some(ref dp) = resolve_default_path(default_path) {
+        if let Some(ref dp) = effective {
             if dp.exists() {
                 builder = builder.set_directory(dp);
             }
