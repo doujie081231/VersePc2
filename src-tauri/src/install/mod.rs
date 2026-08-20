@@ -198,8 +198,8 @@ pub async fn perform_installation(
 
     // 阶段 3：下载 libraries（并发，最多 16 个）
     update!(session::InstallStage::Libraries, 0, "下载依赖库...");
-    let libraries = version_details.get("libraries").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let valid_libs: Vec<Value> = libraries.iter().filter(|lib| evaluate_rules(lib)).cloned().collect();
+    let libraries = merge_inherited_libraries(&version_details, &versions_dir);
+    let valid_libs: Vec<Value> = libraries.into_iter().filter(|lib| evaluate_rules(lib)).collect();
     let total_libs = valid_libs.len() as u32;
 
     use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
@@ -241,6 +241,16 @@ pub async fn perform_installation(
         .collect()
         .await;
     drop(lib_results);
+    let failed_total = failed_libs.load(AtomicOrdering::SeqCst);
+    if failed_total > 0 {
+        let fail_msg = format!("依赖库下载失败 {} 个，请检查网络或稍后重试", failed_total);
+        session::update_session(&app, &session_id, |s| {
+            s.stage = session::InstallStage::Failed;
+            s.progress = calc_progress(&session::InstallStage::Libraries, 100);
+            s.message = fail_msg;
+        });
+        return;
+    }
     update!(session::InstallStage::Libraries, 100, "依赖库已下载");
     check_cancel!();
 
@@ -476,7 +486,53 @@ async fn fetch_json(url: &str, download_source: &str) -> Result<Value, String> {
 }
 
 /// 评估库的 rules（平台兼容性）
-/// 对应原项目 evaluateRules
+/// 递归合并版本及其继承版本（inheritsFrom）的 libraries，供依赖库下载使用。
+/// 顺序：子版本在前、父版本在后；按 name 去重，保留先出现的（子版本优先）。
+fn merge_inherited_libraries(json: &Value, versions_dir: &std::path::Path) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+    collect_libraries(json, versions_dir, &mut out, &mut seen, &mut visited);
+    out
+}
+
+/// 自底向下递归收集 libraries（子在前、父在后）
+fn collect_libraries(
+    json: &Value,
+    versions_dir: &std::path::Path,
+    out: &mut Vec<Value>,
+    seen: &mut std::collections::HashSet<String>,
+    visited: &mut std::collections::HashSet<String>,
+) {
+    if let Some(libs) = json.get("libraries").and_then(|v| v.as_array()) {
+        for lib in libs {
+            if let Some(name) = lib.get("name").and_then(|v| v.as_str()) {
+                if seen.insert(name.to_string()) {
+                    out.push(lib.clone());
+                }
+            } else {
+                out.push(lib.clone());
+            }
+        }
+    }
+    if let Some(parent_id) = json.get("inheritsFrom").and_then(|v| v.as_str()) {
+        if visited.insert(parent_id.to_string()) {
+            if let Some(parent) = load_local_version_json(parent_id, versions_dir) {
+                collect_libraries(&parent, versions_dir, out, seen, visited);
+            }
+        }
+    }
+}
+
+/// 从本地版本目录读取某版本的 json
+fn load_local_version_json(version_id: &str, versions_dir: &std::path::Path) -> Option<Value> {
+    let path = versions_dir
+        .join(version_id)
+        .join(format!("{}.json", version_id));
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
 fn evaluate_rules(lib: &Value) -> bool {
     let rules = match lib.get("rules").and_then(|v| v.as_array()) {
         Some(r) => r,
