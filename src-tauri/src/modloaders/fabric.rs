@@ -386,6 +386,10 @@ async fn install_fabric_impl(
         eprintln!("[Fabric] 库下载完成: 成功 {}, 失败 {}", success, fail);
         if fail > 0 {
             eprintln!("[Fabric] 警告: {} 个库下载失败", fail);
+            return json!({
+                "success": false,
+                "error": format!("Fabric 加载器依赖库下载失败 {} 个，请检查网络后重试", fail)
+            });
         }
     } else {
         eprintln!("[Fabric] 所有库文件已存在，无需下载");

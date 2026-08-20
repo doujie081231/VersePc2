@@ -310,6 +310,12 @@ pub async fn install_optifine(
                 "[OptiFine] 库下载完成: 成功 {}, 失败 {}",
                 success, fail
             );
+            if fail > 0 {
+                return json!({
+                    "success": false,
+                    "error": format!("OptiFine 依赖库下载失败 {} 个，请检查网络后重试", fail)
+                });
+            }
         }
 
         // 追加 OptiFine 库（如不存在）
