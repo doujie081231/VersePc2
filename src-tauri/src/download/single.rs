@@ -690,6 +690,14 @@ async fn download_once(
     file.flush().await.map_err(|e| format!("刷新文件失败: {}", e))?;
     drop(file);
 
+    if total_size > 0 && downloaded < total_size {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(format!(
+            "下载不完整: 已接收 {} 字节，期望 {} 字节",
+            downloaded, total_size
+        ));
+    }
+
     // 重命名 .downloading → 目标文件
     tokio::fs::rename(&tmp_path, dest)
         .await
