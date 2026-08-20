@@ -89,12 +89,6 @@ pub fn resolve_max_memory(
             let physical_cap = (total_mb.saturating_sub(system_reserve)).max(512);
             auto_mb = auto_mb.min(physical_cap as f64);
 
-            // 当前可用内存约束（保留 15% 给 JVM 自身和系统波动）
-            let free_cap = ((free_mb as f64) * 0.85).floor();
-            if auto_mb > free_cap {
-                auto_mb = free_cap.max(min_required_mb);
-            }
-
             // 封顶 16GB，对齐 256MB
             let mut result = auto_mb.max(512.0).min(16384.0) as u64;
             result = (result / 256) * 256;
