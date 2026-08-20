@@ -647,6 +647,12 @@ const API = {
     cancelDownload: (taskId) => apiPost('/api/downloads/cancel', { taskId }),
     getDownloadHistory: (limit = 15, offset = 0) => apiGet('/api/downloads/history', { limit, offset }),
 
+    // === 崩溃分析器 ===
+    getCrashLogs: (version) => apiGet('/api/crash/logs', { version }),
+    analyzeCrashFile: (filePath) => apiPost('/api/crash/analyze', { filePath }),
+    getCrashLogContent: (path) => apiGet('/api/crash/log-content', { path }),
+    exportCrashReport: (files, analysis) => apiPost('/api/crash/export', { files, analysis }),
+
     // === 崩溃日志导出 ===
     exportCrashLog: (versionId) => {
         if (_isTauri) {
@@ -658,7 +664,7 @@ const API = {
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `crash-log-${versionId || 'unknown'}.log`;
+                    a.download = (data.fileName && data.fileName.endsWith('.txt')) ? data.fileName : `crash-log-${versionId || 'unknown'}.txt`;
                     a.click();
                     URL.revokeObjectURL(url);
                 }

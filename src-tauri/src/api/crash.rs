@@ -12,7 +12,60 @@ use std::path::PathBuf;
 
 use crate::api::ApiResult;
 use crate::crash_analyzer;
+use crate::launch;
 use crate::storage;
+
+/// 构建崩溃日志搜索目录集合（按版本解析真实游戏目录）
+/// 复刻 handle_list_logs / handle_log_content / handle_export 原有目录逻辑，
+/// 并补充版本实际游戏目录，覆盖隔离版本 `data/versions/<id>/crash-reports`。
+fn version_crash_search_dirs(version_id: &str) -> Vec<PathBuf> {
+    let data_dir = storage::resolve_data_dir();
+    let settings = storage::load_settings();
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    if !version_id.is_empty() {
+        let versions_dir = data_dir.join("versions");
+        let root = launch::args_builder::resolve_game_dir(
+            version_id,
+            None,
+            None,
+            &settings,
+            &versions_dir,
+            &data_dir,
+        );
+        dirs.push(root.join("crash-reports"));
+        dirs.push(versions_dir.join(version_id).join("crash-reports"));
+    }
+
+    let game_dir = crate::utils::get_str(&settings, "gameDir");
+    if !game_dir.is_empty() {
+        dirs.push(PathBuf::from(&game_dir).join("crash-reports"));
+    }
+    dirs.push(data_dir.join("crash-reports"));
+    dirs.push(crash_analyzer::constants::default_minecraft_dir().join("crash-reports"));
+    dirs
+}
+
+/// 构建崩溃日志路径白名单（覆盖所有版本隔离目录 + 全局目录）
+fn crash_whitelist_dirs() -> Vec<PathBuf> {
+    let data_dir = storage::resolve_data_dir();
+    let settings = storage::load_settings();
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    let game_dir = crate::utils::get_str(&settings, "gameDir");
+    if !game_dir.is_empty() {
+        dirs.push(PathBuf::from(&game_dir).join("crash-reports"));
+    }
+    dirs.push(data_dir.join("crash-reports"));
+    dirs.push(crash_analyzer::constants::default_minecraft_dir().join("crash-reports"));
+
+    if let Ok(entries) = std::fs::read_dir(data_dir.join("versions")) {
+        for entry in entries.flatten() {
+            dirs.push(entry.path().join("crash-reports"));
+        }
+    }
+    dirs
+}
 
 /// 处理崩溃分析相关路由
 pub async fn handle(
@@ -71,19 +124,13 @@ fn handle_list_logs(params: &Option<Value>) -> ApiResult {
         .and_then(|p| p.get("limit"))
         .and_then(|v| v.as_u64())
         .unwrap_or(20) as usize;
+    let version_id = params
+        .as_ref()
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
-    let mut search_dirs: Vec<PathBuf> = Vec::new();
-
-    // 全局游戏目录
-    let settings = storage::load_settings();
-    let game_dir = crate::utils::get_str(&settings, "gameDir");
-    if !game_dir.is_empty() {
-        search_dirs.push(PathBuf::from(&game_dir).join("crash-reports"));
-    }
-    // 数据目录下的 crash-reports
-    search_dirs.push(storage::resolve_data_dir().join("crash-reports"));
-    // 默认 .minecraft 目录
-    search_dirs.push(crash_analyzer::constants::default_minecraft_dir().join("crash-reports"));
+    let search_dirs = version_crash_search_dirs(version_id);
 
     let mut logs: Vec<Value> = Vec::new();
     let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -115,9 +162,11 @@ fn handle_list_logs(params: &Option<Value>) -> ApiResult {
 
                     logs.push(json!({
                         "file": name,
+                        "name": name,
                         "path": path.to_string_lossy(),
                         "size": size,
-                        "modifiedTime": mtime
+                        "modifiedTime": mtime,
+                        "time": mtime
                     }));
                 }
             }
@@ -191,14 +240,7 @@ fn handle_log_content(params: &Option<Value>) -> ApiResult {
         Err(_) => return ApiResult::err(404, "文件不存在"),
     };
 
-    let mut search_dirs: Vec<PathBuf> = Vec::new();
-    let settings = storage::load_settings();
-    let game_dir = crate::utils::get_str(&settings, "gameDir");
-    if !game_dir.is_empty() {
-        search_dirs.push(PathBuf::from(&game_dir).join("crash-reports"));
-    }
-    search_dirs.push(storage::resolve_data_dir().join("crash-reports"));
-    search_dirs.push(crash_analyzer::constants::default_minecraft_dir().join("crash-reports"));
+    let search_dirs = crash_whitelist_dirs();
 
     let mut in_whitelist = false;
     for dir in &search_dirs {
@@ -249,14 +291,8 @@ fn handle_export(body: &Option<Value>) -> ApiResult {
     let data_dir = storage::resolve_data_dir();
     let settings = storage::load_settings();
 
-    // 收集崩溃报告搜索目录（与 handle_list_logs 一致）
-    let mut search_dirs: Vec<PathBuf> = Vec::new();
-    let game_dir = crate::utils::get_str(&settings, "gameDir");
-    if !game_dir.is_empty() {
-        search_dirs.push(PathBuf::from(&game_dir).join("crash-reports"));
-    }
-    search_dirs.push(data_dir.join("crash-reports"));
-    search_dirs.push(crash_analyzer::constants::default_minecraft_dir().join("crash-reports"));
+    // 收集崩溃报告搜索目录（与 handle_list_logs 一致，按版本解析）
+    let search_dirs = version_crash_search_dirs(version_id);
 
     // 收集文件（按文件名去重）
     let mut files: Vec<(String, PathBuf)> = Vec::new();

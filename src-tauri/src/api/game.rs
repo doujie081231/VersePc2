@@ -251,17 +251,30 @@ fn handle_crash_analyze(params: &Option<Value>) -> ApiResult {
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    // 确定 .minecraft 目录
+    // 确定游戏目录：按版本解析真实游戏根目录（与启动逻辑一致），
+    // 替代固定 ~/.minecraft，避免读取到其它版本/旧日志导致误判
     let settings = storage::load_settings();
-    let game_dir = utils::get_str(&settings, "gameDir");
-    let minecraft_dir = if !game_dir.is_empty() {
-        std::path::PathBuf::from(&game_dir)
-    } else {
-        crate::crash_analyzer::constants::default_minecraft_dir()
-    };
-
-    // 清理外部版本标记
     let clean_id = clean_external_marker(version_id);
+
+    let minecraft_dir = if clean_id.is_empty() {
+        let game_dir = utils::get_str(&settings, "gameDir");
+        if !game_dir.is_empty() {
+            std::path::PathBuf::from(&game_dir)
+        } else {
+            crate::crash_analyzer::constants::default_minecraft_dir()
+        }
+    } else {
+        let data_dir = storage::resolve_data_dir();
+        let versions_dir = data_dir.join("versions");
+        launch::args_builder::resolve_game_dir(
+            &clean_id,
+            None,
+            None,
+            &settings,
+            &versions_dir,
+            &data_dir,
+        )
+    };
 
     let analyzer = crate::crash_analyzer::CrashAnalyzer::new(
         if clean_id.is_empty() { None } else { Some(clean_id.clone()) },
@@ -424,24 +437,28 @@ fn handle_crash_analyze(params: &Option<Value>) -> ApiResult {
                 "medium"
             };
 
-            (
-                true,
-                if !ea_reason.is_empty() {
-                    ea_reason
-                } else {
-                    format!("游戏异常退出（退出码: {}）", ea_code)
-                },
-                if !ea_sugg.is_empty() {
-                    ea_sugg
-                } else {
-                    "请查看日志获取更多信息，或尝试重新启动游戏。".to_string()
-                },
-                fallback_excerpt,
-                fallback_desc,
-                if log_file.is_empty() { "(进程输出)".to_string() } else { log_file },
-                None,
-                fallback_sev.to_string(),
-            )
+            if error_lines.is_empty() && fallback_excerpt.is_empty() {
+                (found, reason.clone(), solution.clone(), log_excerpt, output.detail.clone(), log_file, mod_name, severity)
+            } else {
+                (
+                 true,
+                 if !ea_reason.is_empty() {
+                     ea_reason
+                 } else {
+                     format!("游戏异常退出（退出码: {}）", ea_code)
+                 },
+                 if !ea_sugg.is_empty() {
+                     ea_sugg
+                 } else {
+                     "请查看日志获取更多信息，或尝试重新启动游戏。".to_string()
+                 },
+                 fallback_excerpt,
+                 fallback_desc,
+                 if log_file.is_empty() { "(进程输出)".to_string() } else { log_file },
+                 None,
+                 fallback_sev.to_string(),
+                )
+            }
         } else {
             (found, reason.clone(), solution.clone(), log_excerpt, output.detail.clone(), log_file, mod_name, severity)
         }

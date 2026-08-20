@@ -486,10 +486,9 @@ class CrashAnalyzerUI {
                 const v = launchVersionCustomSelect.getValue();
                 if (v) selectedVersion = v;
             }
-            const response = await fetch(`/api/crash/logs?version=${encodeURIComponent(selectedVersion)}`);
-            const data = await response.json();
+            const data = await API.getCrashLogs(selectedVersion);
 
-            if (data.success && data.logs && data.logs.length > 0) {
+            if (data && data.logs && data.logs.length > 0) {
                 listEl.innerHTML = '';
                 data.logs.forEach(log => {
                     const item = document.createElement('div');
@@ -538,13 +537,7 @@ class CrashAnalyzerUI {
         resultEl.innerHTML = '<div class="loading">分析中...</div>';
 
         try {
-            const response = await fetch('/api/crash/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filePath: logPath })
-            });
-
-            const data = await response.json();
+            const data = await API.analyzeCrashFile(logPath);
 
             if (data.success && data.result) {
                 this.currentAnalysis = data.result;
@@ -697,18 +690,18 @@ ${this.currentAnalysis.crashReasons ? this.currentAnalysis.crashReasons.map(r =>
         if (!this.currentAnalysis) return;
 
         try {
-            const response = await fetch('/api/crash/export', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    files: this.currentAnalysis.files,
-                    analysis: this.currentAnalysis.detail
-                })
-            });
-
-            const data = await response.json();
+            const data = await API.exportCrashReport(this.currentAnalysis.files, this.currentAnalysis.detail);
             if (data.success) {
-                showToast('报告已导出', 'success');
+                if (data.content) {
+                    const blob = new Blob([data.content], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = (data.fileName && data.fileName.endsWith('.txt')) ? data.fileName : 'VersePC_Crash.txt';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+                showToast('报告已导出 (.txt)', 'success');
             } else {
                 showToast('导出失败: ' + (data.error || '未知错误'), 'error');
             }
@@ -729,10 +722,9 @@ ${this.currentAnalysis.crashReasons ? this.currentAnalysis.crashReasons.map(r =>
      */
     async viewFullLog(logPath) {
         try {
-            const response = await fetch(`/api/crash/log-content?path=${encodeURIComponent(logPath)}`);
-            const data = await response.json();
+            const data = await API.getCrashLogContent(logPath);
 
-            if (data.success) {
+            if (data && data.content) {
                 const resultEl = document.getElementById('crash-analysis-result');
                 const existingContent = resultEl.innerHTML;
 

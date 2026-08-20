@@ -72,13 +72,7 @@ impl CrashAnalyzer {
         let reasons = if logs.log_mc.is_some() || logs.log_hs.is_some() || logs.log_crash.is_some() {
             crit1::analyze(&logs)
         } else {
-            let mut r: HashMap<CrashReason, Vec<String>> = HashMap::new();
-            utils::append_reason(
-                &mut r,
-                CrashReason::Unknown,
-                Some(vec!["未找到任何日志文件".to_string()]),
-            );
-            r
+            HashMap::new()
         };
 
         // 步骤 4：生成建议文本
