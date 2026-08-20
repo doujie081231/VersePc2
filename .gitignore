@@ -4,6 +4,7 @@ src-tauri/false/
 node_modules/
 dist/
 frontend/installer-app/
+.scratch/
 *.log
 logs/
 build-log.txt

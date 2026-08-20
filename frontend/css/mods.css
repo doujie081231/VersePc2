@@ -885,3 +885,59 @@
     width: 100%;
     display: block;
 }
+
+/* 无对应版本文件夹确认卡片（Vue 模板渲染） */
+.modnf-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+}
+.modnf-card {
+    width: 92%;
+    max-width: 400px;
+    background: var(--bg-secondary, #22262e);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    padding: 24px 22px 20px;
+    text-align: center;
+}
+.modnf-icon {
+    font-size: 32px;
+    line-height: 1;
+    margin-bottom: 10px;
+}
+.modnf-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #e6e9ef);
+    margin-bottom: 10px;
+}
+.modnf-message {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary, #9aa3b2);
+    margin: 0 0 20px;
+}
+.modnf-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.modnf-actions .btn {
+    min-width: 76px;
+}
+.modnf-fade-enter-active,
+.modnf-fade-leave-active {
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.modnf-fade-enter-from,
+.modnf-fade-leave-to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+}

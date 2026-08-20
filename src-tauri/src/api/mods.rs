@@ -45,6 +45,7 @@ use tauri::AppHandle;
 use crate::api::ApiResult;
 use crate::download::{download_with_mirror, resources_session};
 use crate::mods;
+use crate::resource::wiki;
 use crate::storage;
 
 /// Modrinth API
@@ -316,12 +317,37 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
+    let mut cf_query = query.clone();
+    let mut mr_query = query.clone();
+    let plan_debug = wiki::build_plan(
+        &query.to_lowercase(),
+        "mod",
+        source == "any" || source == "curseforge",
+        source == "any" || source == "modrinth",
+    );
+    match &plan_debug {
+        Ok(plan) => {
+            if plan.is_chinese {
+                if let Some(alt) = &plan.cf_alt {
+                    cf_query = alt.clone();
+                }
+                if let Some(alt) = &plan.mr_alt {
+                    mr_query = alt.clone();
+                }
+            }
+        }
+        Err(_) => {}
+    }
+
     let mut all_hits: Vec<Value> = Vec::new();
     let mut total_hits: u64 = 0;
+    let mut mr_hits = 0usize;
+    let mut cf_hits = 0usize;
 
     // Modrinth 源
     if source == "any" || source == "modrinth" {
-        if let Ok((hits, total)) = search_modrinth_mods(&client, &query, &loader, &mc_version, &category, &sort, limit, offset).await {
+        if let Ok((hits, total)) = search_modrinth_mods(&client, &mr_query, &loader, &mc_version, &category, &sort, limit, offset).await {
+            mr_hits = hits.len();
             all_hits.extend(hits);
             total_hits = total_hits.max(total);
         }
@@ -329,7 +355,8 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
 
     // CurseForge 源
     if source == "any" || source == "curseforge" {
-        if let Ok((hits, total)) = search_curseforge_mods(&client, &query, &loader, &mc_version, &sort, limit, offset).await {
+        if let Ok((hits, total)) = search_curseforge_mods(&client, &cf_query, &loader, &mc_version, &sort, limit, offset).await {
+            cf_hits = hits.len();
             all_hits.extend(hits);
             total_hits = total_hits.max(total);
         }
@@ -345,10 +372,27 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
         all_hits.truncate(limit);
     }
 
+    let (plan_is_chinese, plan_cf_alt, plan_mr_alt, plan_mr_slugs, plan_err) = match &plan_debug {
+        Ok(p) => (p.is_chinese, p.cf_alt.clone(), p.mr_alt.clone(), p.mr_slugs.clone(), None::<String>),
+        Err(e) => (false, None, None, Vec::new(), Some(e.clone())),
+    };
+
     ApiResult::ok(json!({
         "hits": all_hits,
         "total": total_hits,
-        "offset": offset
+        "offset": offset,
+        "debug": {
+            "raw": query,
+            "isChine": plan_is_chinese,
+            "cfAlt": plan_cf_alt,
+            "mrAlt": plan_mr_alt,
+            "mrSlugs": plan_mr_slugs,
+            "planErr": plan_err,
+            "cfQuery": cf_query,
+            "mrQuery": mr_query,
+            "cfHits": cf_hits,
+            "mrHits": mr_hits
+        }
     }))
 }
 
@@ -875,22 +919,36 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                         let versions: Vec<Value> = files
                             .iter()
                             .map(|f| {
-                                let loaders = f
+                                let mut loaders: Vec<String> = f
                                     .get("modLoaders")
                                     .and_then(|l| l.as_array())
                                     .map(|arr| {
                                         arr.iter()
                                             .filter_map(|ml| {
                                                 ml.get("modLoader").and_then(|id| id.as_u64()).and_then(|id| match id {
-                                                    1 => Some("forge"),
-                                                    4 => Some("fabric"),
-                                                    5 => Some("neoforge"),
+                                                    1 => Some("forge".to_string()),
+                                                    4 => Some("fabric".to_string()),
+                                                    5 => Some("neoforge".to_string()),
                                                     _ => None,
                                                 })
                                             })
-                                            .collect::<Vec<_>>()
+                                            .collect()
                                     })
                                     .unwrap_or_default();
+                                if loaders.is_empty() {
+                                    if let Some(arr) = f.get("gameVersions").and_then(|g| g.as_array()) {
+                                        for gv in arr {
+                                            if let Some(s) = gv.as_str() {
+                                                let low = s.to_lowercase();
+                                                if low == "forge" || low == "fabric" || low == "neoforge" || low == "quilt" {
+                                                    if !loaders.contains(&low) {
+                                                        loaders.push(low);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 let files_arr: Vec<Value> = f
                                     .get("fileName")
                                     .and_then(|n| n.as_str())
@@ -908,6 +966,28 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                     3 => "alpha",
                                     _ => "release",
                                 };
+                                let deps: Vec<Value> = f
+                                    .get("dependencies")
+                                    .and_then(|d| d.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .map(|d| {
+                                                let rel = d.get("relationType").and_then(|x| x.as_u64()).unwrap_or(0);
+                                                let dep_type = match rel {
+                                                    1 | 2 => "required",
+                                                    5 => "incompatible",
+                                                    _ => "optional",
+                                                };
+                                                json!({
+                                                    "projectId": d.get("modId").map(|m| m.to_string()).unwrap_or_default(),
+                                                    "versionId": d.get("fileId").map(|m| m.to_string()).unwrap_or_default(),
+                                                    "dependencyType": dep_type,
+                                                    "fileName": d.get("fileName").and_then(|x| x.as_str()).unwrap_or("")
+                                                })
+                                            })
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
                                 json!({
                                     "id": f.get("id").map(|i| i.to_string()).unwrap_or_default(),
                                     "name": f.get("displayName").and_then(|n| n.as_str()).or_else(|| f.get("fileName").and_then(|n| n.as_str())).unwrap_or(""),
@@ -918,7 +998,8 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                     "datePublished": f.get("fileDate").and_then(|d| d.as_str()).unwrap_or(""),
                                     "downloads": f.get("downloadCount").and_then(|d| d.as_u64()).unwrap_or(0),
                                     "changelog": f.get("changelog").and_then(|c| c.as_str()).unwrap_or(""),
-                                    "files": files_arr
+                                    "files": files_arr,
+                                    "dependencies": deps
                                 })
                             })
                             .collect();
@@ -971,7 +1052,7 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
         .to_string();
     let settings = storage::load_settings();
     // 前端选择的保存路径（默认模组路径）。优先使用它作为 mods 目录，
-    // 未传时才按当前选中版本自动定位（对齐 PCL：下载到当前实例的 mods 文件夹）。
+    // 未传时才按当前选中版本自动定位到该实例的 mods 文件夹。
     let save_path = body
         .as_ref()
         .and_then(|b| b.get("savePath"))
@@ -1355,6 +1436,11 @@ async fn handle_resolve_deps(params: &Option<Value>) -> ApiResult {
         .and_then(|p| p.get("ids"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
+    let source = params
+        .as_ref()
+        .and_then(|p| p.get("source"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("modrinth");
     let ids: Vec<String> = ids_str
         .split(',')
         .map(|s| s.trim().to_string())
@@ -1362,6 +1448,10 @@ async fn handle_resolve_deps(params: &Option<Value>) -> ApiResult {
         .collect();
     if ids.is_empty() {
         return ApiResult::ok(json!({}));
+    }
+
+    if source == "curseforge" {
+        return resolve_cf_deps(&ids).await;
     }
 
     let client = reqwest::Client::builder()
@@ -1425,6 +1515,70 @@ async fn handle_resolve_deps(params: &Option<Value>) -> ApiResult {
         }));
     }
 
+    ApiResult::ok(Value::Object(result))
+}
+
+async fn resolve_cf_deps(ids: &[String]) -> ApiResult {
+    let settings = storage::load_settings();
+    let cf_api_key = settings
+        .get("curseforgeApiKey")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_CF_API_KEY);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent("VersePC/1.0")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    let mut result = serde_json::Map::new();
+    let mut futures = Vec::new();
+    for id in ids {
+        let id = id.clone();
+        let client = client.clone();
+        let key = cf_api_key.to_string();
+        futures.push(tokio::spawn(async move {
+            let url = format!("{}/mods/{}", CURSEFORGE_API, urlencoding::encode(&id));
+            let r = client.get(&url).header("x-api-key", key).send().await.ok()?;
+            if !r.status().is_success() {
+                return None;
+            }
+            let v: Value = r.json().await.ok()?;
+            let p = v.get("data")?.clone();
+            let pid = p.get("id").map(|i| i.to_string())?;
+            let title = p.get("name")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| pid.clone());
+            let logo = p.get("logo")
+                .and_then(|l| l.get("thumbnailUrl"))
+                .and_then(|u| u.as_str())
+                .unwrap_or("")
+                .to_string();
+            Some((pid.clone(), json!({
+                "id": pid.clone(),
+                "title": title,
+                "slug": p.get("slug").and_then(|x| x.as_str()).unwrap_or(""),
+                "icon": logo,
+                "description": p.get("summary").and_then(|x| x.as_str()).unwrap_or("").chars().take(100).collect::<String>(),
+                "downloads": p.get("downloadCount").and_then(|x| x.as_u64()).unwrap_or(0)
+            })))
+        }));
+    }
+    for f in futures {
+        if let Ok(Some((pid, v))) = f.await {
+            result.insert(pid, v);
+        }
+    }
+    for id in ids {
+        result.entry(id.clone()).or_insert(json!({
+            "id": id,
+            "title": id,
+            "slug": "",
+            "icon": "",
+            "description": "",
+            "downloads": 0
+        }));
+    }
     ApiResult::ok(Value::Object(result))
 }
 

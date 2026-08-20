@@ -1037,17 +1037,95 @@ pub struct EnsureLoaderCompatResult {
     pub error: Option<String>,
 }
 
-/// 扫描 mods 目录中的模组，提取加载器版本需求
-/// 简化实现：返回空字符串（不强制升级）
-/// 完整实现需要解析每个 JAR 的 fabric.mod.json / mods.toml 中的依赖声明
-fn scan_mods_for_loader_reqs(mods_dir: &Path, _loader_type: &str) -> String {
+/// 解析版本需求字符串，返回 (操作符, 版本号)
+/// 无操作符时默认为 >=
+fn parse_version_requirement(req: &str) -> Option<(String, String)> {
+    let re = regex::Regex::new(r"^([><=]+)\s*(.+)").ok()?;
+    if let Some(cap) = re.captures(req) {
+        Some((cap[1].to_string(), cap[2].trim().to_string()))
+    } else {
+        Some((">=".to_string(), req.trim().to_string()))
+    }
+}
+
+/// 扫描 mods 目录中的模组，提取指定加载器所需的最低版本
+/// 逐个解析 JAR 中的 fabric.mod.json / quilt.mod.json 的依赖声明，
+/// 取所有模组要求的最高版本。仅统计 >=、=、== 这类最小值约束。
+fn scan_mods_for_loader_reqs(mods_dir: &Path, loader_type: &str) -> String {
     if !mods_dir.exists() {
         return String::new();
     }
-    // 简化：不强制升级加载器
-    // 原项目会解析 JAR 中的 fabric.mod.json / mods.toml 提取依赖的加载器版本
-    // 这里返回空字符串，表示不需要升级
-    String::new()
+    let mut needed = String::new();
+    let entries = match std::fs::read_dir(mods_dir) {
+        Ok(e) => e,
+        Err(_) => return String::new(),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jar") {
+            continue;
+        }
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        let mut archive = match zip::ZipArchive::new(file) {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+        let mut meta_text: Option<String> = None;
+        let mut is_quilt = false;
+        if let Ok(mut entry) = archive.by_name("fabric.mod.json") {
+            let mut text = String::new();
+            if std::io::Read::read_to_string(&mut entry, &mut text).is_ok() {
+                meta_text = Some(text);
+            }
+        } else if let Ok(mut entry) = archive.by_name("quilt.mod.json") {
+            let mut text = String::new();
+            if std::io::Read::read_to_string(&mut entry, &mut text).is_ok() {
+                meta_text = Some(text);
+                is_quilt = true;
+            }
+        }
+        let meta_text = match meta_text {
+            Some(t) => t,
+            None => continue,
+        };
+        let meta: Value = match serde_json::from_str(&meta_text) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let deps = if is_quilt {
+            meta.get("quilt_loader").and_then(|q| q.get("dependencies"))
+        } else {
+            meta.get("depends")
+        };
+        let deps = match deps {
+            Some(d) => d,
+            None => continue,
+        };
+        let req_str = if loader_type == "fabric" {
+            deps.get("fabricloader").or_else(|| deps.get("fabric-loader"))
+        } else {
+            deps.get("forge")
+        };
+        let req_str = match req_str {
+            Some(Value::String(s)) => s.as_str(),
+            _ => continue,
+        };
+        let parsed = match parse_version_requirement(req_str) {
+            Some(p) => p,
+            None => continue,
+        };
+        let (op, version) = parsed;
+        if op != ">=" && op != "=" && op != "==" {
+            continue;
+        }
+        if needed.is_empty() || compare_semver(&version, &needed) > 0 {
+            needed = version;
+        }
+    }
+    needed
 }
 
 /// 比较语义化版本号

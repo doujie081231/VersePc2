@@ -518,9 +518,14 @@ function preloadResourceVersions(projectId, source) {
 }
 
 async function openResourceDetail(projectId, type, source) {
+  pushModDetailHistory();
   currentModDetailId = projectId;
   currentModDetailSource = source || 'modrinth';
   currentModDetailType = type;
+
+  // 资源详情（材质/光影/数据包/整合包）不展示加载器/版本兼容卡片
+  const compatSection = document.getElementById('md-compat-section');
+  if (compatSection) compatSection.style.display = 'none';
 
   navigateToPage('mod-detail');
   resetMdDetailView();

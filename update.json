@@ -1,13 +1,13 @@
 {
-  "version": "0.7.0",
-  "releaseName": "v0.7.0",
-  "releaseDate": "2026-08-19",
-  "releaseNotes": "VersePC2 v0.7.0\n\n修复:\n- 修复更新下载失败：不再因源瞬时速度波动被误判低速而反复回退镜像源\n- 修复设置-其它中内存使用率卡片无法显示\n- 修复内存优化按钮点击提示失败\n- 修复下载的模组图标破损，无图标时显示灰色占位\n- 修复 Forge 模组下载错误定位到 Fabric 整合包目录\n\n改进:\n- 版本设置页整体改造为真正的 Vue 组件，卡片由数据驱动渲染",
+  "version": "0.8.0",
+  "releaseName": "v0.8.0",
+  "releaseDate": "2026-08-20",
+  "releaseNotes": "VersePC2 v0.8.0\n\n修复:\n- 修复已安装版本页外部文件夹下拉无法展开的问题\n- 修复模组与资源详情页误显示兼容性卡片的问题\n\n改进:\n- 已安装版本项统一改为设置图标按钮，界面更简洁\n- 外部文件夹选择改为展开子菜单，可直接重命名、打开文件夹、移除\n- 启动内存分配按当前可用内存渐进计算，并去除初始堆下限，分配更贴近实际系统资源\n- 清理若干冗余说明文字",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.7.0/VersePC2-0.7.0.exe",
-      "size": 72030208,
-      "sha256": "418C630BFD950B83BA8DF04436976C82553E6D25BBDD0C1E05C562D8CE89A778"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.8.0/VersePC2-0.8.0.exe",
+      "size": 73137152,
+      "sha256": "31A371BE768D18D3209E50674A89E22E6F4ADEFE7A9CCA1CB51CCA0F99C9734D"
     }
   }
 }

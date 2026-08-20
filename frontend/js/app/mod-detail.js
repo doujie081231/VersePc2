@@ -210,6 +210,8 @@ function renderMdSidebar(detail) {
   const detailsEl = document.getElementById('md-sidebar-details');
   const licEl = document.getElementById('md-sidebar-license');
   if (!detail) return;
+  const compatSection = document.getElementById('md-compat-section');
+  if (compatSection) compatSection.style.display = 'none';
   const tagHtml = (arr) => (arr && arr.length)
     ? arr.map(v => `<span class="md-sidebar-tag">${escapeHtml(v)}</span>`).join('')
     : '<span class="md-sidebar-empty">—</span>';
@@ -341,9 +343,13 @@ function _renderModDetailHeader(detail, source, projectId) {
 
 async function openModDetail(projectId, source) {
   const mySeq = ++_modDetailSeq;
+  pushModDetailHistory();
   currentModDetailId = projectId;
   currentModDetailSource = source || 'modrinth';
   currentModDetailType = 'mod';
+
+  const compatSection = document.getElementById('md-compat-section');
+  if (compatSection) compatSection.style.display = 'none';
 
   navigateToPage('mod-detail');
   resetMdDetailView();
@@ -572,10 +578,17 @@ async function loadModDependencies() {
   if (!depsSection || !depsList) return;
 
   const allDeps = new Map();
+  const mdSource = currentModDetailSource || 'modrinth';
   mdAllVersions.forEach(v => {
     (v.dependencies || []).forEach(d => {
       if (d.projectId && !allDeps.has(d.projectId)) {
-        allDeps.set(d.projectId, d);
+        let type = d.dependencyType || '';
+        if (mdSource === 'curseforge') {
+          if (type === '1' || type === '2') type = 'required';
+          else if (type === '5') type = 'incompatible';
+          else type = 'optional';
+        }
+        allDeps.set(d.projectId, Object.assign({}, d, { dependencyType: type }));
       }
     });
   });
@@ -619,7 +632,7 @@ async function loadModDependencies() {
     const depType = d.dependencyType || 'optional';
     const typeLabel = depType === 'required' ? '必选' : (depType === 'incompatible' ? '冲突' : '可选');
     const badgeClass = depType === 'required' ? 'required' : (depType === 'incompatible' ? 'incompatible' : 'optional');
-    return `<div class="md-dep-item" id="md-dep-${escapeOnclick(d.projectId)}" onclick="openModDetail('${escapeOnclick(d.projectId)}', 'modrinth')">
+    return `<div class="md-dep-item" id="md-dep-${escapeOnclick(d.projectId)}" onclick="openModDetail('${escapeOnclick(d.projectId)}', '${escapeOnclick(mdSource)}')">
       <div class="md-dep-icon"><div class="spinner" style="width:20px;height:20px;border-width:2px"></div></div>
       <div class="md-dep-info">
         <div class="md-dep-name" style="color:var(--text-muted)">加载中...</div>
@@ -630,67 +643,95 @@ async function loadModDependencies() {
   }).join('');
 
   try {
-    const [resolveResult, installedModsData] = await Promise.all([
-      hasVersionFilter
-        ? API.resolveDepVersions(depIds, currentGameVersion, currentLoader, 'modrinth')
-        : API.resolveModDeps(depIds.join(',')).then(r => ({ _basic: r })),
-      API.getInstalledMods().catch(() => []).then(r => Array.isArray(r) ? r : (r.mods || []))
-    ]);
-
     let resolved = {};
     let versionInfo = {};
+    let installedMods = [];
+    const isCF = mdSource === 'curseforge';
 
-    if (hasVersionFilter) {
-      versionInfo = resolveResult;
-      mdDepsVersionInfo = versionInfo;
-      for (const pid of depIds) {
-        const info = versionInfo[pid] || {};
-        resolved[pid] = {
-          id: info.id || pid,
-          title: info.title || pid,
-          slug: info.slug || '',
-          icon: info.icon || '',
-          description: info.description || '',
-          downloads: info.downloads || 0
-        };
-      }
-      mdDepsResolved = resolved;
+    if (!isCF) {
+      const [resolveResult, installedModsData] = await Promise.all([
+        hasVersionFilter
+          ? API.resolveDepVersions(depIds, currentGameVersion, currentLoader, 'modrinth')
+          : API.resolveModDeps(depIds.join(',')).then(r => ({ _basic: r })),
+        API.getInstalledMods().catch(() => []).then(r => Array.isArray(r) ? r : (r.mods || []))
+      ]);
+      installedMods = Array.isArray(installedModsData) ? installedModsData : [];
 
-      const failedIds = depIds.filter(pid => {
-        const r = resolved[pid];
-        return !r || !r.title || r.title === pid;
-      });
-      if (failedIds.length > 0) {
-        try {
-          const retryRes = await API.resolveDepVersions(failedIds, '', '', 'modrinth');
-          for (const pid of failedIds) {
-            const ri = retryRes[pid];
-            if (ri && ri.title && ri.title !== pid) {
-              resolved[pid] = { ...resolved[pid], ...ri };
-            }
-          }
-          mdDepsResolved = resolved;
-        } catch (e) { console.warn('[ModInstall] 依赖检查失败:', e.message); }
-      }
-
-      const compatibleCount = requiredDeps.filter(d => versionInfo[d.projectId]?.hasCompatibleVersion).length;
-      const incompatibleCount = requiredDeps.filter(d => !versionInfo[d.projectId]?.hasCompatibleVersion).length;
-      if (depsCount) {
-        let countText = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
-        countText += ` — ${compatibleCount} 个有对应版本`;
-        if (incompatibleCount > 0) {
-          countText += `，${incompatibleCount} 个未有对应版本`;
+      if (hasVersionFilter) {
+        versionInfo = resolveResult;
+        mdDepsVersionInfo = versionInfo;
+        for (const pid of depIds) {
+          const info = versionInfo[pid] || {};
+          resolved[pid] = {
+            id: info.id || pid,
+            title: info.title || pid,
+            slug: info.slug || '',
+            icon: info.icon || '',
+            description: info.description || '',
+            downloads: info.downloads || 0
+          };
         }
-        depsCount.textContent = countText;
+        mdDepsResolved = resolved;
+
+        const failedIds = depIds.filter(pid => {
+          const r = resolved[pid];
+          return !r || !r.title || r.title === pid;
+        });
+        if (failedIds.length > 0) {
+          try {
+            const retryRes = await API.resolveDepVersions(failedIds, '', '', 'modrinth');
+            for (const pid of failedIds) {
+              const ri = retryRes[pid];
+              if (ri && ri.title && ri.title !== pid) {
+                resolved[pid] = { ...resolved[pid], ...ri };
+              }
+            }
+            mdDepsResolved = resolved;
+          } catch (e) { console.warn('[ModInstall] 依赖检查失败:', e.message); }
+        }
+
+        const compatibleCount = requiredDeps.filter(d => versionInfo[d.projectId]?.hasCompatibleVersion).length;
+        const incompatibleCount = requiredDeps.filter(d => !versionInfo[d.projectId]?.hasCompatibleVersion).length;
+        if (depsCount) {
+          let countText = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
+          countText += ` — ${compatibleCount} 个有对应版本`;
+          if (incompatibleCount > 0) {
+            countText += `，${incompatibleCount} 个未有对应版本`;
+          }
+          depsCount.textContent = countText;
+        }
+      } else {
+        resolved = resolveResult._basic;
+        mdDepsResolved = resolved;
+        mdDepsVersionInfo = {};
+        if (depsCount) depsCount.textContent = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
       }
     } else {
-      resolved = resolveResult._basic;
+      try {
+        const d = await API.getInstalledMods().catch(() => []);
+        installedMods = Array.isArray(d) ? d : ((d && d.mods) || []);
+      } catch (e) {}
+      resolved = {};
+      try {
+        const r = await API.resolveModDeps(depIds.join(','), 'curseforge') || {};
+        for (const pid of depIds) {
+          const ri = r[pid];
+          if (ri) {
+            resolved[pid] = {
+              id: ri.id || pid,
+              title: ri.title || ri.name || pid,
+              slug: ri.slug || '',
+              icon: ri.icon || ri.logo || '',
+              description: ri.description || '',
+              downloads: ri.downloads || 0
+            };
+          }
+        }
+      } catch (e) { console.warn('[ModInstall] CF依赖解析失败:', e.message); }
       mdDepsResolved = resolved;
       mdDepsVersionInfo = {};
       if (depsCount) depsCount.textContent = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
     }
-
-    const installedMods = Array.isArray(installedModsData) ? installedModsData : [];
 
     mdDepsCache.set(cacheKey, { resolved, versionInfo, installedMods, time: Date.now() });
 
@@ -700,7 +741,7 @@ async function loadModDependencies() {
       const depType = d.dependencyType || 'optional';
       const typeLabel = depType === 'required' ? '必选' : (depType === 'incompatible' ? '冲突' : '可选');
       const badgeClass = depType === 'required' ? 'required' : (depType === 'incompatible' ? 'incompatible' : 'optional');
-      return `<div class="md-dep-item" onclick="openModDetail('${escapeOnclick(d.projectId)}', 'modrinth')">
+      return `<div class="md-dep-item" onclick="openModDetail('${escapeOnclick(d.projectId)}', '${escapeOnclick(mdSource)}')">
         <div class="md-dep-info">
           <div class="md-dep-name">${escapeHtml(d.projectId)}</div>
         </div>
@@ -770,7 +811,7 @@ function renderDepsList(depArray, resolved, versionInfo, hasVersionFilter, curre
       }
     }
 
-    return `<div class="md-dep-item" onclick="openModDetail('${escapeOnclick(d.projectId)}', 'modrinth')">
+    return `<div class="md-dep-item" onclick="openModDetail('${escapeOnclick(d.projectId)}', '${escapeOnclick(currentModDetailSource || 'modrinth')}')">
       ${icon ? `<div class="md-dep-icon"><img src="${icon}" alt="" onerror="this.parentElement.remove()"></div>` : ''}
       <div class="md-dep-info">
         <div class="md-dep-name">${escapeHtml(formatModNameWithChinese(info.slug || d.projectId, title))}</div>

@@ -19,6 +19,16 @@ function resolveModTarget(gameVersions, loaders) {
   return { game, loader };
 }
 
+/// 从已加载的版本列表里解析某个版本的目标游戏版本/加载器
+function resolveModVersionTarget(versionId) {
+  try {
+    const versions = (typeof mdAllVersions !== 'undefined' ? mdAllVersions : []);
+    const v = versions.find(x => x && x.id === versionId);
+    if (v) return resolveModTarget(v.gameVersions, v.loaders);
+  } catch (e) {}
+  return { game: '', loader: '' };
+}
+
 /// 确保已安装版本列表已加载（installedVersions 仅在访问版本页时填充，
 /// 直接从模组页进入时为空会导致路径匹配失败，需主动拉取）
 async function ensureInstalledVersions() {
@@ -73,6 +83,8 @@ function addModFromDetail(projectId, source, safeVid, safeFid) {
   const vid = decodeURIComponent(atob(safeVid || ''));
   const fid = decodeURIComponent(atob(safeFid || ''));
 
+  const t = resolveModVersionTarget(vid);
+
   if (modSelectedIds.has(projectId)) {
     const existing = modSelectedVersions.get(projectId);
     if (existing && existing.versionId === vid && existing.fileId === fid) {
@@ -83,7 +95,9 @@ function addModFromDetail(projectId, source, safeVid, safeFid) {
       modSelectedVersions.set(projectId, {
         versionId: vid,
         fileId: fid,
-        source: source
+        source: source,
+        gameVersion: t.game,
+        loader: t.loader
       });
       showToast('已更新选择的版本', 'success');
     }
@@ -92,7 +106,9 @@ function addModFromDetail(projectId, source, safeVid, safeFid) {
     modSelectedVersions.set(projectId, {
       versionId: vid,
       fileId: fid,
-      source: source
+      source: source,
+      gameVersion: t.game,
+      loader: t.loader
     });
     showToast('已添加到下载列表', 'success');
   }
@@ -188,8 +204,11 @@ function installModFile(projectId, source, versionId, fileId) {
       const t = resolveModTarget(v.gameVersions, v.loaders);
       _mdSaveGame = t.game || _mdSaveGame;
       _mdSaveLoader = t.loader || _mdSaveLoader;
+      console.warn('[mod-folder] 安装文件=', v.versionNumber || v.name, 'gvs=', JSON.stringify(v.gameVersions), 'loaders=', JSON.stringify(v.loaders), '目标=', t, '=>', _mdSaveGame, _mdSaveLoader, 'source=', source);
+    } else {
+      console.warn('[mod-folder] 未在 mdAllVersions 找到版本 versionId=', versionId);
     }
-  } catch (e) {}
+  } catch (e) { console.warn('[mod-folder] 捕获异常', e); }
   showModInstallConfirm(projectId, source, versionId, fileId);
 }
 
@@ -469,6 +488,8 @@ async function resolveModSavePath(versionId) {
   } catch (e) {
     console.warn('[resolveModSavePath] error:', e);
   }
+  const _fb = await getSelectedVersionModsPath();
+  if (_fb) return _fb;
   return localStorage.getItem('lastModSavePath') || '';
 }
 
@@ -491,11 +512,164 @@ async function resolveResourceSavePath(type) {
   return localStorage.getItem(storageKey) || '';
 }
 
+/// 无对应版本文件夹时的确认卡片（Vue 模板渲染）
+/// 返回 Promise<boolean>：确定 -> true，取消/关闭 -> false
+let _noFolderApp = null;
+function showNoFolderConfirmCard(message) {
+  return new Promise((resolve) => {
+    if (!window.Vue) {
+      resolve(window.confirm(message || '该版本没有对应的版本文件夹，将会打开已选择版本的 mod 文件夹'));
+      return;
+    }
+    if (_noFolderApp) {
+      try { _noFolderApp.unmount(); } catch (e) {}
+      _noFolderApp = null;
+    }
+    let host = document.getElementById('mod-no-folder-card-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'mod-no-folder-card-host';
+      document.body.appendChild(host);
+    } else {
+      host.innerHTML = '';
+    }
+    let settled = false;
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      if (_noFolderApp) {
+        try { _noFolderApp.unmount(); } catch (e) {}
+        _noFolderApp = null;
+      }
+      if (host) host.innerHTML = '';
+      resolve(val);
+    };
+    const App = {
+      data() {
+        return {
+          visible: false,
+          message: message || '该版本没有对应的版本文件夹，将会打开已选择版本的 mod 文件夹',
+          confirmText: '确定',
+          cancelText: '取消'
+        };
+      },
+      mounted() {
+        this.visible = true;
+      },
+      methods: {
+        confirm() { finish(true); },
+        cancel() { finish(false); }
+      },
+      template: `
+        <transition name="modnf-fade">
+          <div class="modnf-overlay" v-if="visible" @click.self="cancel" role="presentation">
+            <div class="modnf-card" role="dialog">
+              <div class="modnf-icon">📂</div>
+              <div class="modnf-title">提示</div>
+              <p class="modnf-message">{{ message }}</p>
+              <div class="modnf-actions">
+                <button type="button" class="btn btn-secondary btn-sm" @click="cancel">{{ cancelText }}</button>
+                <button type="button" class="btn btn-primary btn-sm" @click="confirm">{{ confirmText }}</button>
+              </div>
+            </div>
+          </div>
+        </transition>`
+    };
+    _noFolderApp = window.Vue.createApp(App).mount(host);
+  });
+}
+
+/// 获取主页已选择版本的 mod 文件夹路径（用于原生对话框定位）
+async function getSelectedVersionModsPath() {
+  try {
+    let selVid = '';
+    if (typeof homeVersionCustomSelect !== 'undefined' && homeVersionCustomSelect) {
+      selVid = homeVersionCustomSelect.getValue() || '';
+    }
+    if (!selVid) {
+      const settings = await API.getSettings().catch(() => ({}));
+      selVid = settings.selectedVersion || '';
+    }
+    if (selVid) {
+      let p = '';
+      if (window.electronAPI && typeof window.electronAPI.getDefaultModPath === 'function') {
+        const r = await window.electronAPI.getDefaultModPath(selVid).catch(() => null);
+        if (typeof r === 'string' && r) p = r;
+      }
+      if (!p) {
+        const res = await API.getDefaultModPath(selVid).catch(() => null);
+        if (typeof res === 'string') {
+          p = res;
+        } else if (res && typeof res === 'object') {
+          p = res.path || res.data || '';
+        }
+      }
+      if (p) return p;
+    }
+  } catch (e) {
+    console.warn('[getSelectedVersionModsPath] error:', e);
+  }
+  return localStorage.getItem('lastModSavePath') || '';
+}
+
+/// 解析模组保存路径；若模组目标版本没有对应文件夹，先弹出确认卡片，
+/// 确定后改为定位到主页已选择版本的 mod 文件夹。取消返回 null。
+async function resolveModSavePathWithConfirm() {
+  const filterVersion = getCustomSelectValue('mod-filter-version') || '';
+  const filterLoader = getCustomSelectValue('mod-filter-loader') || '';
+  const targetGame = _mdSaveGame || filterVersion || '';
+  const targetLoader = _mdSaveLoader || filterLoader || '';
+
+  // 优先使用按常规逻辑解析的默认保存文件夹（选中版本兼容则用之，否则择优）
+  let resolved = null;
+  try {
+    if (window.electronAPI && typeof window.electronAPI.getDefaultModSaveFolder === 'function') {
+      resolved = await window.electronAPI.getDefaultModSaveFolder(targetGame, targetLoader);
+      console.warn('[mod-folder] backend 入参=', targetGame, targetLoader, '返回=', JSON.stringify(resolved));
+    }
+  } catch (e) {
+    console.warn('[resolveModSavePathWithConfirm] getDefaultModSaveFolder error:', e);
+  }
+
+  if (resolved && resolved.path) {
+    if (resolved.selectedCompatible || resolved.compatible) {
+      return resolved.path;
+    }
+    const ok = await showNoFolderConfirmCard('该版本没有对应的版本文件夹，将会打开已选择版本的 mod 文件夹');
+    if (!ok) return null;
+    return getSelectedVersionModsPath();
+  }
+
+  // 备选：命令不可用时的旧版匹配逻辑
+  await ensureInstalledVersions();
+  const matched = matchInstalledVersion(targetGame, targetLoader);
+  if (matched) {
+    return resolveModSavePath();
+  }
+  const ok = await showNoFolderConfirmCard('该版本没有对应的版本文件夹，将会打开已选择版本的 mod 文件夹');
+  if (!ok) return null;
+  return getSelectedVersionModsPath();
+}
+
 async function showModInstallConfirm(projectId, source, versionId, fileId) {
+  // 未记录目标加载器/版本时，从当前模组版本数据中推导（避免误用页面筛选加载器）
+  if (!_mdSaveLoader && versionId) {
+    try {
+      const v = (typeof mdAllVersions !== 'undefined' ? mdAllVersions : []).find(x => x && x.id === versionId);
+      if (v) {
+        const t = resolveModTarget(v.gameVersions, v.loaders);
+        if (t.game) _mdSaveGame = t.game;
+        if (t.loader) _mdSaveLoader = t.loader;
+      }
+    } catch (e) {}
+  }
   showToast('请选择保存文件夹...', 'info');
   try {
-    const defaultPath = await resolveModSavePath();
-    console.warn('[mod-install] dialog defaultPath=', JSON.stringify(defaultPath));
+    const defaultPath = await resolveModSavePathWithConfirm();
+    if (defaultPath === null) {
+      showToast('已取消下载', 'info');
+      return;
+    }
     const folderResult = await API.selectSaveFolder(defaultPath);
     if (folderResult.cancelled) {
       if (folderResult.error) {
@@ -1013,8 +1187,18 @@ async function batchDownloadMods() {
       const versionId = selectedVer?.versionId || '';
       const fileId = selectedVer?.fileId || '';
       const source = selectedVer?.source || 'modrinth';
-      
-      const result = await API.downloadModVersion(versionId, modId, source, fileId, currentGameVersion, currentLoader, savePath);
+      const sGame = selectedVer?.gameVersion || '';
+      const sLoader = selectedVer?.loader || '';
+
+      let targetPath = savePath;
+      if (sGame || sLoader) {
+        _mdSaveGame = sGame;
+        _mdSaveLoader = sLoader;
+        const modPath = await resolveModSavePath(versionId);
+        if (modPath) targetPath = modPath;
+      }
+
+      const result = await API.downloadModVersion(versionId, modId, source, fileId, sGame || currentGameVersion, sLoader || currentLoader, targetPath);
       
       if (result.success) {
         await pollBatchModDownload(result.sessionId, modId);

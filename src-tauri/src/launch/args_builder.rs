@@ -18,7 +18,7 @@ use crate::utils;
 
 use super::dep_check;
 use super::memory::{
-    resolve_max_memory, resolve_memory_mode, resolve_min_memory, MemoryMode,
+    resolve_max_memory, resolve_memory_mode, MemoryMode,
 };
 
 /// 启动参数构建结果
@@ -217,12 +217,10 @@ pub fn build_launch_arguments(
     let total_mb = total_physical_memory_mb();
     let free_mb = free_physical_memory_mb();
     let max_mem_mb = resolve_max_memory(&memory_mode, total_mb, free_mb, mod_count);
-    let min_mem_mb = resolve_min_memory(max_mem_mb);
 
     // ============== JVM 参数 ==============
     let mut jvm_args: Vec<String> = Vec::new();
     jvm_args.push(format!("-Xmx{}M", max_mem_mb));
-    jvm_args.push(format!("-Xms{}M", min_mem_mb));
     jvm_args.push("-Dlog4j2.formatMsgNoLookups=true".to_string());
     jvm_args.push("-Djava.net.preferIPv4Stack=true".to_string());
 
@@ -467,7 +465,23 @@ pub fn build_launch_arguments(
 
     let fullscreen = settings.get("fullscreen").and_then(|v| v.as_bool()).unwrap_or(false);
     if fullscreen {
+        // 全屏启动：以当前桌面分辨率作为窗口尺寸。
+        // 若不显式传入 --width/--height，Minecraft 会用默认较小分辨率（如 854x480）
+        // 进入独占全屏，把显示模式切换到该值，从而修改系统分辨率。
+        // 显式传桌面分辨率后，全屏显示模式与系统分辨率一致，系统分辨率保持不变。
+        let (w, h) = {
+            let (screen_w, screen_h, _) = get_screen_size();
+            if screen_w > 0 && screen_h > 0 {
+                (screen_w, screen_h)
+            } else {
+                (res_w, res_h)
+            }
+        };
         game_args.push("--fullscreen".to_string());
+        game_args.push("--width".to_string());
+        game_args.push(w.to_string());
+        game_args.push("--height".to_string());
+        game_args.push(h.to_string());
     } else {
         let (w, h) = adjust_window_resolution(res_w, res_h, &game_args);
         game_args.push("--width".to_string());

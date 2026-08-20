@@ -80,7 +80,7 @@ const PageModDetail = {
           </div>
         </div>
         <div class="md-layout-sidebar">
-          <div class="md-sidebar-section">
+          <div class="md-sidebar-section" id="md-compat-section">
             <div class="md-sidebar-section-title">兼容性</div>
             <div id="md-sidebar-loaders" class="md-sidebar-tags"></div>
             <div id="md-sidebar-versions" class="md-sidebar-tags" style="margin-top:8px"></div>

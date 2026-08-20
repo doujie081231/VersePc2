@@ -501,6 +501,201 @@
     color: var(--text-primary);
 }
 
+/* 外部文件夹下拉（Vue 展开子菜单） */
+.folder-dropdown {
+    position: relative;
+}
+
+.folder-dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 240px;
+    height: 34px;
+    padding: 0 12px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--transition), background-color var(--transition);
+}
+
+.folder-dropdown-toggle:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.folder-dropdown-label {
+    flex: 1;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.folder-dropdown-caret {
+    transition: transform var(--transition);
+}
+
+.folder-dropdown-caret.open {
+    transform: rotate(180deg);
+}
+
+.folder-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 500;
+    min-width: 280px;
+    max-width: 360px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    padding: 4px;
+}
+
+.folder-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color var(--transition);
+}
+
+.folder-dropdown-item:hover {
+    background: var(--bg-hover);
+}
+
+.folder-dropdown-item.selected {
+    background: rgba(var(--accent-rgb), 0.12);
+}
+
+.folder-dropdown-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.folder-dropdown-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folder-dropdown-count {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.folder-dropdown-path {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folder-dropdown-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.folder-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--transition), background-color var(--transition);
+}
+
+.folder-action-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+.folder-action-btn:hover {
+    background: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent);
+}
+
+.folder-action-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.folder-rename-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.folder-rename-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    outline: none;
+}
+
+.folder-rename-confirm,
+.folder-rename-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--transition), background-color var(--transition);
+}
+
+.folder-rename-confirm svg,
+.folder-rename-cancel svg {
+    width: 14px;
+    height: 14px;
+}
+
+.folder-rename-confirm:hover {
+    background: rgba(76, 175, 80, 0.15);
+    color: #4caf50;
+}
+
+.folder-rename-cancel:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
 .custom-select {
     position: relative;
     min-width: 240px;

@@ -142,7 +142,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 // ============== 内存优化 ==============
 
 #[cfg(target_os = "windows")]
-fn do_memory_optimize_purge() -> Result<(), String> {
+pub(crate) fn do_memory_optimize_purge() -> Result<(), String> {
     use std::ffi::c_void;
 
     #[link(name = "ntdll")]
@@ -248,16 +248,17 @@ fn do_memory_optimize_purge() -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn do_memory_optimize_purge() -> Result<(), String> {
+pub(crate) fn do_memory_optimize_purge() -> Result<(), String> {
     Err("内存优化仅支持 Windows".to_string())
 }
 
 /// POST /api/memory-optimize — 执行内存优化
+/// 已管理员则直接执行，否则通过提权子进程执行
 fn handle_memory_optimize() -> ApiResult {
     let (_, before_avail) = get_system_memory_kb();
     let before_mb = before_avail / 1024 / 1024;
 
-    match do_memory_optimize_purge() {
+    match crate::promote::run_memory_optimize() {
         Ok(()) => {
             let (_, after_avail) = get_system_memory_kb();
             let after_mb = after_avail / 1024 / 1024;

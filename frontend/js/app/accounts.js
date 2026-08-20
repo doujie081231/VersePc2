@@ -725,7 +725,7 @@ async function loadAccounts() {
       document.getElementById('home-account-type').textContent = accountTypeText;
       try { localStorage.setItem('cachedPlayerName', selectedAccount.username); localStorage.setItem('cachedAccountType', accountTypeText); } catch(e) {}
       
-      // 主页使用皮肤头部头像（PCL 风格：皮肤贴图裁出的头部像素方块，带像素纹理）
+      // 主页使用皮肤头部头像（由皮肤贴图裁出的头部像素方块，带像素纹理）
       _loadAvatarImg(
         document.getElementById('home-avatar'),
         accUuid,
@@ -1709,7 +1709,7 @@ function cropSkinHeadCanvas(imgElement, outputSize = 64) {
     canvas.width = outputSize;
     canvas.height = outputSize;
     ctx.imageSmoothingEnabled = false;
-    // PCL 风格双图层：脸部放大约 0.75，帽子层放大约 0.875（帽子比脸大，完整显示帽子像素块，不被脸的正方形裁剪）
+    // 双图层：脸部放大约 0.75，帽子层放大约 0.875（帽子比脸大，完整显示帽子像素块，不被脸的正方形裁剪）
     const faceSize = Math.round(outputSize * 0.75);
     const hatSize = Math.round(outputSize * 0.875);
     const faceOffset = Math.round((outputSize - faceSize) / 2);

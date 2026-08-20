@@ -20,7 +20,9 @@ mod modpack;
 mod mods;
 mod network;
 mod private_server;
+mod promote;
 mod redstone_online;
+mod resource;
 mod server_host;
 mod storage;
 mod system;
@@ -495,6 +497,169 @@ fn get_default_mod_path(
     json!({ "success": true, "path": default_path.to_string_lossy() })
 }
 
+/// 解析下载 Mod 时的默认保存文件夹。
+/// 查找顺序：
+///   1. 当前选中版本兼容（游戏版本 + 加载器匹配）时，使用其 mods 文件夹
+///   2. 否则在全部已安装版本中找兼容版本，按其 mods 文件夹的修改时间、文件数择优
+///   3. 否则回退到 MC 根目录的 mods 文件夹
+/// 返回 { path, compatible, selectedCompatible }
+#[tauri::command]
+fn get_default_mod_save_folder(game_version: String, loader: String) -> Value {
+    let settings = storage::load_settings();
+    let data_dir = storage::resolve_data_dir();
+
+    let allowed = match loader.to_lowercase().as_str() {
+        "forge" => 1,
+        "liteloader" => 2,
+        "fabric" => 4,
+        "neoforge" => 16,
+        _ => 0,
+    };
+    eprintln!(
+        "[mod-folder] 输入: game={:?} loader={:?} allowed_mask={}",
+        game_version, loader, allowed
+    );
+
+    // 收集已安装版本：(id, 原版版本名, 加载器掩码)
+    let mut versions: Vec<(String, String, i32)> = Vec::new();
+    for v in crate::versions::scan_local_versions()
+        .into_iter()
+        .chain(crate::versions::scan_external_versions())
+    {
+        let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        if id.is_empty() {
+            continue;
+        }
+        let base = v.get("baseVersion").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let mut mask = 0i32;
+        if v.get("isForge").and_then(|x| x.as_bool()).unwrap_or(false) {
+            mask |= 1;
+        }
+        if v.get("isFabric").and_then(|x| x.as_bool()).unwrap_or(false) {
+            mask |= 4;
+        }
+        if v.get("isNeoForge").and_then(|x| x.as_bool()).unwrap_or(false) {
+            mask |= 16;
+        }
+        if v.get("isLiteLoader").and_then(|x| x.as_bool()).unwrap_or(false) {
+            mask |= 2;
+        }
+        let vanilla = if base.is_empty() {
+            id.split('-').next().unwrap_or("").to_string()
+        } else {
+            base
+        };
+        versions.push((id, vanilla, mask));
+    }
+
+    let loader_ok = |mask: i32| allowed == 0 || (mask & allowed) != 0;
+    let match_tier = |vanilla: &str, masked: i32| -> i32 {
+        if !loader_ok(masked) {
+            return -1;
+        }
+        let base_known = crate::resource::mcversion::is_mc_version(vanilla);
+        if base_known
+            && !game_version.is_empty()
+            && crate::resource::mcversion::version_snapshot_match(&game_version, vanilla)
+        {
+            return 0;
+        }
+        if base_known
+            && !game_version.is_empty()
+            && crate::resource::mcversion::version_prefix_match(&game_version, vanilla)
+        {
+            return 1;
+        }
+        if !base_known || game_version.is_empty() {
+            return 2;
+        }
+        -1
+    };
+
+    let selected_id = settings
+        .get("selectedVersion")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let mut selected_tier = -1;
+    let mut selected_path = String::new();
+    for inst in &versions {
+        if inst.0 == selected_id {
+            selected_tier = match_tier(&inst.1, inst.2);
+            selected_path = crate::mods::list::resolve_mods_dir_for(&settings, &inst.0)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            break;
+        }
+    }
+    let selected_compatible = selected_tier == 0 || selected_tier == 1;
+    let mut matched_version = selected_compatible;
+
+    let mut path = String::new();
+    if (selected_tier == 0 || selected_tier == 1) && !selected_path.is_empty() {
+        path = selected_path;
+    }
+
+    for t in 0..3 {
+        if !path.is_empty() {
+            break;
+        }
+        let mut bm: i64 = -1;
+        let mut bc: usize = 0;
+        let mut bp = String::new();
+        for inst in &versions {
+            if match_tier(&inst.1, inst.2) != t {
+                continue;
+            }
+            let Some(d) = crate::mods::list::resolve_mods_dir_for(&settings, &inst.0) else {
+                continue;
+            };
+            let mtime = std::fs::metadata(&d)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|x| x.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|x| x.as_secs() as i64)
+                .unwrap_or(0);
+            let count = std::fs::read_dir(&d).map(|rd| rd.count()).unwrap_or(0);
+            let d = d.to_string_lossy().to_string();
+            if bp.is_empty() || mtime > bm || (mtime == bm && count > bc) {
+                bm = mtime;
+                bc = count;
+                bp = d;
+            }
+        }
+        if !bp.is_empty() {
+            path = bp;
+            matched_version = true;
+        }
+    }
+
+    if path.is_empty() {
+        let game_dir = settings
+            .get("gameDir")
+            .and_then(|x| x.as_str())
+            .filter(|s| !s.is_empty())
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| data_dir.clone());
+        path = game_dir.join("mods").to_string_lossy().to_string();
+    }
+
+    let debug_versions: Vec<Value> = versions
+        .iter()
+        .map(|(id, vanilla, mask)| json!({ "id": id, "vanilla": vanilla, "mask": mask }))
+        .collect();
+
+    json!({
+        "success": true,
+        "path": path,
+        "compatible": matched_version,
+        "selectedCompatible": selected_compatible,
+        "selectedVersion": selected_id,
+        "versions": debug_versions
+    })
+}
+
 // ============== TTS 语音合成命令 ==============
 
 #[tauri::command]
@@ -542,6 +707,12 @@ fn install_panic_hook() {
 pub fn run() {
     install_panic_hook();
 
+    // 提权子进程模式：由主进程通过 runas 启动，仅作为命名管道执行端，
+    // 不启动完整的 Tauri（窗口/异步 runtime），执行完命令后直接退出。
+    if crate::promote::try_run_promote_process() {
+        return;
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -576,8 +747,8 @@ pub fn run() {
             app.manage(store);
             println!("[boot] after manage {}\n", chrono::Local::now().format("%H:%M:%S%.3f"));
 
-            // 后台预热 Java 探测缓存（对齐 PCL 的 JavaInit：在启动时后台刷新 Java 列表，
-            // 避免真正启动游戏时才在启动流程里同步跑每个 Java 的 -version 探测，造成卡顿）
+            // 后台预热 Java 探测缓存：在启动时后台刷新 Java 列表，
+            // 避免真正启动游戏时才在启动流程里同步跑每个 Java 的 -version 探测，造成卡顿
             tauri::async_runtime::spawn_blocking(|| {
                 let list = crate::java::detect_all();
                 println!("[boot] 后台预热 Java 列表完成: {} 个", list.len());
@@ -702,6 +873,7 @@ pub fn run() {
             get_versions_dir,
             get_external_version_folders,
             get_default_mod_path,
+            get_default_mod_save_folder,
             // API 代理分发
             api::api_proxy,
             // 头像

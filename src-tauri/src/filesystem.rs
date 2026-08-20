@@ -398,14 +398,49 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         // ===== 默认资源路径 =====
         "GET /api/filesystem/default-resource-path" => {
+            let settings = storage::load_settings();
+            let res_type = params
+                .as_ref()
+                .and_then(|p| p.get("type"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let subfolder = match res_type.as_str() {
+                "resourcepack" => "resourcepacks",
+                "shader" => "shaderpacks",
+                "datapack" => "datapacks",
+                _ => "",
+            };
             let data_dir = storage::resolve_data_dir();
             let minecraft_dir = dirs::home_dir()
                 .map(|h| h.join(".minecraft"))
                 .unwrap_or_else(|| data_dir.clone());
+            let rp = minecraft_dir.join("resourcepacks");
+            let sp = minecraft_dir.join("shaderpacks");
+            let dp = data_dir.join("datapacks");
+            let mut target = if res_type == "datapack" {
+                data_dir.join("datapacks")
+            } else if !subfolder.is_empty() {
+                minecraft_dir.join(subfolder)
+            } else {
+                data_dir.clone()
+            };
+            if !subfolder.is_empty() {
+                if let Some(mods_dir) =
+                    crate::api::mods::resolve_mods_dir(&settings, "", "")
+                {
+                    if let Some(game_dir) = mods_dir.parent() {
+                        target = game_dir.join(subfolder);
+                    }
+                }
+            }
+            let _ = std::fs::create_dir_all(&target);
             Some(ApiResult::ok(json!({
-                "resourcepacks": minecraft_dir.join("resourcepacks").to_string_lossy(),
-                "shaderpacks": minecraft_dir.join("shaderpacks").to_string_lossy(),
-                "datapacks": data_dir.join("datapacks").to_string_lossy()
+                "success": true,
+                "path": target.to_string_lossy(),
+                "resourcepacks": rp.to_string_lossy(),
+                "shaderpacks": sp.to_string_lossy(),
+                "datapacks": dp.to_string_lossy()
             })))
         }
 

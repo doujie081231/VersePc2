@@ -245,6 +245,10 @@ fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Option<PathBu
     if version_id.is_empty() {
         return None;
     }
+    // 外部版本：mods 目录位于外部版本目录下（外部文件夹/versions/<id> 或 外部文件夹/<id>）
+    if let Some(ext_mods) = resolve_external_version_mods_dir(version_id) {
+        return Some(ext_mods);
+    }
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
     let game_dir = crate::launch::args_builder::resolve_game_dir(
@@ -256,6 +260,50 @@ fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Option<PathBu
         &data_dir,
     );
     Some(game_dir.join("mods"))
+}
+
+/// 供外部模块解析指定版本的 mods 目录
+pub fn resolve_mods_dir_for(settings: &Value, version_id: &str) -> Option<PathBuf> {
+    resolve_version_mods_dir(settings, version_id)
+}
+
+/// 去掉版本 ID 上的 " [外部N]" / "[外部N]" 标记
+fn clean_external_marker(version_id: &str) -> &str {
+    if let Some(idx) = version_id.find(" [外部") {
+        &version_id[..idx]
+    } else if let Some(idx) = version_id.find("[外部") {
+        version_id[..idx].trim_end()
+    } else {
+        version_id
+    }
+}
+
+/// 在外部文件夹配置中解析该版本对应的 mods 目录
+fn resolve_external_version_mods_dir(version_id: &str) -> Option<PathBuf> {
+    let clean_id = clean_external_marker(version_id);
+    if clean_id.is_empty() {
+        return None;
+    }
+    let folders = storage::load_external_folders();
+    for folder in folders {
+        let path_str = folder.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        if path_str.is_empty() {
+            continue;
+        }
+        let folder_path = PathBuf::from(path_str);
+        if !folder_path.exists() {
+            continue;
+        }
+        let ver_dir = folder_path.join("versions").join(clean_id);
+        if ver_dir.join("mods").is_dir() || ver_dir.is_dir() {
+            return Some(ver_dir.join("mods"));
+        }
+        let direct_dir = folder_path.join(clean_id);
+        if direct_dir.join("mods").is_dir() || direct_dir.is_dir() {
+            return Some(direct_dir.join("mods"));
+        }
+    }
+    None
 }
 
 /// 解析存档目录（screenshots/saves 等用）

@@ -389,7 +389,7 @@ const API = {
     installModFromFile: (versionId, filePath) => apiPost('/api/mods/install-from-file', { versionId, filePath }),
     removeMod: (versionId, fileName) => apiPost('/api/mods/remove', { versionId, fileName }),
     openModSaveFolder: () => apiGet('/api/mods/open-save-folder'),
-    resolveModDeps: (ids) => apiGet('/api/mods/resolve-deps', { ids }),
+    resolveModDeps: (ids, source = 'modrinth') => apiGet('/api/mods/resolve-deps', { ids, source }),
     resolveDepVersions: (ids, gameVersion = '', loader = '', source = 'modrinth') =>
         apiPost('/api/mods/resolve-deps-versions', { ids, gameVersion, loader, source }),
     selectSaveFolder: async (defaultPath = '') => {
@@ -578,6 +578,8 @@ const API = {
         apiPost('/api/version/add-folder', { path: folderPath, name }),
     removeExternalFolder: (folderPath) =>
         apiPost('/api/version/remove-folder', { path: folderPath }),
+    renameExternalFolder: (folderPath, name) =>
+        apiPost('/api/version/rename-folder', { path: folderPath, name }),
     listExternalFolders: () => apiGet('/api/version/list-folders'),
     selectExternalFolder: () => apiGet('/api/version/select-folder'),
     autoDetectFolders: () => apiGet('/api/version/auto-detect-folders', {}, 120000),

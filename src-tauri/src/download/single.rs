@@ -193,10 +193,16 @@ pub async fn download_with_mirror(
     };
     let urls = mirror::get_mirror_urls(&base_url, effective_source);
 
-    // 坏源黑名单过滤：本次会话已失败的 host 直接跳过
+    // 坏源黑名单过滤：本次会话已失败的 host 直接跳过。
+    // 但对 Modrinth CDN 例外：官方 cdn.modrinth.com 永不因黑名单被跳过。
+    // 原因：镜像 mod.mcimirror.top 挂掉时（公益 CDN 偶发 429/超时，且本地对 Modrinth
+    // 强制镜像优先），若官方源曾因网络抖动被标记坏源，列表会被清空直接报"所有下载源
+    // 均失败"，而官方源其实可用。失败源独立标记，官方源始终可兜底尝试。
+    let is_modrinth_official = base_url.contains("cdn.modrinth.com")
+        || base_url.contains("cdn-alt.modrinth.com");
     let urls: Vec<String> = urls
         .into_iter()
-        .filter(|u| !mirror::is_bad_host(u))
+        .filter(|u| is_modrinth_official || !mirror::is_bad_host(u))
         .collect();
     if urls.is_empty() {
         return Err(format!("所有下载源均已被标记为不可用: {}", base_url));

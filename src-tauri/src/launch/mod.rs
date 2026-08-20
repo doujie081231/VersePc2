@@ -19,7 +19,7 @@ pub use game_session::{
 };
 pub use java_scan::{get_java_version_range, should_skip_system_scan, JavaCandidate};
 pub use memory::{
-    resolve_max_memory, resolve_memory_mode, resolve_min_memory, should_run_memory_optimize,
+    resolve_max_memory, resolve_memory_mode, should_run_memory_optimize,
     DEFAULT_LEGACY_MAX_MEMORY, MemoryMode,
 };
 pub use process_manager::{do_launch, kill_game, list_running_games};

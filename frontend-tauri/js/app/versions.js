@@ -263,7 +263,7 @@ function renderInstalledVersionsInto(container) {
     const externalPathHtml = v.isExternal && v.externalPath ? `<span style="color:var(--text-muted);font-size:11px;margin-left:4px" title="${escapeHtml(v.externalPath)}">${escapeHtml(v.externalPath)}</span>` : '';
     const displayName = v.isExternal ? (v.customName || v.id.replace(/ \[外部\d*\]/, '')) : (v.customName || v.id);
     const deleteBtnHtml = `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteVersion('${escapeOnclick(v.id)}')">${v.isExternal ? '移除' : '删除'}</button>`;
-    const settingsBtnHtml = `<button class="version-item-settings-btn" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置" onclick="event.stopPropagation();">
+    const settingsBtnHtml = `<button class="version-item-settings-btn" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置" onclick="event.stopPropagation();openVersionSettings('${escapeOnclick(v.id)}','${escapeOnclick(displayName)}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
     </button>`;
     const selectedClass = currentLaunchVersionId === v.id ? ' selected' : '';
@@ -284,7 +284,6 @@ function renderInstalledVersionsInto(container) {
       </div>
       <div class="version-item-actions">
         ${settingsBtnHtml}
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openVersionSettings('${escapeOnclick(v.id)}','${escapeOnclick(displayName)}')">设置</button>
         ${deleteBtnHtml}
       </div>
     </div>`;
@@ -385,6 +384,52 @@ const AVATAR_CACHE_VERSION = 9;
 let _pageTransitionLock = false;
 let _pendingPageTransition = null;
 
+const _PCL_BLOCK_SELECTOR = '.page-header, .card, .section-title, .mod-list, .home-hero, .stat-card';
+
+function _collectPclBlocks(pageEl) {
+  const blocks = [];
+  pageEl.querySelectorAll(_PCL_BLOCK_SELECTOR).forEach((el) => {
+    if (getComputedStyle(el).display === 'none') return;
+    if (el.classList.contains('card') && el.parentElement && el.parentElement.closest('.card')) return;
+    blocks.push(el);
+  });
+  if (blocks.length === 0) {
+    let kids = Array.from(pageEl.children);
+    while (kids.length === 1 && kids[0].children && kids[0].children.length > 1) {
+      kids = Array.from(kids[0].children);
+    }
+    kids.forEach((el) => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none') return;
+      if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
+      blocks.push(el);
+    });
+  }
+  return blocks;
+}
+
+function runPageEnterAnim(pageEl) {
+  if (!pageEl) return;
+  const blocks = _collectPclBlocks(pageEl);
+  if (blocks.length === 0) return;
+  pageEl.style.animation = 'none';
+  blocks.forEach((el, i) => {
+    el.classList.remove('pc-enter-block');
+    void el.offsetWidth;
+    el.style.setProperty('--pc-delay', (i * 25) + 'ms');
+    el.classList.add('pc-enter-block');
+  });
+}
+
+function runPageExitAnim(pageEl, done) {
+  if (!pageEl) { if (done) done(); return; }
+  pageEl.classList.add('pc-exit-page');
+  setTimeout(() => {
+    pageEl.classList.remove('pc-exit-page');
+    if (done) done();
+  }, 70);
+}
+
 async function navigateToPage(pageName) {
   if (_pageTransitionLock) {
     _pendingPageTransition = pageName;
@@ -418,6 +463,7 @@ async function navigateToPage(pageName) {
     if (navBtn) navBtn.classList.add('active');
     target.classList.add('active');
     target.scrollTop = 0;
+    runPageEnterAnim(target);
     // 开服页：进入时刷新本地版本列表
     if (pageName === 'server-host' && typeof initServerHostPage === 'function') {
       setTimeout(() => initServerHostPage(), 50);
@@ -435,43 +481,39 @@ async function navigateToPage(pageName) {
     }
   }
 
-  if (pageName === 'mod-detail' && currentPage && currentPage.id === 'page-mod-detail' && !_isRestoringModDetail) {
-    modDetailHistory.push({
-      id: currentModDetailId,
-      source: currentModDetailSource
-    });
-  }
-  
   if (currentPage && currentPage !== target) {
     if (currentPage.id === 'page-version-settings') {
       document.querySelector('.content-area')?.classList.remove('no-scroll');
     }
     _pageTransitionLock = true;
     currentPage.style.animation = '';
+    target.style.animation = '';
     requestAnimationFrame(() => {
-      try {
-        currentPage.classList.remove('active');
-        currentPage.style.animation = '';
-        target.classList.add('active');
-        target.scrollTop = 0;
-        target.style.animation = 'pageIn 0.18s var(--ease-out-expo) backwards';
-      } finally {
-        setTimeout(() => {
-          _pageTransitionLock = false;
-          if (_pendingPageTransition && _pendingPageTransition !== pageName) {
-            const pending = _pendingPageTransition;
-            _pendingPageTransition = null;
-            navigateToPage(pending);
-          } else {
-            _pendingPageTransition = null;
-          }
-        }, 80);
-      }
+      runPageExitAnim(currentPage, () => {
+        try {
+          currentPage.classList.remove('active');
+          target.classList.add('active');
+          target.scrollTop = 0;
+          runPageEnterAnim(target);
+        } finally {
+          setTimeout(() => {
+            _pageTransitionLock = false;
+            if (_pendingPageTransition && _pendingPageTransition !== pageName) {
+              const pending = _pendingPageTransition;
+              _pendingPageTransition = null;
+              navigateToPage(pending);
+            } else {
+              _pendingPageTransition = null;
+            }
+          }, 120);
+        }
+      });
     });
   } else if (!currentPage) {
     target.classList.add('active');
     target.scrollTop = 0;
-    target.style.animation = 'pageIn 0.18s var(--ease-out-expo) backwards';
+    target.style.animation = '';
+    runPageEnterAnim(target);
   }
 
   // ===== 页面切换完成后：恢复该页面之前被内存清理清掉的图片 src =====
@@ -603,12 +645,33 @@ function goBackFromDetail() {
   if (modDetailHistory.length > 0) {
     const prev = modDetailHistory.pop();
     _isRestoringModDetail = true;
-    openModDetail(prev.id, prev.source);
+    if (prev && prev.type !== 'mod') {
+      openResourceDetail(prev.id, prev.type, prev.source);
+    } else {
+      openModDetail(prev && prev.id, prev && prev.source);
+    }
     _isRestoringModDetail = false;
   } else {
     const backPage = previousPage || 'mods';
     navigateToPage(backPage);
   }
+}
+
+// 压栈当前详情为返回历史：仅在当前正展示详情页且非恢复操作时压栈，
+// 记录"来源"（即正在查看的详情），从而支持前置模组逐级返回。
+function pushModDetailHistory() {
+  if (_isRestoringModDetail) return;
+  const active = document.querySelector('.page.active');
+  if (!active || active.id !== 'page-mod-detail') return;
+  if (modDetailHistory.length > 0) {
+    const last = modDetailHistory[modDetailHistory.length - 1];
+    if (last.id === currentModDetailId && last.source === currentModDetailSource) return;
+  }
+  modDetailHistory.push({
+    id: currentModDetailId,
+    source: currentModDetailSource,
+    type: currentModDetailType
+  });
 }
 
 function openVersionDetail(versionId, versionUrl, versionType) {
@@ -1345,10 +1408,13 @@ function setSelectedFolder(folder) {
 }
 
 async function populateFolderSelector() {
+  _selectedFolder = getSelectedFolder();
+  if (window.VerseInstalledVM && typeof window.VerseInstalledVM.loadFolders === 'function') {
+    await window.VerseInstalledVM.loadFolders();
+    return;
+  }
   const select = document.getElementById('folder-selector');
   if (!select) return;
-  const currentVal = getSelectedFolder();
-  _selectedFolder = currentVal;
   let html = '<option value="__internal">游戏文件夹</option>';
   try {
     const result = await API.listExternalFolders();
@@ -1361,7 +1427,7 @@ async function populateFolderSelector() {
     }
   } catch (e) {}
   select.innerHTML = html;
-  select.value = currentVal;
+  select.value = _selectedFolder;
 }
 
 function onFolderSelectorChange() {

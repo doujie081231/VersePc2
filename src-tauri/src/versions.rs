@@ -299,7 +299,7 @@ pub(crate) fn fetch_remote_manifest(refresh: bool) -> Option<Value> {
         vec![MOJANG_MANIFEST_URL, BMCLAPI_MANIFEST_URL]
     };
 
-    // 多源竞速：同时请求所有源，先成功者胜出（对应 PCL 的双源竞速策略）
+    // 多源竞速：同时请求所有源，先成功者胜出，避免慢源阻塞
     let manifest = fetch_json_racing(&urls, Duration::from_secs(6));
 
     // 写缓存
@@ -360,7 +360,7 @@ fn fetch_json_blocking_with_timeout(url: &str, timeout: Duration) -> Option<Valu
 }
 
 /// 多源竞速：并发请求多个 URL，返回第一个成功解析为 JSON 的结果。
-/// 对应 PCL 的"双源竞速"策略：同时请求多个源，先成功者胜出，失败/慢源不阻塞整体。
+/// 同时请求多个源，先成功者胜出，失败/慢源不阻塞整体。
 /// 每个源有独立的超时，避免慢源或不可达源长时间挂起。
 fn fetch_json_racing(urls: &[&str], per_url_timeout: Duration) -> Option<Value> {
     if urls.is_empty() {
@@ -386,14 +386,14 @@ fn fetch_json_racing(urls: &[&str], per_url_timeout: Duration) -> Option<Value> 
 }
 
 /// 扫描本地已安装版本（versions/ 目录）
-fn scan_local_versions() -> Vec<Value> {
+pub(crate) fn scan_local_versions() -> Vec<Value> {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
     scan_versions_in_dir(&versions_dir, false, None)
 }
 
 /// 扫描外部文件夹下的版本
-fn scan_external_versions() -> Vec<Value> {
+pub(crate) fn scan_external_versions() -> Vec<Value> {
     let external_folders = storage::load_external_folders();
     let mut versions: Vec<Value> = Vec::new();
 
@@ -834,6 +834,10 @@ fn detect_loader(parsed: &Value, id: &str, inherits_from: &str, version_dir: Opt
         if !is_bare_mc && !is_loader_id && (!is_content_vanilla || inherits_non_mc) {
             is_modpack = true;
         }
+    }
+
+    if is_neoforge {
+        is_fabric = false;
     }
 
     // 基础版本：优先用 inheritsFrom
@@ -1277,6 +1281,33 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             let path_str = utils::get_str(&data, "path");
             let mut folders = storage::load_external_folders();
             folders.retain(|f| utils::get_str(f, "path") != path_str);
+            storage::save_external_folders(&folders);
+            Some(ApiResult::ok(json!({ "success": true })))
+        }
+
+        // ===== 重命名外部文件夹 =====
+        "POST /api/version/rename-folder" => {
+            let data = body.clone().unwrap_or(Value::Null);
+            let path_str = utils::get_str(&data, "path");
+            let name = utils::get_str(&data, "name");
+            if path_str.is_empty() || name.trim().is_empty() {
+                return Some(ApiResult::err(400, "Missing path or name"));
+            }
+            let trimmed = name.trim().to_string();
+            let mut folders = storage::load_external_folders();
+            let mut found = false;
+            for folder in folders.iter_mut() {
+                if utils::get_str(folder, "path") == path_str {
+                    if let Some(obj) = folder.as_object_mut() {
+                        obj.insert("name".to_string(), json!(trimmed));
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Some(ApiResult::ok(json!({ "success": false, "error": "未找到该外部文件夹" })));
+            }
             storage::save_external_folders(&folders);
             Some(ApiResult::ok(json!({ "success": true })))
         }
@@ -2560,10 +2591,10 @@ async fn handle_export_script(body: &Option<Value>) -> crate::api::ApiResult {
     }
 }
 
-/// POST /api/version/export-modpack — 导出整合包（按 PCL2 导出内容规则生成 overrides + modpack.json）
+/// POST /api/version/export-modpack — 导出整合包（生成 overrides + modpack.json）
 ///
 /// 参数：versionId（必填）、name、version、author、description、selectedKeys（导出内容 key 数组）
-/// 对齐 PCL2 PageInstanceExport 的导出内容规则：将选中的游戏内容写入 overrides/ 目录，
+/// 将选中的游戏内容写入 overrides/ 目录，
 /// 排除系统/缓存目录、日志与临时文件、版本自身 JAR/JSON，并写入 modpack.json 元信息。
 /// 写入 DATA_DIR/temp/<versionId>-export.zip
 /// 返回：{ success, path, fileName }
@@ -2624,10 +2655,9 @@ fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResult {
     }
 }
 
-/// 生成 PCL2 风格整合包 ZIP：overrides/ 保存游戏内容，modpack.json 记录元信息
+/// 生成整合包 ZIP：overrides/ 保存游戏内容，modpack.json 记录元信息
 ///
-/// 对齐 PCL2 ModModpack 的导入结构与 PageInstanceExport 的导出内容规则。
-/// 若未提供 selectedKeys，则使用与 PCL2 默认一致的完整内容集。
+/// 若未提供 selectedKeys，则导出完整内容集。
 #[allow(clippy::too_many_arguments)]
 fn create_modpack_zip(
     src_dir: &Path,
@@ -2680,12 +2710,12 @@ fn create_modpack_zip(
         }
     }
 
-    // 系统/缓存/无用目录（PCL2 跳过列表 + 常规无用目录）
+    // 系统/缓存/无用目录
     let skip_dirs: HashSet<&str> = [
         "assets", "versions", "libraries", "structureCacheV1", ".fabric", ".git",
         "avatar-cache", "cosmetic-cache", "downloads", "logs", "crash-reports",
     ].iter().cloned().collect();
-    // 排除的垃圾文件（PCL2 排除行）
+    // 排除的垃圾文件
     let junk_names: HashSet<&str> = ["hmclversion.cfg", "log4j2.xml", "BakaCoreInfo"]
         .iter().cloned().collect();
     let version_json_name = format!("{}.json", version_id);

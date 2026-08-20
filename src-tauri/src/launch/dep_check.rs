@@ -717,7 +717,6 @@ pub(crate) fn merge_version_json_chain(
 }
 
 /// 合并两个版本 JSON：base 是父版本，child 是当前版本
-/// 对齐 PCL2 (ModMinecraft.vb JsonObject 合并段)：
 /// 深度合并全部字段（对象递归、数组按 Newtonsoft MergeArrayHandling.Concat 拼接、
 /// 其余 scalar 由子版本覆盖），libraries 单独处理为"子版本在前、父版本在后"，
 /// 继承标记在合并链中已消费后移除。

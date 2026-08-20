@@ -31,7 +31,7 @@ const PageHome = {
         Verse<span class="home-page-title-accent">PC2</span>
       </div>
 
-      <!-- 头像（居中放大，皮肤头部像素方块，PCL 风格） -->
+      <!-- 头像（居中放大，皮肤头部像素方块） -->
       <div class="home-avatar-box" id="home-avatar-box" @click="goAccounts" title="账户管理">
         <div class="home-avatar-img-wrap" id="home-avatar"><img src="img/icon.png" alt="" class="home-avatar-img"></div>
       </div>

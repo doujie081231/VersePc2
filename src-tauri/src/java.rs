@@ -558,7 +558,7 @@ fn normalize_version_string(raw: &str) -> Option<String> {
 }
 
 /// 执行 java -version 解析版本和架构
-/// 参照 PCL 的 CheckAsync 逻辑：优先运行 -XshowSettings:properties -version 获取完整信息，
+/// 优先运行 -XshowSettings:properties -version 获取完整信息，
 /// 包括版本号、64 位检测、file.encoding 等；失败时回退到 -version 仅解析版本号
 pub fn inspect_java(java_exe: &Path) -> Option<(String, u32, bool)> {
     if !java_exe.exists() {
@@ -722,7 +722,7 @@ fn sort_java_list(list: &mut Vec<Value>) {
 }
 
 /// 检查路径是否包含重解析点（符号链接 / junction）
-/// 对应 PCL 对含重解析点 Java 的筛除；.minecraft\runtime 目录不受此限制
+/// 筛除含重解析点的 Java；.minecraft\runtime 目录不受此限制
 fn has_reparse_point(java_exe: &Path) -> bool {
     let lower = java_exe.to_string_lossy().to_lowercase();
     if lower.contains(".minecraft\\runtime") || lower.contains(".minecraft/runtime") {

@@ -2240,6 +2240,19 @@ async fn download_one_mod(
         error: error.to_string(),
     };
 
+    // 按文件大小计算单个模组下载超时（秒）：越大给越久，避免大文件在慢速/并发下超时丢失
+    fn mod_download_timeout(size_bytes: i64) -> u64 {
+        if size_bytes > 50 * 1024 * 1024 {
+            600
+        } else if size_bytes > 20 * 1024 * 1024 {
+            300
+        } else if size_bytes > 5 * 1024 * 1024 {
+            180
+        } else {
+            120
+        }
+    }
+
     if downloads.is_empty() {
         eprintln!("[mrpack] 模组无下载链接，跳过: {}", file_name);
         failed_count.fetch_add(1, Ordering::SeqCst);
@@ -2338,7 +2351,7 @@ async fn download_one_mod(
             dest_path,
             sha1_opt,
             size_opt,
-            180,
+            mod_download_timeout(file_size),
             on_progress,
         )
         .await
@@ -2413,8 +2426,8 @@ async fn download_one_mod(
     make_result(false, err)
 }
 
-/// 熔断保护：失败数 > max(5, 10% × 总数) 且 failCount > okCount 才取消
-/// 对应原项目 modrinth.js 的熔断逻辑
+/// 熔断保护：失败数超过一定比例且失败占比过高时才取消剩余下载
+/// 失败数需 > max(20, 10% × 总数×4) 且 失败占比 > 0.75 才取消，避免少量失败导致大量文件缺失
 fn check_circuit_breaker(
     failed_count: &Arc<AtomicUsize>,
     downloaded_count: &Arc<AtomicUsize>,
@@ -2423,11 +2436,19 @@ fn check_circuit_breaker(
 ) {
     let fail_n = failed_count.load(Ordering::SeqCst);
     let ok_n = downloaded_count.load(Ordering::SeqCst);
-    let threshold = std::cmp::max(5usize, total_mods / 10);
-    if fail_n > threshold && fail_n > ok_n {
+    let total_attempts = fail_n + ok_n;
+    let fail_ratio = if total_attempts > 0 {
+        fail_n as f64 / total_attempts as f64
+    } else {
+        0.0
+    };
+    let threshold = std::cmp::max(20usize, (total_mods as f64 * 0.4) as usize);
+    if fail_n > threshold && fail_ratio > 0.75 {
         eprintln!(
-            "[mrpack] 失败数({})超过阈值({})且大于成功数({})，取消剩余下载",
-            fail_n, threshold, ok_n
+            "[mrpack] 失败数({})超过阈值({})且失败占比({:.2}%)，取消剩余下载",
+            fail_n,
+            threshold,
+            fail_ratio * 100.0
         );
         abort_flag.store(true, Ordering::SeqCst);
     }

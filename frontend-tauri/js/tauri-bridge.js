@@ -285,6 +285,12 @@
         return '';
       });
     },
+    getDefaultModSaveFolder: function (gameVersion, loader) {
+      return invoke('get_default_mod_save_folder', { gameVersion: gameVersion || '', loader: loader || '' }).then(function (result) {
+        if (result && result.success) return result;
+        return null;
+      }).catch(function () { return null; });
+    },
     // 拖拽文件路径解析 — 从 File 对象中提取路径
     getDroppedFilePath: function (file) {
       return file ? (file.path || file.name || '') : '';
@@ -579,6 +585,7 @@
     memoryOptimize: system.memoryOptimize,
     openExternal: system.openExternal,
     getDefaultModPath: system.getDefaultModPath,
+    getDefaultModSaveFolder: system.getDefaultModSaveFolder,
     getDroppedFilePath: system.getDroppedFilePath,
     readFileBuffer: system.readFileBuffer,
     getAuroraVideoPath: system.getAuroraVideoPath,

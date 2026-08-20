@@ -34,7 +34,7 @@ const FORGE_METADATA_URLS: &[&str] = &[
 /// # 返回
 /// Vec<{version: String, gameVersion: String, type: String}>（type 为 "推荐" / "最新" / "release"）
 pub async fn get_forge_versions(game_version: &str) -> Vec<Value> {
-    // 多源竞速：并发请求各镜像源，谁先返回非空 XML 就用谁（对应 PCL 双源竞速）
+    // 多源竞速：并发请求各镜像源，谁先返回非空 XML 就用谁
     // 注意：Forge 对 MC 1.20.5+ 不再发布版本，元数据中确实没有匹配条目时返回空数组
     let xml = match shared::fetch_text_racing(FORGE_METADATA_URLS, 15).await {
         Some(x) => x,

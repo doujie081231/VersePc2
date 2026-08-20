@@ -298,7 +298,7 @@ async fn handle_launch(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     };
 
     // 依赖完整性检查
-    // 对齐 PCL：检查为纯同步重活（对每个 library/native/asset 逐一下文件系统 exists），
+    // 这是纯同步重活（对每个 library/native/asset 逐一下文件系统 exists），
     // 挪到阻塞线程池执行，避免占住 async 运行时导致启动流程卡顿
     let dep_check_result = {
         let clean_id = clean_id.clone();

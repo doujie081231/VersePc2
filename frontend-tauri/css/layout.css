@@ -519,7 +519,7 @@ body.sidebar-collapsed .sidebar .sidebar-footer {
     margin-top: 4px;
 }
 
-/* 首页（PCL 风格）：标题在页面上方居中、头像和其他内容在下方居中 */
+/* 首页：标题在页面上方居中、头像和其他内容在下方居中 */
 .home-page {
     display: flex;
     flex-direction: column;
@@ -549,7 +549,7 @@ body.sidebar-collapsed .sidebar .sidebar-footer {
     background-clip: text;
 }
 
-/* 头像容器：居中，自适应窗口大小（皮肤头部像素方块，PCL 风格） */
+/* 头像容器：居中，自适应窗口大小（皮肤头部像素方块） */
 .home-avatar-box {
     width: min(25vh, 175px);
     height: min(25vh, 175px);
@@ -1183,6 +1183,30 @@ body.sidebar-collapsed .content-area {
     content: '';
     display: block;
     height: 0;
+}
+
+/* ============================================================
+   页面切换动画（逐内容块级联弹入）
+   进入：每个内容块从上方 -16px 落下并回弹，25ms 错峰
+   退出：整页快速上移淡出
+   ============================================================ */
+.pc-exit-page {
+    animation: pcPageExit 0.07s ease-out forwards !important;
+}
+
+.pc-enter-block {
+    animation: pcBlockEnter 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    animation-delay: var(--pc-delay, 0ms);
+}
+
+@keyframes pcPageExit {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-6px); }
+}
+
+@keyframes pcBlockEnter {
+    from { opacity: 0; transform: translateY(-16px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* 把原先写死的 title 高度完全清掉，避免挤压布局 */

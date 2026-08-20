@@ -113,25 +113,6 @@ function populateModVersionFilter() {
     updateCustomSelectOptions('resourcepack-filter-version', versionOptions);
 }
 
-function translateChineseModQuery(query) {
-    if (!query || !/[\u4e00-\u9fff]/.test(query)) return query;
-    const q = query.toLowerCase().trim();
-    const matches = [];
-    for (const [slug, chineseName] of Object.entries(MOD_CHINESE_NAMES)) {
-        const parts = chineseName.split(/[·（(]/);
-        const mainName = (parts[0] || '').trim();
-        if (mainName.includes(q) || chineseName.includes(q)) {
-            matches.push({ slug, weight: mainName === q ? 100 : mainName.startsWith(q) ? 50 : chineseName.includes(q) ? 20 : 0 });
-        }
-    }
-    if (matches.length > 0) {
-        matches.sort((a, b) => b.weight - a.weight);
-        const slugs = [...new Set(matches.filter(m => m.weight >= 20).map(m => m.slug))];
-        if (slugs.length > 0) return slugs.slice(0, 5).join(' ');
-    }
-    return query;
-}
-
 async function loadMods() {
     const container = document.getElementById('mod-browse-list');
     container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
@@ -145,10 +126,12 @@ async function loadMods() {
     const sort = getCustomSelectValue('mod-filter-sort');
     const sourceFilter = getCustomSelectValue('mod-filter-source') || 'any';
 
-    const translatedQuery = translateChineseModQuery(modSearchQuery);
+    const translatedQuery = modSearchQuery;
+    console.warn('[mod-search] 原始关键词=', modSearchQuery, 'loader=', loader, 'version=', version);
 
     try {
         const data = await API.searchMods(translatedQuery, sourceFilter, loader, version, category, sort, 15, modSearchOffset);
+        console.warn('[mod-search] 后端返回 hits=', (data.hits || []).length, 'total=', data.total, 'debug=', JSON.stringify(data.debug || null));
         const hits = data.hits || [];
         modSearchTotal = data.total || 0;
         modSearchResults = hits;

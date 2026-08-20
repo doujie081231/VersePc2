@@ -35,7 +35,7 @@ pub fn resolve_memory_mode(
 }
 
 /// 解析 JVM 最大内存（对应 memory-resolver.js）
-/// 自动模式：物理内存 1/4 基础值 + Mod 分级加成
+/// 自动模式：基于当前可用内存按 Mod 分级加成
 /// custom 模式：直接返回用户指定值
 pub fn resolve_max_memory(
     mode: &MemoryMode,
@@ -47,12 +47,6 @@ pub fn resolve_max_memory(
         MemoryMode::Custom(v) => *v,
         MemoryMode::Auto => {
             const GB_TO_MB: u64 = 1024;
-            const ALIGN_MB: u64 = 128;
-            const MIN_BASE_MB: u64 = 256;
-
-            // 基础值：物理内存 1/4，对齐 128MB，保底 256MB
-            let base_mb = ((total_mb / 4) / ALIGN_MB) * ALIGN_MB;
-            let base_mb = base_mb.max(MIN_BASE_MB);
 
             // Mod 加成 4 级目标（GB）
             let ram_min_gb = 0.5 + (mod_count as f64) / 150.0;
@@ -60,8 +54,9 @@ pub fn resolve_max_memory(
             let ram_target2_gb = 2.7 + (mod_count as f64) / 50.0;
             let ram_target3_gb = 4.5 + (mod_count as f64) / 25.0;
 
+            // 基于当前可用内存渐进分配
             let mut ram_give_mb: f64 = 0.0;
-            let mut ram_available_gb = (total_mb as f64) / (GB_TO_MB as f64);
+            let mut ram_available_gb = (free_mb as f64) / (GB_TO_MB as f64);
 
             let stages: [(f64, f64); 4] = [
                 (ram_target1_gb, 1.0),
@@ -81,7 +76,7 @@ pub fn resolve_max_memory(
             let min_required_mb = (ram_min_gb * (GB_TO_MB as f64)).floor();
             ram_give_mb = ram_give_mb.max(min_required_mb);
 
-            let mut auto_mb = (base_mb as f64).max(ram_give_mb.floor());
+            let mut auto_mb = ram_give_mb.floor();
 
             // 物理内存总量约束（分档保留系统占用）
             let system_reserve = if total_mb <= 4096 {
@@ -140,12 +135,4 @@ pub fn should_run_memory_optimize(
         return false;
     }
     true
-}
-
-/// 计算最小内存（对应 args-builder.js 中的逻辑）
-/// maxMemMB / 2，对齐 256MB，最小 512MB，最大不超过 maxMemMB
-pub fn resolve_min_memory(max_mem_mb: u64) -> u64 {
-    let mut min = (max_mem_mb / 2) / 256 * 256;
-    min = min.max(512);
-    min.min(max_mem_mb)
 }
