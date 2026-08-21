@@ -1475,6 +1475,7 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
                 .and_then(|p| p.get("folderType"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("version");
+            eprintln!("[open-folder] version_id={:?} folder_type={:?}", version_id, folder_type);
             if version_id.is_empty() {
                 return Some(ApiResult::err(400, "Missing versionId"));
             }
@@ -1485,23 +1486,29 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             } else {
                 version_id.to_string()
             };
+            eprintln!("[open-folder] is_external={} clean_id={:?}", is_external, clean_id);
 
             let data_dir = storage::resolve_data_dir();
+            eprintln!("[open-folder] data_dir = {}", data_dir.display());
             let versions_dir = data_dir.join("versions");
+            eprintln!("[open-folder] versions_dir = {}", versions_dir.display());
             let version_dir = versions_dir.join(storage::sanitize_version_id(&clean_id));
+            eprintln!("[open-folder] version_dir = {} (exists={})", version_dir.display(), version_dir.exists());
 
             let game_root = if is_external {
                 version_dir.clone()
             } else {
                 let settings = storage::load_settings();
-                crate::launch::args_builder::resolve_game_dir(
+                let gr = crate::launch::args_builder::resolve_game_dir(
                     &clean_id,
                     None,
                     None,
                     &settings,
                     &versions_dir,
                     &data_dir,
-                )
+                );
+                eprintln!("[open-folder] resolve_game_dir version isolation -> game_root = {}", gr.display());
+                gr
             };
 
             let target = match folder_type {
@@ -1514,9 +1521,12 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
                 "crash-reports" => game_root.join("crash-reports"),
                 _ => version_dir,
             };
+            eprintln!("[open-folder] target = {} (exists={}, is_dir={})",
+                target.display(), target.exists(), target.is_dir());
 
             if !target.exists() {
                 let _ = std::fs::create_dir_all(&target);
+                eprintln!("[open-folder] created target dir (after create exists={})", target.exists());
             }
 
             if open_in_explorer(&target) {
@@ -1894,9 +1904,25 @@ fn open_in_explorer(path: &Path) -> bool {
     if !path.exists() {
         let _ = std::fs::create_dir_all(path);
     }
+    eprintln!("[explorer] opening path={} is_dir={}", path.display(), path.is_dir());
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer.exe").arg(path).spawn().is_ok()
+        // 直接传原路径，由 Command::arg 自动对含空格路径加引号。
+        // 不能补尾部反斜杠：含空格路径的结尾会拼成 \"，被命令行当作转义引号，
+        // 导致路径断裂、explorer 回退打开默认位置（如“文档”）。
+        if path.is_dir() {
+            let p = path.to_string_lossy().to_string();
+            eprintln!("[explorer] cmd = explorer.exe {:?}", p);
+            std::process::Command::new("explorer.exe").arg(p).spawn().is_ok()
+        } else {
+            // 文件：用 /select 定位并选中该文件
+            let p = path.to_string_lossy().to_string();
+            eprintln!("[explorer] cmd = explorer.exe /select, {:?}", p);
+            std::process::Command::new("explorer.exe")
+                .args(["/select,", &p])
+                .spawn()
+                .is_ok()
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -2680,7 +2706,7 @@ fn create_modpack_zip(
     let mut include_dirs: HashSet<String> = HashSet::new();
     let mut include_files: HashSet<String> = HashSet::new();
     if selected_keys.is_empty() {
-        // 未指定内容时使用 PCL2 默认全量内容
+        // 未指定内容时使用默认全量内容
         for d in ["mods", "config", "resourcepacks", "texturepacks", "shaderpacks",
                   "saves", "screenshots", "defaultconfigs", "kubejs", "scripts",
                   "openloader", "serverconfig", "custom"] {

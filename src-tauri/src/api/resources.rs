@@ -22,7 +22,7 @@ use tauri::{AppHandle, Listener};
 use tokio::sync::Mutex;
 
 use crate::api::ApiResult;
-use crate::download::{download_with_mirror, resources_session};
+use crate::download::{download_with_mirror, download_with_mirror_cancellable, resources_session};
 use crate::modpack;
 use crate::resource::{matcher, mcversion, wiki};
 use crate::resource::matcher::SearchSource;
@@ -1601,7 +1601,6 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     };
 
     tokio::spawn(async move {
-        let _cancel = cancel_flag; // 持有 cancel_flag，便于扩展取消逻辑
         let progress_session_id = session_id_for_progress.clone();
         let on_progress: crate::download::ProgressCb = Arc::new(move |p: &crate::download::DownloadProgress| {
             let pct = if p.total_bytes > 0 {
@@ -1627,8 +1626,8 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
             });
         });
 
-        // 调用单流下载（含镜像回退、SHA1 校验、续传、低速检测）
-        let result = download_with_mirror(
+        // 调用单流下载（含镜像回退、SHA1 校验、续传、低速检测、取消支持）
+        let result = download_with_mirror_cancellable(
             &download_url_clone,
             &dest_path_clone,
             if expected_sha1_clone.is_empty() { None } else { Some(&expected_sha1_clone) },
@@ -1636,6 +1635,7 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
             &download_source,
             300, // 5 分钟超时
             Some(on_progress),
+            &cancel_flag,
         )
         .await;
 
@@ -1743,15 +1743,24 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
                 });
             }
             Err(e) => {
-                eprintln!("[resources] 下载失败: {}", e);
-                resources_session::update_session(&app_handle, &session_id_for_task, |s| {
-                    s.status = resources_session::ResourceStage::Failed;
-                    s.progress = 100;
-                    s.message = format!("下载失败: {}", e);
-                    if !s.files.is_empty() {
-                        s.files[0].status = "failed".to_string();
-                    }
-                });
+                if resources_session::is_cancelled(&cancel_flag) {
+                    resources_session::update_session(&app_handle, &session_id_for_task, |s| {
+                        s.status = resources_session::ResourceStage::Cancelled;
+                        s.progress = 100;
+                        s.message = "下载已取消".to_string();
+                        s.phase = "cancelled".to_string();
+                    });
+                } else {
+                    eprintln!("[resources] 下载失败: {}", e);
+                    resources_session::update_session(&app_handle, &session_id_for_task, |s| {
+                        s.status = resources_session::ResourceStage::Failed;
+                        s.progress = 100;
+                        s.message = format!("下载失败: {}", e);
+                        if !s.files.is_empty() {
+                            s.files[0].status = "failed".to_string();
+                        }
+                    });
+                }
                 // 失败也保留 60 秒便于前端读取错误
                 let sid = session_id_for_task.clone();
                 tokio::spawn(async move {

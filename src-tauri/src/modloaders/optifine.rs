@@ -22,6 +22,89 @@ use super::shared;
 
 /// OptiFine 下载页 URL
 const OPTIFINE_DOWNLOADS_URL: &str = "https://optifine.net/downloads";
+/// OptiFine 镜像下载入口（页内含真实 downloadx 连接）
+const OPTIFINE_ADLOAD_URL: &str = "https://optifine.net/adloadx?f=";
+/// BMCLAPI OptiFine 版本列表
+const OPTIFINE_LIST_BMCLAPI: &str = "https://bmclapi2.bangbang93.com/optifine/versionList";
+
+/// 拉取 OptiFine 页面文本（带浏览器 UA，optifine.net 会拦截非浏览器请求）
+async fn fetch_optifine_text(url: &str) -> Result<String, String> {
+    let client = shared::shared_client();
+    let resp = client
+        .get(url)
+        .header("User-Agent", crate::download::mirror::BROWSER_UA)
+        .timeout(std::time::Duration::from_secs(20))
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("HTTP {}", status));
+    }
+    resp.text().await.map_err(|e| format!("读取响应失败: {}", e))
+}
+
+/// 从 BMCLAPI 解析指定 MC 版本的 OptiFine 版本列表
+async fn optifine_versions_from_bmclapi(game_version: &str) -> Option<Vec<Value>> {
+    let text = shared::fetch_text(OPTIFINE_LIST_BMCLAPI, 20).await.ok()?;
+    let arr: Value = serde_json::from_str(&text).ok()?;
+    let arr = arr.as_array()?;
+    let mut out: Vec<Value> = Vec::new();
+    for tok in arr {
+        if shared::jstr(tok, "mcversion") != game_version {
+            continue;
+        }
+        let ftype = shared::jstr(tok, "type");
+        let patch = shared::jstr(tok, "patch");
+        let fname = shared::jstr(tok, "filename");
+        if fname.is_empty() || (ftype.is_empty() && patch.is_empty()) {
+            continue;
+        }
+        let token = if patch.is_empty() {
+            ftype.clone()
+        } else {
+            format!("{}_{}", ftype, patch)
+        };
+        out.push(json!({
+            "version": token,
+            "gameVersion": game_version,
+            "fileName": fname,
+        }));
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
+
+/// 从官方下载页解析指定 MC 版本的 OptiFine 版本列表
+async fn optifine_versions_from_official(game_version: &str) -> Option<Vec<Value>> {
+    let url = format!("{}?f={}", OPTIFINE_DOWNLOADS_URL, game_version);
+    let html = fetch_optifine_text(&url).await.ok()?;
+    let re = regex::Regex::new(r"OptiFine_([0-9A-Za-z_.]+)\.jar").ok()?;
+    let mut out: Vec<Value> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let prefix = format!("{}_", game_version);
+    for cap in re.captures_iter(&html) {
+        let name = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let token = match name.strip_prefix(&prefix) {
+            Some(t) => t,
+            None => continue,
+        };
+        if token.is_empty() || !seen.insert(token.to_string()) {
+            continue;
+        }
+        // preview 文件名带 preview_ 前缀
+        let fname = format!(
+            "{}OptiFine_{}.jar",
+            if token.contains("pre") { "preview_" } else { "" },
+            name
+        );
+        out.push(json!({
+            "version": token,
+            "gameVersion": game_version,
+            "fileName": fname,
+        }));
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
 
 /// 获取指定 MC 版本的 OptiFine 版本列表
 /// 对应原项目 GET /api/optifine/versions
@@ -30,73 +113,20 @@ const OPTIFINE_DOWNLOADS_URL: &str = "https://optifine.net/downloads";
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
 ///
 /// # 返回
-/// Vec<{version: String, gameVersion: String}>（version 形如 "HD_U_Z"）
+/// Vec<{version, gameVersion, fileName}>（version 形如 "HD_U_I5"、"HD_U_I5_pre4"）
 pub async fn get_optifine_versions(game_version: &str) -> Vec<Value> {
-    let url = format!("{}?f={}", OPTIFINE_DOWNLOADS_URL, game_version);
-
-    // optifine.net 实际返回 HTML 页面，必须用 fetch_text 而不是 fetch_json
-    let page_html = match shared::fetch_text(&url, 15).await {
-        Ok(html) => html,
-        Err(e) => {
-            eprintln!("[OptiFine] 获取版本列表失败: {}", e);
-            // 完全失败时返回默认 HD_U_Z
-            let fallback = json!({
-                "version": "HD_U_Z",
-                "gameVersion": game_version,
-            });
-            return vec![fallback];
-        }
-    };
-
-    // 字符串扫描匹配：OptiFine_<gamever>_HD_U_X.jar
-    let prefix = format!("OptiFine_{}_HD_U_", game_version);
-    let mut versions: Vec<Value> = Vec::new();
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-    let bytes = page_html.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        // 找下一个 "OptiFine_<gamever>_HD_U_" 出现位置
-        if let Some(idx) = page_html[i..].find(&prefix) {
-            let abs_idx = i + idx + prefix.len();
-            if abs_idx >= bytes.len() {
-                break;
-            }
-            // 扫描字母数字（版本号字母，如 Z、Z6、Z8_1 等）
-            let mut end = abs_idx;
-            while end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
-                end += 1;
-            }
-            // 后面应该是 .jar 或非字母数字字符
-            if end > abs_idx {
-                let ver = &page_html[abs_idx..end];
-                // 排除超长异常匹配（正常版本号最多 5 字符）
-                if ver.len() <= 8 && !seen.contains(ver) {
-                    seen.insert(ver.to_string());
-                    versions.push(json!({
-                        "version": format!("HD_U_{}", ver),
-                        "gameVersion": game_version,
-                    }));
-                }
-            }
-            i = end;
-        } else {
-            break;
+    // BMCLAPI 源优先，官方源兜底
+    if let Some(v) = optifine_versions_from_bmclapi(game_version).await {
+        if !v.is_empty() {
+            return v;
         }
     }
-
-    // 回退：未匹配到则生成 Z~A 字母版本
-    if versions.is_empty() {
-        for c in "ZYXWVUTSRQPONMLKJIHGFEDCBA".chars() {
-            versions.push(json!({
-                "version": format!("HD_U_{}", c),
-                "gameVersion": game_version,
-            }));
-        }
+    if let Some(mut v) = optifine_versions_from_official(game_version).await {
+        v.truncate(12);
+        return v;
     }
-
-    versions.truncate(10);
-    versions
+    eprintln!("[OptiFine] 获取版本列表失败（双源均不可用），返回空列表");
+    Vec::new()
 }
 
 // ============== OptiFine 安装 ==============
@@ -111,8 +141,27 @@ pub async fn get_optifine_versions(game_version: &str) -> Vec<Value> {
 //   5. 在版本 libraries 中追加 optifine:OptiFine:<game>_<type> 条目
 //   6. 写入版本 JSON
 
-/// OptiFine installer 下载基础 URL（不带 k 参数，原项目使用空 k）
-const OPTIFINE_INSTALLER_URL: &str = "https://optifine.net/downloadx";
+/// 解析 OptiFine 的真实下载地址。
+/// OptiFine 官方不允许直接下载固定地址：需先请求 adloadx 镜像页，
+/// 从页内提取携带一次性 token 的 `downloadx?f=<file>&x=<token>` 地址，再用它下载。
+async fn resolve_optifine_download_url(filename: &str) -> Result<String, String> {
+    let mirror_url = format!("{}{}", OPTIFINE_ADLOAD_URL, filename);
+    let html = fetch_optifine_text(&mirror_url)
+        .await
+        .map_err(|e| format!("获取 OptiFine 镜像页失败: {}", e))?;
+    if html.len() < 200 {
+        return Err("镜像页内容过短".to_string());
+    }
+    let pat = format!(
+        r#"downloadx\?f={}(?:&|&amp;)[^'"<]*?x=[0-9a-fA-F]+"#,
+        regex::escape(filename)
+    );
+    let re = regex::Regex::new(&pat).map_err(|e| format!("正则编译失败: {}", e))?;
+    let m = re
+        .find(&html)
+        .ok_or_else(|| "镜像页中未找到 downloadx 下载地址".to_string())?;
+    Ok(format!("https://optifine.net/{}", &html[m.start()..m.end()]))
+}
 
 /// 安装 OptiFine 模组加载器
 /// 对应原项目 POST /api/optifine/install
@@ -129,12 +178,11 @@ pub async fn install_optifine(
     optifine_type: &str,
     target_version_id: Option<&str>,
 ) -> Value {
-    // 1. 参数规范化
-    let optifine_type = if optifine_type.is_empty() {
-        "HD_U_Z".to_string()
-    } else {
-        optifine_type.to_string()
-    };
+    // 1. 参数规范化（必须从版本列表选择真实版本，不默认伪造版本号）
+    if optifine_type.is_empty() {
+        return json!({ "success": false, "error": "缺少 OptiFine 版本号，请从版本列表中选择" });
+    }
+    let optifine_type = optifine_type.to_string();
     let default_version_id = format!("OptiFine_{}_{}", game_version, optifine_type);
     let version_id = target_version_id
         .map(|s| s.to_string())
@@ -145,12 +193,7 @@ pub async fn install_optifine(
         game_version, optifine_type, version_id
     );
 
-    // 2. 检查原版已安装（缺失时自动下载）
-    if let Err(e) = shared::ensure_base_version_installed(game_version, None).await {
-        return json!({ "success": false, "error": e });
-    }
-
-    // 3. 下载 installer JAR
+    // 2. 下载 installer JAR（不单独安装原版，下方统一合并）
     let installer_dir = shared::data_dir().join("temp");
     let installer_path = installer_dir.join(format!(
         "optifine-installer-{}-{}.jar",
@@ -160,22 +203,30 @@ pub async fn install_optifine(
         return json!({ "success": false, "error": format!("无法创建临时目录: {}", e) });
     }
 
-    // OptiFine 下载 URL：?f=OptiFine_<game>_<type>.jar&k=
-    let jar_filename = format!("OptiFine_{}_{}.jar", game_version, optifine_type);
-    let download_url = format!(
-        "{}?f={}&k=",
-        OPTIFINE_INSTALLER_URL, jar_filename
+    let is_preview = optifine_type.contains("pre");
+    // OptiFine 下载文件名：预览版带 preview_ 前缀
+    let jar_filename = format!(
+        "{}{}_{}_{}.jar",
+        if is_preview { "preview_" } else { "" },
+        "OptiFine",
+        game_version,
+        optifine_type
     );
+    let download_url = match resolve_optifine_download_url(&jar_filename).await {
+        Ok(u) => u,
+        Err(e) => {
+            let _ = std::fs::remove_file(&installer_path);
+            return json!({ "success": false, "error": format!("获取 OptiFine 下载地址失败: {}", e) });
+        }
+    };
 
     eprintln!("[OptiFine] 下载 installer: {}", download_url);
-    if let Err(e) = crate::download::single::download_with_mirror(
+    if let Err(e) = crate::download::single::download_single(
         &download_url,
         &installer_path,
         None,
         None,
-        "libraries",
-        180,
-        None,
+        300,
     )
     .await
     {
@@ -202,14 +253,7 @@ pub async fn install_optifine(
         installer_meta.len()
     );
 
-    // 4. 创建版本目录
-    let version_dir = shared::versions_dir().join(&version_id);
-    if let Err(e) = std::fs::create_dir_all(&version_dir) {
-        let _ = std::fs::remove_file(&installer_path);
-        return json!({ "success": false, "error": format!("无法创建版本目录: {}", e) });
-    }
-
-    // 5. 尝试从 installer 中读取 version.json 或 <versionId>.json
+    // 4. 尝试从 installer 中读取 version.json 或 <versionId>.json
     let mut version_json: Option<Value> = None;
     let mut launchwrapper_entries: Vec<(String, Vec<u8>)> = Vec::new();
 
@@ -278,16 +322,8 @@ pub async fn install_optifine(
     }
     eprintln!("[OptiFine] 已复制到 libraries: {}", of_lib_path.display());
 
-    // 7. 根据是否存在 version.json 选择主路径或降级路径
-    let final_json: Value = if let Some(mut profile) = version_json.take() {
-        // ===== 主路径 =====
-        // 设置 id / inheritsFrom / type
-        if let Some(obj) = profile.as_object_mut() {
-            obj.insert("id".to_string(), json!(version_id));
-            obj.insert("inheritsFrom".to_string(), json!(game_version));
-            obj.insert("type".to_string(), json!("release"));
-        }
-
+    // 7. 根据是否存在 version.json 选择主路径或降级路径，构造加载器 JSON
+    let loader_json: Value = if let Some(mut profile) = version_json.take() {
         // 兼容旧格式：minecraftArguments → arguments
         if let Some(obj) = profile.as_object_mut() {
             if obj.get("arguments").is_none() {
@@ -299,23 +335,8 @@ pub async fn install_optifine(
                     );
                 }
             }
-        }
-
-        // 下载 libraries 中带 url 的库
-        let libs_to_download = collect_libraries_with_urls(&profile);
-        if !libs_to_download.is_empty() {
-            eprintln!("[OptiFine] 主路径需下载 {} 个库文件", libs_to_download.len());
-            let (success, fail) = shared::download_libraries_concurrent(libs_to_download, 16).await;
-            eprintln!(
-                "[OptiFine] 库下载完成: 成功 {}, 失败 {}",
-                success, fail
-            );
-            if fail > 0 {
-                return json!({
-                    "success": false,
-                    "error": format!("OptiFine 依赖库下载失败 {} 个，请检查网络后重试", fail)
-                });
-            }
+            obj.remove("inheritsFrom");
+            obj.remove("jar");
         }
 
         // 追加 OptiFine 库（如不存在）
@@ -370,10 +391,7 @@ pub async fn install_optifine(
         }
 
         json!({
-            "id": version_id,
-            "inheritsFrom": game_version,
             "mainClass": "net.minecraft.launchwrapper.Launch",
-            "type": "release",
             "libraries": [
                 {
                     "name": "net.minecraft:launchwrapper:1.12",
@@ -393,45 +411,25 @@ pub async fn install_optifine(
         })
     };
 
-    // 8. 写入版本 JSON
-    let json_path = version_dir.join(format!("{}.json", version_id));
-    let json_str = serde_json::to_string_pretty(&final_json).unwrap_or_default();
-    if let Err(e) = std::fs::write(&json_path, json_str) {
-        let _ = std::fs::remove_file(&installer_path);
-        return json!({ "success": false, "error": format!("写入版本 JSON 失败: {}", e) });
-    }
-    eprintln!("[OptiFine] 版本 JSON 已写入: {}", json_path.display());
-
-    // 9. 清理 installer
+    // 8. 清理 installer
     let _ = std::fs::remove_file(&installer_path);
 
-    eprintln!("[OptiFine] 安装完成: {}", version_id);
-    json!({
-        "success": true,
-        "versionId": version_id
-    })
-}
-
-/// 从版本 JSON 中收集带 url 的库（用于下载）
-/// 返回 (url, dest_path) 列表
-fn collect_libraries_with_urls(profile: &Value) -> Vec<(String, PathBuf)> {
-    let mut result = Vec::new();
-    let libs = match profile.get("libraries").and_then(|l| l.as_array()) {
-        Some(arr) => arr,
-        None => return result,
-    };
-
-    for lib in libs {
-        if let Some(artifact) = lib.get("downloads").and_then(|d| d.get("artifact")) {
-            let url = shared::jstr(artifact, "url");
-            let path = shared::jstr(artifact, "path");
-            if !url.is_empty() && !path.is_empty() {
-                let dest = shared::libraries_dir().join(&path);
-                if !shared::is_jar_intact(&dest) {
-                    result.push((url, dest));
-                }
+    // 9. 与对应原版合并，产出单一独立版本（自含原版内容，删除 inheritsFrom）
+    match shared::install_merged_loader(game_version, &version_id, &loader_json, None).await {
+        Ok(_) => {
+            eprintln!("[OptiFine] 合并式安装完成: {}", version_id);
+            // 清理不再被引用的原版目录（合并后目标版本自含，不遗留独立原版目录）
+            if !game_version.is_empty() && game_version != version_id {
+                shared::cleanup_orphan_vanilla(game_version);
             }
+            json!({
+                "success": true,
+                "versionId": version_id
+            })
+        }
+        Err(e) => {
+            eprintln!("[OptiFine] 安装失败: {}", e);
+            json!({ "success": false, "error": e })
         }
     }
-    result
 }

@@ -3,6 +3,7 @@
 // 对应原项目 server/http-client/download-single.js 的 _dlSingle
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sha1::{Sha1, Digest};
@@ -146,7 +147,7 @@ async fn probe_speed_sort(urls: &[String], timeout_secs: u64) -> Vec<String> {
 
 /// 单流下载一个文件（带镜像回退 + SHA1 校验）
 /// 对应原项目 downloadFileWithMirror
-pub async fn download_with_mirror(
+async fn download_with_mirror_inner(
     original_url: &str,
     dest: &Path,
     sha1: Option<&str>,
@@ -154,6 +155,7 @@ pub async fn download_with_mirror(
     download_source: &str,
     timeout_secs: u64,
     on_progress: Option<ProgressCb>,
+    cancel: Option<&Arc<AtomicBool>>,
 ) -> Result<(), String> {
     // 文件已存在且校验通过，跳过
     if dest.exists() && should_skip(dest, sha1, expected_size).await {
@@ -237,7 +239,7 @@ pub async fn download_with_mirror(
             expected_size,
             timeout_secs,
             max_chunks,
-            None,
+            cancel,
             on_progress.clone(),
         )
         .await
@@ -262,7 +264,12 @@ pub async fn download_with_mirror(
     let mut last_err = String::new();
 
     for url in &urls {
-        match download_with_retry(url, dest, sha1, expected_size, timeout_secs, on_progress.clone()).await {
+        if let Some(c) = cancel {
+            if c.load(Ordering::SeqCst) {
+                return Err("已取消".to_string());
+            }
+        }
+        match download_with_retry(url, dest, sha1, expected_size, timeout_secs, on_progress.clone(), cancel).await {
             Ok(()) => {
                 if url != original_url {
                     mirror::mirror_success();
@@ -285,6 +292,55 @@ pub async fn download_with_mirror(
         }
     }
     Err(last_err)
+}
+
+/// 单流下载一个文件（带镜像回退 + SHA1 校验），不含取消
+/// 对应原项目 downloadFileWithMirror
+pub async fn download_with_mirror(
+    original_url: &str,
+    dest: &Path,
+    sha1: Option<&str>,
+    expected_size: Option<u64>,
+    download_source: &str,
+    timeout_secs: u64,
+    on_progress: Option<ProgressCb>,
+) -> Result<(), String> {
+    download_with_mirror_inner(
+        original_url,
+        dest,
+        sha1,
+        expected_size,
+        download_source,
+        timeout_secs,
+        on_progress,
+        None,
+    )
+    .await
+}
+
+/// 单流下载一个文件（带镜像回退 + SHA1 校验），支持通过 cancel 标志取消
+/// cancel 为 true 时立即中断，返回 Err("已取消")
+pub async fn download_with_mirror_cancellable(
+    original_url: &str,
+    dest: &Path,
+    sha1: Option<&str>,
+    expected_size: Option<u64>,
+    download_source: &str,
+    timeout_secs: u64,
+    on_progress: Option<ProgressCb>,
+    cancel: &Arc<AtomicBool>,
+) -> Result<(), String> {
+    download_with_mirror_inner(
+        original_url,
+        dest,
+        sha1,
+        expected_size,
+        download_source,
+        timeout_secs,
+        on_progress,
+        Some(cancel),
+    )
+    .await
 }
 
 /// XMCL 等价的多镜像下载（对应原项目 downloadFileRace → xmclDownload）
@@ -342,7 +398,7 @@ pub async fn download_file_race(
     }
 
     for url in mirrors {
-        match download_with_retry(url, dest, sha1, expected_size, timeout_secs, on_progress.clone()).await
+        match download_with_retry(url, dest, sha1, expected_size, timeout_secs, on_progress.clone(), None).await
         {
             Ok(()) => return Ok(()),
             Err(e) => {
@@ -427,7 +483,7 @@ pub async fn download_single(
     if dest.exists() && should_skip(dest, sha1, expected_size).await {
         return Ok(());
     }
-    download_with_retry(url, dest, sha1, expected_size, timeout_secs, None).await
+    download_with_retry(url, dest, sha1, expected_size, timeout_secs, None, None).await
 }
 
 /// 判断文件是否可跳过（大小+SHA1 校验通过）
@@ -462,11 +518,17 @@ async fn download_with_retry(
     expected_size: Option<u64>,
     timeout_secs: u64,
     on_progress: Option<ProgressCb>,
+    cancel: Option<&Arc<AtomicBool>>,
 ) -> Result<(), String> {
     let mut last_err = String::new();
 
     for attempt in 0..3u32 {
-        match download_once(url, dest, expected_size, timeout_secs, on_progress.clone()).await {
+        if let Some(c) = cancel {
+            if c.load(Ordering::SeqCst) {
+                return Err("已取消".to_string());
+            }
+        }
+        match download_once(url, dest, expected_size, timeout_secs, on_progress.clone(), cancel).await {
             Ok(actual_size) => {
                 // 校验大小
                 if let Some(expected) = expected_size {
@@ -535,6 +597,7 @@ async fn download_once(
     expected_size: Option<u64>,
     timeout_secs: u64,
     on_progress: Option<ProgressCb>,
+    cancel: Option<&Arc<AtomicBool>>,
 ) -> Result<u64, String> {
     // 复用全局 HTTP 客户端（共享连接池），避免大量小文件重复 TLS 握手
     let client = &*HTTP_CLIENT;
@@ -634,6 +697,12 @@ async fn download_once(
     let low_speed_enabled = expected_size.map(|s| s > 1024 * 1024).unwrap_or(false);
 
     while !finished {
+        if let Some(c) = cancel {
+            if c.load(Ordering::SeqCst) {
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                return Err("已取消".to_string());
+            }
+        }
         let waited = tokio::time::timeout(Duration::from_secs(30), stream.next()).await;
         let chunk_result = match waited {
             Ok(Some(r)) => r,

@@ -102,12 +102,14 @@ fn list_directory(path: &std::path::Path, dirs_only: bool) -> Vec<Value> {
 /// 解析预定义文件夹类型为实际路径
 fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
     let data_dir = storage::resolve_data_dir();
+    eprintln!("[open-folder] resolve_folder_type folder={:?} data_dir={}", folder, data_dir.display());
     let settings = storage::load_settings();
     let minecraft_dir = if utils::get_str(&settings, "gameDir").is_empty() {
         dirs::home_dir().map(|h| h.join(".minecraft")).unwrap_or_else(|| data_dir.clone())
     } else {
         PathBuf::from(utils::get_str(&settings, "gameDir"))
     };
+    eprintln!("[open-folder] minecraft_dir={}", minecraft_dir.display());
 
     let version_id = utils::get_str(&settings, "selectedVersion");
     let versions_dir = data_dir.join("versions");
@@ -116,6 +118,8 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
     } else {
         minecraft_dir.clone()
     };
+    eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={}",
+        version_id, versions_dir.display(), version_dir.display());
 
     let path = match folder {
         "minecraft" | "game" => minecraft_dir,
@@ -137,6 +141,7 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
         }
         _ => return None,
     };
+    eprintln!("[open-folder] resolved path={} (exists={})", path.display(), path.exists());
 
     Some(path)
 }
@@ -147,9 +152,25 @@ fn open_in_explorer(path: &std::path::Path) -> bool {
     if !path.exists() {
         let _ = std::fs::create_dir_all(path);
     }
+    eprintln!("[open-folder-explorer] path={} is_dir={}", path.display(), path.is_dir());
     #[cfg(target_os = "windows")]
     {
-        match std::process::Command::new("explorer.exe").arg(path).spawn() {
+        let result = if path.is_dir() {
+            // 直接传原路径，由 Command::arg 自动对含空格路径加引号。
+            // 不能补尾部反斜杠：含空格路径的结尾会拼成 \"，被命令行当作转义引号，
+            // 导致路径断裂、explorer 回退打开默认位置（如“文档”）。
+            let p = path.to_string_lossy().to_string();
+            eprintln!("[open-folder-explorer] cmd = explorer.exe {:?}", p);
+            std::process::Command::new("explorer.exe").arg(p).spawn()
+        } else {
+            // 文件：用 /select 定位并选中该文件
+            let p = path.to_string_lossy().to_string();
+            eprintln!("[open-folder-explorer] cmd = explorer.exe /select, {:?}", p);
+            std::process::Command::new("explorer.exe")
+                .args(["/select,", &p])
+                .spawn()
+        };
+        match result {
             Ok(_) => true,
             Err(e) => {
                 eprintln!("[open-folder] 启动 explorer 失败: {}", e);

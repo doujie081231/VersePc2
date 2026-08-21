@@ -478,6 +478,18 @@ async fn run_import_main(
     settings: &Value,
     file_path: &str,
 ) -> Result<Value, String> {
+    // 记录导入前原版版本目录是否已存在：若为本次流程新建，导入收尾时清理，避免遗留独立原版目录
+    let base_vanilla_pre_existed = {
+        if mc_version.is_empty() {
+            false
+        } else {
+            versions_dir()
+                .join(mc_version)
+                .join(format!("{}.json", mc_version))
+                .exists()
+        }
+    };
+
     // 2.7 overrides 解压
     emit_progress(app, 40, "解压覆盖文件...", "extract");
     let override_files = extract_overrides_with_progress(archive, version_dir, app)?;
@@ -983,6 +995,25 @@ async fn run_import_main(
         "done",
     );
 
+    // 原版依赖目录为流程本次新建、且整合包版本已自含（合并后独立）时，清理该临时原版目录，
+    // 避免遗留独立的原版版本目录（与合并式安装行为一致）
+    if !base_vanilla_pre_existed
+        && !mc_version.is_empty()
+        && mc_version != version_id
+    {
+        let vanilla_dir = versions_dir().join(mc_version);
+        if vanilla_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&vanilla_dir) {
+                import_log(&format!("清理临时原版目录失败: {}", e));
+            } else {
+                import_log(&format!(
+                    "已清理本次新建的临时原版目录: {}",
+                    vanilla_dir.display()
+                ));
+            }
+        }
+    }
+
     let cf_warning = if cf_api_key.is_empty() {
         Some("CurseForge Mod 文件需要 API Key，overrides 已解压。请在设置中配置 CurseForge API Key 后重新导入。".to_string())
     } else {
@@ -1455,28 +1486,59 @@ fn construct_cdn_url(file_id: i64, file_name: &str) -> String {
 
 // ============== 镜像 URL 列表 ==============
 
-/// 替换为镜像 URL 列表（原 URL + mod.mcimirror.top 镜像）
-/// media.forgecdn.net / edge.forgecdn.net → mod.mcimirror.top
+/// 替换为镜像下载地址列表
+/// 对齐资源下载的多个 CDN 域名变体 + mod.mcimirror.top 镜像。
+/// 原始 CurseForge 下载地址可能为 -service.overwolf.wtf / edge / media / mediafilez 之一，
+/// 生成这些变体可以提升不同网络环境下的下载命中率，避免单个 CDN 节点故障导致缺 mod。
 fn get_mirror_urls(url: &str) -> Vec<String> {
-    let mut urls = vec![url.to_string()];
-
-    if url.contains("mediafilez.forgecdn.net") {
-        let mirror = url.replace("mediafilez.forgecdn.net", "mod.mcimirror.top");
-        if mirror != url {
-            urls.push(mirror);
-        }
-    } else if url.contains("media.forgecdn.net") {
-        let mirror = url.replace("media.forgecdn.net", "mod.mcimirror.top");
-        if mirror != url {
-            urls.push(mirror);
-        }
+    // 先规整到统一的 overload 域名再展开变体，避免误替换
+    let normalized: String = if url.contains("-service.overwolf.wtf") {
+        url.replace("-service.overwolf.wtf", ".forgecdn.net")
     } else if url.contains("edge.forgecdn.net") {
-        let mirror = url.replace("edge.forgecdn.net", "mod.mcimirror.top");
-        if mirror != url {
-            urls.push(mirror);
+        url.to_string()
+    } else if url.contains("mediafilez.forgecdn.net") {
+        url.to_string()
+    } else if url.contains("media.forgecdn.net") {
+        url.to_string()
+    } else {
+        return vec![url.to_string()];
+    };
+
+    // 基础变体集合：original + edge + mediafilez + media
+    let mut candidates = vec![normalized.clone()];
+    let edge_url = normalized.replace("://mediafilez.", "://edge.").replace("://media.", "://edge.");
+    let mut all: Vec<String> = Vec::new();
+    // original 及 edge 变体直接收集
+    all.push(normalized.clone());
+    all.push(edge_url.clone());
+    // mediafilez 变体
+    let mediafilez_url = edge_url
+        .replace("://edge.", "://mediafilez.")
+        .replace("://media.", "://mediafilez.");
+    all.push(mediafilez_url);
+    // media 变体
+    let media_url = edge_url.replace("://edge.", "://media.");
+    all.push(media_url);
+    // 去重
+    for u in all {
+        if !candidates.contains(&u) {
+            candidates.push(u);
         }
     }
 
+    // 每个变体追加 mod.mcimirror.top 镜像
+    let mut urls = Vec::new();
+    for c in candidates {
+        if !urls.contains(&c) {
+            urls.push(c.clone());
+        }
+        let mirror = c.replace("edge.forgecdn.net", "mod.mcimirror.top")
+            .replace("mediafilez.forgecdn.net", "mod.mcimirror.top")
+            .replace("media.forgecdn.net", "mod.mcimirror.top");
+        if mirror != c && !urls.contains(&mirror) {
+            urls.push(mirror);
+        }
+    }
     urls
 }
 

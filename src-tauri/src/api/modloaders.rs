@@ -275,7 +275,10 @@ async fn handle_optifine_install(body: &Option<Value>) -> ApiResult {
     };
 
     let game_version = utils::get_str(body, "gameVersion");
-    let optifine_version = utils::get_str(body, "optifineVersion");
+    let optifine_version = {
+        let v = utils::get_str(body, "optifineVersion");
+        if v.is_empty() { utils::get_str(body, "optifineType") } else { v }
+    };
     let target_version_id = utils::get_str(body, "targetVersionId");
 
     if game_version.is_empty() || optifine_version.is_empty() {
@@ -308,20 +311,24 @@ async fn handle_fabric_api_install(body: &Option<Value>) -> ApiResult {
     let game_version = utils::get_str(body, "gameVersion");
     let version_id = utils::get_str(body, "versionId");
     let version_name = utils::get_str(body, "versionName");
+    let file_url = utils::get_str(body, "fileUrl");
+    let file_filename = utils::get_str(body, "filename");
 
     if game_version.is_empty() || version_id.is_empty() {
         return ApiResult::err(400, "Missing gameVersion or versionId");
     }
 
     eprintln!(
-        "[modloaders] POST /api/fabric-api/install game={} versionId={} versionName={:?}",
-        game_version, version_id, version_name
+        "[modloaders] POST /api/fabric-api/install game={} versionId={} versionName={:?} fileUrl={} filename={}",
+        game_version, version_id, version_name, file_url, file_filename
     );
 
     let result = modloaders::fabric_api::install_fabric_api(
         &game_version,
         &version_id,
         if version_name.is_empty() { None } else { Some(&version_name) },
+        if file_url.is_empty() { None } else { Some(file_url.as_str()) },
+        if file_filename.is_empty() { None } else { Some(file_filename.as_str()) },
     )
     .await;
 

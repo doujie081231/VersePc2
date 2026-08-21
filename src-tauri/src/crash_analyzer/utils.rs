@@ -37,7 +37,7 @@ pub fn regex_seek_group(text: &str, pattern: &str, group: usize) -> Option<Strin
     }
 }
 
-/// 正则匹配并返回所有捕获组的内容（多行匹配）
+/// 正则匹配并返回所有匹配项的完整文本（多行匹配）
 pub fn regex_seek_all(pattern: &str, text: &str) -> Vec<String> {
     if text.is_empty() {
         return Vec::new();
@@ -48,6 +48,50 @@ pub fn regex_seek_all(pattern: &str, text: &str) -> Vec<String> {
             .map(|m| m.as_str().to_string())
             .collect(),
         Err(_) => Vec::new(),
+    }
+}
+
+/// 正则匹配并返回所有匹配项中指定捕获组的内容（多行匹配）
+pub fn regex_seek_all_group(pattern: &str, text: &str, group: usize) -> Vec<String> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    match Regex::new(pattern) {
+        Ok(re) => re
+            .captures_iter(text)
+            .filter_map(|c| c.get(group).map(|m| m.as_str().to_string()))
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// 取文本中首个标记之后的部分（原项目 AfterLast 语义）
+pub fn after_last<'a>(text: &'a str, marker: &str) -> &'a str {
+    match text.rfind(marker) {
+        Some(idx) => &text[idx + marker.len()..],
+        None => text,
+    }
+}
+
+/// 取文本中 start 与 end 两个标记之间的部分（原项目 Between 语义）
+pub fn between<'a>(text: &'a str, start: &str, end: &str) -> &'a str {
+    match text.find(start) {
+        Some(si) => {
+            let offset = si + start.len();
+            match text[offset..].find(end) {
+                Some(ei) => &text[offset..offset + ei],
+                None => &text[offset..],
+            }
+        }
+        None => "",
+    }
+}
+
+/// 取文本在首个标记之前的部分（原项目 BeforeFirst 语义）
+pub fn before_first<'a>(text: &'a str, marker: &str) -> &'a str {
+    match text.find(marker) {
+        Some(idx) => &text[..idx],
+        None => text,
     }
 }
 

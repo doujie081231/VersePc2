@@ -43,7 +43,7 @@ use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use crate::api::ApiResult;
-use crate::download::{download_with_mirror, resources_session};
+use crate::download::{download_with_mirror, download_with_mirror_cancellable, resources_session};
 use crate::mods;
 use crate::resource::wiki;
 use crate::storage;
@@ -1216,7 +1216,7 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
     let dest_path = mods_dir.join(&final_name);
 
     // 创建下载会话
-    let (session_id, _cancel_flag) = resources_session::create_session(
+    let (session_id, cancel_flag) = resources_session::create_session(
         &final_name,
         file_size,
         "mod",
@@ -1266,7 +1266,7 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
             });
         });
 
-        let result = download_with_mirror(
+        let result = download_with_mirror_cancellable(
             &download_url,
             &dest_path,
             if expected_sha1_task.is_empty() { None } else { Some(&expected_sha1_task) },
@@ -1274,6 +1274,7 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
             &download_source,
             300,
             Some(on_progress),
+            &cancel_flag,
         )
         .await;
 
@@ -1290,14 +1291,23 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
                 });
             }
             Err(e) => {
-                eprintln!("[mods] 下载失败: {}", e);
-                resources_session::update_session_silent(&session_id_for_task, |s| {
-                    s.status = resources_session::ResourceStage::Failed;
-                    s.message = format!("下载失败: {}", e);
-                    if !s.files.is_empty() {
-                        s.files[0].status = "failed".to_string();
-                    }
-                });
+                if resources_session::is_cancelled(&cancel_flag) {
+                    resources_session::update_session_silent(&session_id_for_task, |s| {
+                        s.status = resources_session::ResourceStage::Cancelled;
+                        s.progress = 100;
+                        s.message = "下载已取消".to_string();
+                        s.phase = "cancelled".to_string();
+                    });
+                } else {
+                    eprintln!("[mods] 下载失败: {}", e);
+                    resources_session::update_session_silent(&session_id_for_task, |s| {
+                        s.status = resources_session::ResourceStage::Failed;
+                        s.message = format!("下载失败: {}", e);
+                        if !s.files.is_empty() {
+                            s.files[0].status = "failed".to_string();
+                        }
+                    });
+                }
             }
         }
 

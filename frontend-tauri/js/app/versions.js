@@ -889,8 +889,17 @@ function confirmInstallVersion() {
     loaderInfo = {
       type: selectedLoaderType,
       version: selectedLoaderVersion,
-      fabricApiId: (selectedLoaderType === 'fabric' && _fabricApiDetailId) ? _fabricApiDetailId : ''
+      fabricApiId: (selectedLoaderType === 'fabric' && _fabricApiDetailId) ? _fabricApiDetailId : '',
+      fabricApiUrl: '',
+      fabricApiFilename: ''
     };
+    if (selectedLoaderType === 'fabric' && _fabricApiDetailId) {
+      const apiFile = _fabricApiDetailVersions.find(v => v.versionId === _fabricApiDetailId);
+      if (apiFile) {
+        loaderInfo.fabricApiUrl = apiFile.url || '';
+        loaderInfo.fabricApiFilename = apiFile.filename || '';
+      }
+    }
   }
   
   let defaultName = currentVersionDetail.id;
@@ -910,7 +919,13 @@ async function installVersionWithLoader(versionUrl, versionId, loaderInfo, downl
       currentInstallSessionId = result.sessionId;
       // 如果有 Fabric API 待安装，保存信息供安装完成后使用
       if (loaderInfo && loaderInfo.fabricApiId) {
-        _pendingFabricApiAfterInstall = { gameVersion: versionId, apiId: loaderInfo.fabricApiId, versionId: '' };
+        _pendingFabricApiAfterInstall = {
+          gameVersion: versionId,
+          apiId: loaderInfo.fabricApiId,
+          url: loaderInfo.fabricApiUrl || '',
+          filename: loaderInfo.fabricApiFilename || '',
+          versionId: ''
+        };
       } else {
         _pendingFabricApiAfterInstall = null;
       }
@@ -1150,7 +1165,7 @@ async function pollInstallProgress(sessionId) {
           dlManager.update(taskId, { message: '正在安装 Fabric API...' });
           try {
             const installedId = data.versionId || fa.versionId || '';
-            const apiResult = await API.installFabricApi(fa.gameVersion, fa.apiId, installedId);
+            const apiResult = await API.installFabricApi(fa.gameVersion, fa.apiId, installedId, fa.url || '', fa.filename || '');
             if (apiResult.success) {
               showToast('Fabric API 已一并安装！', 'success');
             } else {
@@ -1544,6 +1559,7 @@ async function loadModLoaderVersions() {
 let _fabricApiVersionsCache = []; // 当前游戏版本的 Fabric API 版本列表
 let _fabricApiSelectedId = '';    // 用户选中的版本 ID（空表示不安装）
 let _fabricApiSelectedText = '';  // 用户选中的版本显示文本
+let _fabricApiSelectedFile = { url: '', filename: '' };  // 用户选中版本的下载文件信息
 let _fabricApiPickerLoadedFor = ''; // 已加载过的游戏版本（避免重复请求）
 let _fabricApiRecommendedId = ''; // 推荐版本 ID
 
@@ -1641,7 +1657,7 @@ function renderFabricApiList() {
     const date = v.datePublished ? v.datePublished.substring(0, 10) : '';
     const isRecommended = v.versionId === _fabricApiRecommendedId;
     items.push(`
-      <div class="fabric-api-item${isSelected ? ' selected' : ''}" onclick="selectFabricApiVersion('${escapeHtml(v.versionId)}', '${escapeHtml(v.versionNumber + ' (' + typeLabel + ')')}')" style="padding:12px 14px;border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-color)'};border-radius:8px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-secondary)'};cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s" onmouseover="if(!this.classList.contains('selected'))this.style.borderColor='var(--accent)'" onmouseout="if(!this.classList.contains('selected'))this.style.borderColor='var(--border-color)'">
+      <div class="fabric-api-item${isSelected ? ' selected' : ''}" onclick="selectFabricApiVersion('${escapeHtml(v.versionId)}')" style="padding:12px 14px;border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-color)'};border-radius:8px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-secondary)'};cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s" onmouseover="if(!this.classList.contains('selected'))this.style.borderColor='var(--accent)'" onmouseout="if(!this.classList.contains('selected'))this.style.borderColor='var(--border-color)'">
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${escapeHtml(v.versionNumber)}</span>
@@ -1657,7 +1673,17 @@ function renderFabricApiList() {
 }
 
 // 选中某个 Fabric API 版本（或空字符串=不安装），回到主表单
-function selectFabricApiVersion(versionId, versionText) {
+function selectFabricApiVersion(versionId) {
+  let versionText = '不安装';
+  _fabricApiSelectedFile = { url: '', filename: '' };
+  if (versionId) {
+    const v = _fabricApiVersionsCache.find(item => item.versionId === versionId);
+    if (v) {
+      const typeLabel = v.releaseType === 'release' ? '稳定' : (v.releaseType === 'beta' ? '测试' : v.releaseType);
+      versionText = v.versionNumber + ' (' + typeLabel + ')';
+      _fabricApiSelectedFile = { url: v.url || '', filename: v.filename || '' };
+    }
+  }
   _fabricApiSelectedId = versionId;
   _fabricApiSelectedText = versionText;
   // 更新主表单卡片显示
@@ -1715,7 +1741,14 @@ async function installModLoader() {
       if (installFabricApi && currentLoaderType === 'fabric') {
         if (installBtn) installBtn.textContent = '正在安装 Fabric API...';
         try {
-          const apiResult = await API.installFabricApi(gameVersion, fabricApiVersionId, installedId);
+          const apiFile = _fabricApiVersionsCache.find(v => v.versionId === fabricApiVersionId);
+          const apiResult = await API.installFabricApi(
+            gameVersion,
+            fabricApiVersionId,
+            installedId,
+            apiFile ? (apiFile.url || '') : '',
+            apiFile ? (apiFile.filename || '') : ''
+          );
           if (!apiResult.success) {
             apiOk = false;
             showToast(`Fabric API 安装失败：${apiResult.error || '未知错误'}`, 'error', 5000);

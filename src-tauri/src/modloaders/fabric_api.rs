@@ -185,13 +185,112 @@ pub async fn install_fabric_api(
     game_version: &str,
     version_id: &str,
     version_name: Option<&str>,
+    file_url: Option<&str>,
+    file_filename: Option<&str>,
 ) -> Value {
     eprintln!(
-        "[fabric_api] 安装 game={}, versionId={}, versionName={:?}",
-        game_version, version_id, version_name
+        "[fabric_api] 安装 game={}, versionId={}, versionName={:?}, fileUrl={:?}, filename={:?}",
+        game_version, version_id, version_name, file_url, file_filename
     );
 
-    // 1. 查询 Modrinth API 获取版本列表（带镜像回退）
+    // 1. 解析下载地址：优先使用前端传入的版本文件信息（选择时即带下载地址，安装时零列表查询），
+    //    否则回退到查询 Modrinth 版本列表匹配。
+    let (file_url, file_filename, version_number) =
+        if let (Some(u), Some(f)) = (file_url, file_filename) {
+            (u.to_string(), f.to_string(), version_id.to_string())
+        } else {
+            match resolve_fabric_api_file(game_version, version_id).await {
+                Some(v) => v,
+                None => return json!({ "success": false, "error": "无法获取 Fabric API 版本信息" }),
+            }
+        };
+
+    if file_url.is_empty() || file_filename.is_empty() {
+        return json!({ "success": false, "error": "文件信息不完整" });
+    }
+
+    // 2. 确定 mods 目录（版本目录优先，其次全局 mods）
+    let version_name = version_name.unwrap_or("");
+    let version_dir = if !version_name.is_empty() {
+        shared::versions_dir().join(version_name)
+    } else {
+        shared::versions_dir().join(format!("fabric-loader-{}", game_version))
+    };
+
+    // 版本已安装（版本目录存在）时，Fabric API 应装入该版本的 mods 目录；
+    // 即使 mods 子目录尚不存在也要创建，而不是回退到公共目录。
+    // 仅当版本目录本身不存在时才回退到全局 mods。
+    let mods_dir = if version_dir.is_dir() {
+        version_dir.join("mods")
+    } else {
+        shared::data_dir().join("mods")
+    };
+
+    // 确保 mods 目录存在
+    if !mods_dir.exists() {
+        if std::fs::create_dir_all(&mods_dir).is_err() {
+            return json!({ "success": false, "error": "无法创建 mods 目录" });
+        }
+    }
+
+    // 3. 清理旧版本 Fabric API（fabric-api-*.jar）
+    if let Ok(existing) = std::fs::read_dir(&mods_dir) {
+        for entry in existing.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                // 匹配 fabric-api-*.jar 或 fabric-api.jar
+                if (name.starts_with("fabric-api-") && name.ends_with(".jar"))
+                    || name.eq_ignore_ascii_case("fabric-api.jar")
+                {
+                    let _ = std::fs::remove_file(entry.path());
+                    eprintln!("[fabric_api] 清理旧版本: {}", name);
+                }
+            }
+        }
+    }
+
+    // 4. 下载 JAR 到 mods 目录
+    let dest_path = mods_dir.join(&file_filename);
+    eprintln!(
+        "[fabric_api] 下载 {} -> {}",
+        file_url,
+        dest_path.display()
+    );
+
+    match crate::download::single::download_with_mirror(
+        &file_url,
+        &dest_path,
+        None,
+        None,
+        "modrinth",
+        180,
+        None,
+    )
+    .await
+    {
+        Ok(()) => {
+            eprintln!("[fabric_api] 安装完成: {}", file_filename);
+            json!({
+                "success": true,
+                "filename": file_filename,
+                "path": dest_path.to_string_lossy(),
+                "modsDir": mods_dir.to_string_lossy(),
+                "versionId": version_id,
+                "versionNumber": version_number
+            })
+        }
+        Err(e) => {
+            eprintln!("[fabric_api] 下载失败: {}", e);
+            json!({ "success": false, "error": format!("Fabric API 下载失败: {}", e) })
+        }
+    }
+}
+
+/// 查询 Modrinth 版本列表并匹配到指定版本，返回 (下载地址, 文件名, 版本号)。
+async fn resolve_fabric_api_file(
+    game_version: &str,
+    version_id: &str,
+) -> Option<(String, String, String)> {
+    // 带过滤条件查询，同时尝试官方源和镜像源
     let filtered_url = format!(
         "{}/project/{}/version?game_versions=[\"{}\"]&loaders=[\"fabric\"]",
         MODRINTH_API, FABRIC_API_PROJECT_ID, game_version
@@ -228,111 +327,24 @@ pub async fn install_fabric_api(
 
     let versions = match &raw_versions {
         Some(v) => v.as_array().cloned().unwrap_or_default(),
-        None => {
-            return json!({ "success": false, "error": "无法获取 Fabric API 版本列表" });
-        }
+        None => return None,
     };
 
-    // 2. 找到匹配 versionId 的版本
-    let target = versions.iter().find(|v| {
-        shared::jstr(v, "id") == version_id
-    });
+    let target = versions.iter().find(|v| shared::jstr(v, "id") == version_id)?;
 
-    let target = match target {
-        Some(t) => t,
-        None => {
-            return json!({ "success": false, "error": "找不到指定的 Fabric API 版本" });
-        }
-    };
+    let primary = target
+        .get("files")
+        .and_then(|f| f.as_array())
+        .and_then(|f| f.first())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let file_url = shared::jstr(&primary, "url");
+    let file_filename = shared::jstr(&primary, "filename");
+    let version_number = shared::jstr(target, "version_number");
 
-    // 3. 获取 primary file
-    let files = target.get("files").and_then(|f| f.as_array());
-    let primary = match files.and_then(|f| f.first()) {
-        Some(f) => f,
-        None => {
-            return json!({ "success": false, "error": "Fabric API 版本没有可下载文件" });
-        }
-    };
-
-    let file_url = shared::jstr(primary, "url");
-    let file_filename = shared::jstr(primary, "filename");
-    if file_url.is_empty() || file_filename.is_empty() {
-        return json!({ "success": false, "error": "文件信息不完整" });
-    }
-
-    // 4. 确定 mods 目录（版本隔离目录优先，其次全局 mods）
-    let version_name = version_name.unwrap_or("");
-    let version_dir = if !version_name.is_empty() {
-        shared::versions_dir().join(version_name)
-    } else {
-        shared::versions_dir().join(format!("fabric-loader-{}", game_version))
-    };
-
-    let mods_dir = {
-        let version_mods = version_dir.join("mods");
-        if version_mods.exists() {
-            version_mods
-        } else {
-            shared::data_dir().join("mods")
-        }
-    };
-
-    // 确保 mods 目录存在
-    if !mods_dir.exists() {
-        if std::fs::create_dir_all(&mods_dir).is_err() {
-            return json!({ "success": false, "error": "无法创建 mods 目录" });
-        }
-    }
-
-    // 5. 清理旧版本 Fabric API（fabric-api-*.jar）
-    if let Ok(existing) = std::fs::read_dir(&mods_dir) {
-        for entry in existing.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                // 匹配 fabric-api-*.jar 或 fabric-api.jar
-                if (name.starts_with("fabric-api-") && name.ends_with(".jar"))
-                    || name.eq_ignore_ascii_case("fabric-api.jar")
-                {
-                    let _ = std::fs::remove_file(entry.path());
-                    eprintln!("[fabric_api] 清理旧版本: {}", name);
-                }
-            }
-        }
-    }
-
-    // 6. 下载 JAR 到 mods 目录
-    let dest_path = mods_dir.join(&file_filename);
-    eprintln!(
-        "[fabric_api] 下载 {} -> {}",
+    Some((
         file_url,
-        dest_path.display()
-    );
-
-    match crate::download::single::download_with_mirror(
-        &file_url,
-        &dest_path,
-        None,
-        None,
-        "modrinth",
-        180,
-        None,
-    )
-    .await
-    {
-        Ok(()) => {
-            let version_number = shared::jstr(target, "version_number");
-            eprintln!("[fabric_api] 安装完成: {}", file_filename);
-            json!({
-                "success": true,
-                "filename": file_filename,
-                "path": dest_path.to_string_lossy(),
-                "modsDir": mods_dir.to_string_lossy(),
-                "versionId": version_id,
-                "versionNumber": if version_number.is_empty() { version_id.to_string() } else { version_number }
-            })
-        }
-        Err(e) => {
-            eprintln!("[fabric_api] 下载失败: {}", e);
-            json!({ "success": false, "error": format!("Fabric API 下载失败: {}", e) })
-        }
-    }
+        file_filename,
+        if version_number.is_empty() { version_id.to_string() } else { version_number },
+    ))
 }

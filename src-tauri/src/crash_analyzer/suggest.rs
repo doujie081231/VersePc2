@@ -207,6 +207,78 @@ pub fn get_analyze_result(
                 "请尝试删除或更新这些 Mod。",
                 additional,
             ),
+            CrashReason::JavaArgsError => {
+                "Java 虚拟机参数有误，请检查启动参数设置。\n可能是使用了当前 Java 不支持的启动参数。".to_string()
+            }
+            CrashReason::GpuNoOpenGL => {
+                "检测到显卡不支持 OpenGL，可能是显卡驱动问题。\n请更新显卡驱动，或尝试关闭独立显卡、使用核显启动游戏。".to_string()
+            }
+            CrashReason::JavaVersionIncompatible => {
+                "Java 版本与当前游戏不兼容，请更换 Java 版本。\n请根据游戏使用的加载器要求选择正确的 Java 版本。".to_string()
+            }
+            CrashReason::Java32Bit => {
+                "你正在使用 32 位 Java，这会导致 JVM 无法分配足够的内存。\n请安装并选择 64 位 Java。".to_string()
+            }
+            CrashReason::ModConfigCrash => build_mod_list_suggestion(
+                "Mod 配置文件导致游戏崩溃：",
+                "请删除相关 Mod 的配置文件后再试。",
+                additional,
+            ),
+            CrashReason::ModLoaderError => {
+                "Mod 加载器报错，请检查 Mod 加载器的安装情况。\n请尝试重新安装或更换 Mod 加载器版本。".to_string()
+            }
+            CrashReason::ModInitError => build_mod_list_suggestion(
+                "以下 Mod 初始化失败：",
+                "请尝试删除或更新这些 Mod。",
+                additional,
+            ),
+            CrashReason::StackKeywordFound => build_mod_list_suggestion(
+                "崩溃日志堆栈中检测到以下相关关键字：",
+                "这可能与对应 Mod 有关，请尝试更新或移除相关 Mod。",
+                additional,
+            ),
+            CrashReason::StackModNameFound => build_mod_list_suggestion(
+                "堆栈分析发现以下 Mod 可能导致崩溃：",
+                "请尝试更新或移除这些 Mod。",
+                additional,
+            ),
+            CrashReason::SuspectedModCrash => build_mod_list_suggestion(
+                "崩溃报告中怀疑以下 Mod 导致了崩溃：",
+                "请尝试更新或移除这些 Mod。",
+                additional,
+            ),
+            CrashReason::ShortLogOutput => {
+                "程序输出极短即退出，没有记录有效的崩溃信息。\n请尝试重新启动游戏，或检查 Java 环境是否正常。".to_string()
+            }
+            CrashReason::BlockCrash => {
+                if !additional.is_empty() {
+                    format!("特定方块导致崩溃：{}\n请尝试移除相关 Mod 或避免在该方块附近活动。", additional[0])
+                } else {
+                    "特定方块导致崩溃，可能与相关 Mod 有关。\n请尝试移除相关 Mod。".to_string()
+                }
+            }
+            CrashReason::EntityCrash => {
+                if !additional.is_empty() {
+                    format!("特定实体导致崩溃：{}\n请尝试移除相关 Mod 或避免与该实体交互。", additional[0])
+                } else {
+                    "特定实体导致崩溃，可能与相关 Mod 有关。\n请尝试移除相关 Mod。".to_string()
+                }
+            }
+            CrashReason::MultipleForge => {
+                "版本 JSON 中存在多个 Forge，请重新安装 Forge 修复此问题。".to_string()
+            }
+            CrashReason::TooManyMods => {
+                "Mod 过多导致超出 ID 限制，请删除一些 Mod 后再试。".to_string()
+            }
+            CrashReason::NoAnalysisFiles => {
+                "未找到可用的日志文件，无法分析崩溃原因。\n请先启动游戏触发崩溃，或手动选择日志文件后再分析。".to_string()
+            }
+            CrashReason::TextureTooLarge => {
+                "材质过大或显卡配置不足，请尝试使用更低分辨率的资源包，或降低游戏图形设置。".to_string()
+            }
+            CrashReason::OptiFineCannotLoadWorld => {
+                "发现 OptiFine 导致无法加载世界，请更新 OptiFine 或删除它。\n可能是 OptiFine 与当前版本不兼容。".to_string()
+            }
             CrashReason::Unknown => {
                 if !additional.is_empty() {
                     format!("发现未知错误：{}", additional[0])
@@ -289,5 +361,23 @@ pub fn reason_order_pub(reason: &CrashReason) -> u32 {
         CrashReason::SecurityException => 36,
         CrashReason::NativeLinkError => 37,
         CrashReason::Unknown => 38,
+        CrashReason::Java32Bit => 39,
+        CrashReason::JavaVersionIncompatible => 40,
+        CrashReason::GpuNoOpenGL => 41,
+        CrashReason::JavaArgsError => 42,
+        CrashReason::TextureTooLarge => 43,
+        CrashReason::OptiFineCannotLoadWorld => 44,
+        CrashReason::MultipleForge => 45,
+        CrashReason::TooManyMods => 46,
+        CrashReason::ModConfigCrash => 47,
+        CrashReason::ModLoaderError => 48,
+        CrashReason::ModInitError => 49,
+        CrashReason::SuspectedModCrash => 50,
+        CrashReason::ShortLogOutput => 51,
+        CrashReason::BlockCrash => 52,
+        CrashReason::EntityCrash => 53,
+        CrashReason::NoAnalysisFiles => 54,
+        CrashReason::StackKeywordFound => 55,
+        CrashReason::StackModNameFound => 56,
     }
 }

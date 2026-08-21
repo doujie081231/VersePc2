@@ -321,7 +321,7 @@ pub async fn import_mrpack(
         "prepare",
     );
 
-    // 3.2 版本目录去重 dedupe_version_id
+// 3.2 版本目录去重 dedupe_version_id
     // 更新整合包时（update_version_id 非空）复用指定版本目录，不新建版本
     let base_version_id = if !custom_version_name.is_empty() {
         normalize_version_id(custom_version_name)
@@ -618,6 +618,18 @@ async fn run_import_main(
     file_path: &str,
     abort_flag: Option<&Arc<AtomicBool>>,
 ) -> Result<Value, String> {
+    // 记录导入前原版版本目录是否已存在：若为本次流程新建，导入收尾时清理，避免遗留独立原版目录
+    let base_vanilla_pre_existed = {
+        if mc_version.is_empty() {
+            false
+        } else {
+            versions_dir()
+                .join(mc_version)
+                .join(format!("{}.json", mc_version))
+                .exists()
+        }
+    };
+
     // 3.7 overrides 解压（路径遍历保护 + 5 次重试 + 50 文件 yield + 实时进度）
     emit_progress(app, 40, "解压覆盖文件...", "extract");
     let override_files = extract_overrides_with_progress(archive, version_dir, app)?;
@@ -1137,6 +1149,22 @@ async fn run_import_main(
     );
 
     // 完成
+    // 原版依赖目录为流程本次新建、且整合包版本已自含（合并后独立）时，清理该临时原版目录，
+    // 避免遗留独立的原版版本目录（与合并式安装行为一致）
+    if !base_vanilla_pre_existed
+        && !mc_version.is_empty()
+        && mc_version != version_id
+    {
+        let vanilla_dir = versions_dir().join(&mc_version);
+        if vanilla_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&vanilla_dir) {
+                eprintln!("[mrpack] 清理临时原版目录失败: {}", e);
+            } else {
+                eprintln!("[mrpack] 已清理本次新建的临时原版目录: {}", vanilla_dir.display());
+            }
+        }
+    }
+
     emit_progress(
         app,
         100,

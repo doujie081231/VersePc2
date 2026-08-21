@@ -286,6 +286,12 @@ pub async fn install_forge(
         return json!({ "success": false, "error": format!("Forge installer 下载失败（所有镜像源均失败），版本 {}", version_str) });
     }
 
+    // 旧版 Forge（版本号第一段 < 20，对应 MC ≤ 1.12.2）：
+    // 不运行 Java 安装器，直接解析 install_profile.json 完成安装
+    if version_first_segment(&forge_version) < 20 {
+        return install_forge_legacy(game_version, &forge_version, &target_id, &installer_path).await;
+    }
+
     // 4. 收集可用 Java 候选（按游戏版本匹配；安装器失败时自动换下一个重试）
     let java_candidates = crate::java::select_java_candidates_for_version(game_version);
     if java_candidates.is_empty() {
@@ -458,8 +464,9 @@ pub async fn install_forge(
     // 7. 清理 installer
     let _ = std::fs::remove_file(&installer_path);
 
-    // 8. 验证最终版本 JSON 存在
-    let final_json = shared::versions_dir().join(&target_id).join(format!("{}.json", target_id));
+    // 8. 读取最终版本 JSON；若其仍带 inheritsFrom（依赖独立原版），则合并原版为独立版本
+    let target_dir = shared::versions_dir().join(&target_id);
+    let final_json = target_dir.join(format!("{}.json", target_id));
     if !final_json.exists() {
         return json!({
             "success": false,
@@ -467,9 +474,244 @@ pub async fn install_forge(
         });
     }
 
+    let loader_json = match shared::read_version_json(&target_id) {
+        Some(v) => v,
+        None => {
+            return json!({ "success": false, "error": "Forge 版本 JSON 读取失败" });
+        }
+    };
+
+    // 若 installer 生成的版本中带继承字段，则合并原版内容，产出自含独立版本
+    if loader_json.get("inheritsFrom").is_some() {
+        eprintln!("[Forge] 检测到继承式 JSON，合并原版 {} 产出独立版本", game_version);
+        match shared::install_merged_loader(game_version, &target_id, &loader_json, None).await {
+            Ok(_) => {
+                eprintln!("[Forge] 合并式安装完成: {}", target_id);
+            }
+            Err(e) => {
+                eprintln!("[Forge] 合并失败: {}", e);
+                return json!({ "success": false, "error": e });
+            }
+        }
+    } else {
+        eprintln!("[Forge] JSON 已是独立版本，无需合并: {}", target_id);
+    }
+
+    // 9. 清理不再被引用的原版目录（Forge 安装器只把原版作为 patch 输入，安装后目标版本自含）
+    if !game_version.is_empty() && game_version != target_id {
+        shared::cleanup_orphan_vanilla(game_version);
+    }
+
     eprintln!("[Forge] 安装完成: {}", target_id);
     json!({
         "success": true,
         "versionId": target_id
     })
+}
+
+/// 取版本号第一段（点号之前的整数部分）；解析失败返回 0
+fn version_first_segment(forge_version: &str) -> u32 {
+    forge_version
+        .split('.')
+        .next()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .unwrap_or(0)
+}
+
+/// 旧版 Forge 安装（不运行 Java 安装器，直接解析 install_profile.json）：
+/// - 无 "install" 字段：Legacy 方式 1 —— 读取 json 字段指向的版本 JSON，并把 installer 内 maven/ 解压到 libraries/
+/// - 有 "install" 字段：Legacy 方式 2 —— 把 install.filePath 的 jar 解压到 install.path 对应的库位置，写 versionInfo 为版本 JSON
+/// 安装完成后若版本 JSON 带继承字段，则合并原版产出自含独立版本。
+async fn install_forge_legacy(
+    game_version: &str,
+    _forge_version: &str,
+    target_id: &str,
+    installer_path: &std::path::Path,
+) -> Value {
+    // 1. 打开 installer 并读取 install_profile.json
+    let file = match std::fs::File::open(installer_path) {
+        Ok(f) => f,
+        Err(e) => return json!({ "success": false, "error": format!("无法打开 Forge installer: {}", e) }),
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(e) => return json!({ "success": false, "error": format!("无法解析 Forge installer: {}", e) }),
+    };
+    let profile_bytes = match zip_entry_bytes(&mut archive, "install_profile.json") {
+        Some(b) => b,
+        None => return json!({ "success": false, "error": "installer 中缺少 install_profile.json" }),
+    };
+    let profile: Value = match serde_json::from_slice(&profile_bytes) {
+        Ok(v) => v,
+        Err(e) => return json!({ "success": false, "error": format!("解析 install_profile.json 失败: {}", e) }),
+    };
+
+    // 2. 新建目标版本文件夹
+    let version_dir = shared::versions_dir().join(target_id);
+    if std::fs::create_dir_all(&version_dir).is_err() {
+        return json!({ "success": false, "error": format!("无法创建版本目录 {}", version_dir.display()) });
+    }
+
+    // 3. 依据是否存在 install 字段选择安装方式
+    let version_json: Value = if profile.get("install").is_none() {
+        // Legacy 方式 1：读取 json 字段指向的版本 JSON，并解压 maven 支持库
+        let json_rel = shared::jstr(&profile, "json").trim_start_matches('/').to_string();
+        if json_rel.is_empty() {
+            return json!({ "success": false, "error": "install_profile.json 缺少 json 字段" });
+        }
+        let mut vj: Value = {
+            let bytes = match zip_entry_bytes(&mut archive, &json_rel) {
+                Some(b) => b,
+                None => return json!({ "success": false, "error": format!("installer 中缺少 {}", json_rel) }),
+            };
+            match serde_json::from_slice(&bytes) {
+                Ok(v) => v,
+                Err(e) => return json!({ "success": false, "error": format!("解析版本 JSON 失败: {}", e) }),
+            }
+        };
+        if let Some(obj) = vj.as_object_mut() {
+            obj.insert("id".to_string(), json!(target_id));
+        }
+        // 解压 installer 内 maven/ 目录到 libraries/
+        extract_maven_prefix(&mut archive, &shared::libraries_dir());
+        vj
+    } else {
+        // Legacy 方式 2：解压安装器 jar 到库位置，写 versionInfo 为版本 JSON
+        let install = profile.get("install").cloned().unwrap_or(Value::Null);
+        let coord = shared::jstr(&install, "path");
+        let file_path_entry = shared::jstr(&install, "filePath");
+        if coord.is_empty() || file_path_entry.is_empty() {
+            return json!({ "success": false, "error": "install_profile.json 的 install 字段缺少 path / filePath" });
+        }
+        let lib_rel = match maven_to_lib_rel(&coord) {
+            Some(r) => r,
+            None => return json!({ "success": false, "error": format!("无法解析库路径: {}", coord) }),
+        };
+        let lib_dest = shared::libraries_dir().join(&lib_rel);
+        if let Some(parent) = lib_dest.parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                return json!({ "success": false, "error": format!("无法创建库目录 {}", parent.display()) });
+            }
+        }
+        {
+            let mut src = match archive.by_name(&file_path_entry) {
+                Ok(e) => e,
+                Err(_) => return json!({ "success": false, "error": format!("installer 中缺少 {}", file_path_entry) }),
+            };
+            let mut out = match std::fs::File::create(&lib_dest) {
+                Ok(f) => f,
+                Err(e) => return json!({ "success": false, "error": format!("无法写入库文件 {}: {}", lib_dest.display(), e) }),
+            };
+            if std::io::copy(&mut src, &mut out).is_err() {
+                return json!({ "success": false, "error": format!("解压库文件失败: {}", file_path_entry) });
+            }
+        }
+        eprintln!("[Forge] 已解压 Forge 主库: {}", lib_dest.display());
+
+        // 建立版本 JSON（versionInfo）
+        let mut vj = profile.get("versionInfo").cloned().unwrap_or(json!({}));
+        if !vj.is_object() {
+            return json!({ "success": false, "error": "install_profile.json 缺少 versionInfo 对象" });
+        }
+        if let Some(obj) = vj.as_object_mut() {
+            obj.insert("id".to_string(), json!(target_id));
+            // 无继承字段时继承原版
+            obj.entry("inheritsFrom".to_string())
+                .or_insert_with(|| json!(game_version));
+        }
+        vj
+    };
+
+    // 4. 写入目标版本 JSON
+    if !shared::write_version_json(target_id, &version_json) {
+        return json!({ "success": false, "error": format!("无法写入版本 JSON {}", target_id) });
+    }
+
+    // 5. 若版本带继承字段，合并原版产出自含独立版本（与原版 Forge 现代版一致）
+    if version_json.get("inheritsFrom").is_some() {
+        eprintln!("[Forge] 旧版安装检测到继承式 JSON，合并原版 {} 产出独立版本", game_version);
+        match shared::install_merged_loader(game_version, target_id, &version_json, None).await {
+            Ok(_) => {}
+            Err(e) => {
+                return json!({ "success": false, "error": e });
+            }
+        }
+        if !game_version.is_empty() && game_version != target_id {
+            shared::cleanup_orphan_vanilla(game_version);
+        }
+    }
+
+    let _ = std::fs::remove_file(installer_path);
+    eprintln!("[Forge] 旧版安装完成: {}", target_id);
+    json!({
+        "success": true,
+        "versionId": target_id
+    })
+}
+
+/// 读取 zip 内某条目为字节
+fn zip_entry_bytes<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    name: &str,
+) -> Option<Vec<u8>> {
+    let mut entry = archive.by_name(name).ok()?;
+    let mut buf = Vec::new();
+    std::io::copy(&mut entry, &mut buf).ok()?;
+    Some(buf)
+}
+
+/// 把 installer 内 maven/ 前缀的文件解压到 libraries/ 目录
+fn extract_maven_prefix<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    libs_dir: &std::path::Path,
+) {
+    use std::io::Write;
+    for i in 0..archive.len() {
+        let mut entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.name().to_string();
+        if !name.starts_with("maven/") {
+            continue;
+        }
+        let rel = &name["maven/".len()..];
+        if rel.is_empty() || entry.is_dir() {
+            continue;
+        }
+        let dest = libs_dir.join(rel);
+        if let Some(parent) = dest.parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                continue;
+            }
+        }
+        let mut out = match std::fs::File::create(&dest) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        let _ = std::io::copy(&mut entry, &mut out);
+        let _ = out.flush();
+    }
+}
+
+/// 把 maven 坐标转换为 libraries 下相对路径（如 net.minecraftforge:forge:1.12.2-14.23.5.2854:universal）
+fn maven_to_lib_rel(name: &str) -> Option<String> {
+    if !name.contains(':') {
+        // 已是相对路径
+        return Some(name.to_string());
+    }
+    let parts: Vec<&str> = name.split(':').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let group_path = parts[0].replace('.', "/");
+    let artifact_id = parts[1];
+    let version = parts[2];
+    let classifier = if parts.len() >= 4 {
+        format!("-{}", parts[3])
+    } else {
+        String::new()
+    };
+    let jar_name = format!("{}-{}{}.jar", artifact_id, version, classifier);
+    Some(format!("{}/{}/{}/{}", group_path, artifact_id, version, jar_name))
 }

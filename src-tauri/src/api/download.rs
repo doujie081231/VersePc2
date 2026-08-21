@@ -139,20 +139,87 @@ pub async fn handle(
         "POST /api/check-version-name" => {
             let body = body.as_ref().or(params.as_ref())?;
             let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            if name.is_empty() {
-                return Some(ApiResult::ok(json!({ "available": false, "reason": "名称为空" })));
-            }
-
-            // 检查本地是否已存在同名版本
             let versions_dir = storage::resolve_data_dir().join("versions");
-            let target = versions_dir.join(name);
-            let available = !target.exists();
+            let reason = validate_folder_name(name, &versions_dir);
+            let available = reason.is_empty();
             Some(ApiResult::ok(json!({
                 "available": available,
-                "reason": if available { "" } else { "版本名已存在" }
+                "reason": reason
             })))
         }
 
         _ => None,
     }
+}
+
+/// 校验版本整理夹名是否合法且不与现有版本重名。
+/// 返回空字符串表示可用，否则返回错误原因。
+fn validate_folder_name(name: &str, versions_dir: &std::path::Path) -> String {
+    // 1. 空 / 空白
+    if name.trim().is_empty() {
+        return "文件夹名不能为空！".to_string();
+    }
+    // 2. 两端空格
+    if name.starts_with(' ') {
+        return "文件夹名不能以空格开头！".to_string();
+    }
+    if name.ends_with(' ') {
+        return "文件夹名不能以空格结尾！".to_string();
+    }
+    // 3. 长度 1~100
+    let len = name.chars().count();
+    if len < 1 {
+        return "长度至少需 1 个字符！".to_string();
+    }
+    if len > 100 {
+        return "长度最长为 100 个字符！".to_string();
+    }
+    // 4. 尾部小数点
+    if name.ends_with('.') {
+        return "文件夹名不能以小数点结尾！".to_string();
+    }
+    // 5. 非法字符：Windows 路径非法字符 + Minecraft 额外字符 "!;"
+    for c in name.chars() {
+        match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '!' | ';' => {
+                return format!("文件夹名不可包含 {} 字符！", c);
+            }
+            c if c.is_control() => {
+                return format!("文件夹名不可包含 {} 字符！", c);
+            }
+            _ => {}
+        }
+    }
+    // 6. Windows 保留名（CON/PRN/AUX/CLOCK$/NUL/COM0-9/LPT0-9），忽略大小写
+    let upper = name.to_uppercase();
+    let reserved = matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "CLOCK$" | "NUL" | "COM0" | "COM1" | "COM2" | "COM3"
+            | "COM4" | "COM5" | "COM6" | "COM7" | "COM8" | "COM9" | "LPT0" | "LPT1"
+            | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9"
+    );
+    if reserved {
+        return format!("文件夹名不可为 {}！", name);
+    }
+    // 7. NTFS 8.3 短文件名形式（"xx~1"）
+    let bytes = name.as_bytes();
+    for i in 0..bytes.len() {
+        if bytes[i] == b'~' && i >= 2 && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() {
+            return "文件夹名不能包含这一特殊格式！".to_string();
+        }
+    }
+    // 8. 与 versions 目录下现有子文件夹名重名（忽略大小写）
+    if let Ok(entries) = std::fs::read_dir(versions_dir) {
+        for entry in entries.flatten() {
+            if !entry.path().is_dir() {
+                continue;
+            }
+            if let Some(fname) = entry.file_name().to_str() {
+                if fname.eq_ignore_ascii_case(name) {
+                    return "不可与现有文件夹重名！".to_string();
+                }
+            }
+        }
+    }
+    String::new()
 }

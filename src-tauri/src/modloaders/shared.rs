@@ -7,7 +7,7 @@
 //   - fetch_with_racing 实现双源竞速：同时请求官方源和镜像源，谁先返回用谁
 //   - 失败时返回 Result，由调用方决定降级策略
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::time::Duration;
 
 /// 共享 HTTP 客户端（懒加载）
@@ -886,14 +886,251 @@ pub async fn ensure_base_version_installed(
     // 5. 并发下载核心库
     report(30, "正在下载依赖库...".to_string());
     let libs_dir = libraries_dir();
-    let (ok, fail) = download_basic_libraries(&version_details, &libs_dir).await;
-    if ok == 0 && fail > 0 {
-        return Err(format!("依赖库下载失败（{} 个）", fail));
+    let (_ok, fail) = download_basic_libraries(&version_details, &libs_dir).await;
+    if fail > 0 {
+        // 依赖库下载失败不中断安装（部分库失败时版本会被拒绝，导致整合包安装中止）。
+        // 缺失库由“文件修复 / 启动前补全”自动下载补齐。
+        file_log(&format!("[base] 依赖库下载失败（{} 个），将由启动前修复与补全流程补齐", fail));
     }
 
     report(90, "基础版本安装完成".to_string());
     file_log(&format!("[base] {} 基础版本自动安装完成", game_version));
     Ok(())
+}
+
+/// 将原版 JSON 与加载器 JSON 合并为单一独立版本 JSON。
+/// 结果删除 inheritsFrom 与 jar，自含原版全部内容与加载器内容，id 替换为目标版本名。
+fn merge_version_json(vanilla: &Value, loader: &Value, output_id: &str) -> Value {
+    let mut out = vanilla.clone();
+    let vanilla = vanilla; // 复用原始引用
+
+    let vanilla_libs: Vec<Value> = vanilla
+        .get("libraries")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let loader_libs: Vec<Value> = loader
+        .get("libraries")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    // 合并 libraries：以原版为底，追加加载器库，按 name 去重（name 在前者更优先）
+    if let Some(arr) = out.get_mut("libraries").and_then(|v| v.as_array_mut()) {
+        let mut existing: Vec<String> = arr
+            .iter()
+            .filter_map(|l| {
+                let name = jstr(l, "name");
+                if name.is_empty() { None } else { Some(name) }
+            })
+            .collect();
+        for lib in &loader_libs {
+            let name = jstr(lib, "name");
+            if name.is_empty() {
+                arr.push(lib.clone());
+            } else if !existing.iter().any(|e| e == &name) {
+                arr.push(lib.clone());
+                existing.push(name);
+            }
+        }
+    } else if let Some(obj) = out.as_object_mut() {
+        obj.insert("libraries".to_string(), json!(loader_libs));
+    }
+
+    // 合并 minecraftArguments（旧格式参数）
+    let vanilla_args = jstr(vanilla, "minecraftArguments");
+    let loader_args = jstr(loader, "minecraftArguments");
+    if !loader_args.is_empty() {
+        let combined = if vanilla_args.is_empty() {
+            loader_args
+        } else {
+            format!("{} {}", vanilla_args, loader_args)
+        };
+        out["minecraftArguments"] = json!(combined);
+    }
+
+    // 合并 arguments 对象中的数组字段（game / jvm），按值去重
+    if let (Some(out_args), Some(ld_args)) = (
+        out.get_mut("arguments").and_then(|v| v.as_object_mut()),
+        loader.get("arguments").and_then(|v| v.as_object()),
+    ) {
+        for (k, v) in ld_args {
+            if let Some(ld_arr) = v.as_array() {
+                if k == "game" || k == "jvm" {
+                    let existing = out_args
+                        .get(k)
+                        .and_then(|e| e.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut seen: Vec<String> = existing
+                        .iter()
+                        .filter_map(|i| i.as_str())
+                        .map(|s| s.to_string())
+                        .collect();
+                    let mut merged = existing;
+                    for item in ld_arr {
+                        let s = item.as_str().map(|s| s.to_string()).unwrap_or_default();
+                        if s.is_empty() {
+                            merged.push(item.clone());
+                        } else if !seen.iter().any(|x| x == &s) {
+                            merged.push(item.clone());
+                            seen.push(s);
+                        }
+                    }
+                    out_args.insert(k.clone(), json!(merged));
+                }
+            }
+        }
+    }
+
+    // mainClass：加载器优先，否则保留原版
+    let loader_main = jstr(loader, "mainClass");
+    if !loader_main.is_empty() {
+        out["mainClass"] = json!(loader_main);
+    }
+
+    // 清理与修正：删除继承字段，id 设为输出版本名
+    if let Some(obj) = out.as_object_mut() {
+        obj.remove("inheritsFrom");
+        obj.remove("jar");
+        obj.remove("_comment_");
+        obj.insert("id".to_string(), json!(output_id));
+        obj.insert("type".to_string(), json!("release"));
+    }
+
+    out
+}
+
+/// 将加载器 JSON 与对应原版合并，产出单一独立版本并落盘（不遗留独立原版目录）。
+///
+/// # 参数
+/// - `game_version`: Minecraft 版本号
+/// - `version_id`: 输出版本目录名
+/// - `loader_json`: 加载器 JSON（Fabric/OptiFine 等，可含 inheritsFrom，会被删除）
+/// - `on_progress`: 进度回调（可选）
+///
+/// # 返回
+/// Ok(最终合并后的版本 JSON)
+pub async fn install_merged_loader(
+    game_version: &str,
+    version_id: &str,
+    loader_json: &Value,
+    on_progress: Option<BaseVersionProgress>,
+) -> Result<Value, String> {
+    use crate::download::download_with_mirror;
+
+    let report = on_progress.unwrap_or_else(|| Box::new(|_, _| {}) as BaseVersionProgress);
+
+    // 1. 拉取原版版本清单，找到详情地址
+    report(5, "获取版本清单...".to_string());
+    let manifest = crate::versions::fetch_remote_manifest(false)
+        .ok_or_else(|| format!("无法获取版本清单，请检查网络后重试"))?;
+    let version_info = manifest
+        .get("versions")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.iter().find(|it| jstr(it, "id") == game_version))
+        .cloned()
+        .ok_or_else(|| format!("没找到 Minecraft {}", game_version))?;
+    let details_url = jstr(&version_info, "url");
+    if details_url.is_empty() {
+        return Err(format!("版本 {} 缺少详情地址", game_version));
+    }
+
+    // 2. 拉取原版版本详情 JSON
+    report(10, "正在下载版本信息...".to_string());
+    let settings = storage::load_settings();
+    let download_source = jstr(&settings, "downloadSource");
+    let vanilla = fetch_version_details(&details_url, &download_source).await
+        .map_err(|e| format!("获取版本信息失败: {}", e))?;
+
+    // 3. 合并为独立版本
+    let merged = merge_version_json(&vanilla, loader_json, version_id);
+    file_log(&format!("[loader] 合并版本 {} 完成（自含原版内容）", version_id));
+
+    // 4. 创建版本目录并写入 JSON（须先落盘，供客户端 JAR 下载后位于同目录）
+    let version_dir = versions_dir().join(version_id);
+    if std::fs::create_dir_all(&version_dir).is_err() {
+        return Err(format!("无法创建版本目录 {}", version_dir.display()));
+    }
+    if !write_version_json(version_id, &merged) {
+        return Err(format!("无法写入版本 JSON {}", version_id));
+    }
+
+    // 5. 下载客户端 JAR 到版本目录（合并后没有继承，JAR 必须自含）
+    report(20, "正在下载客户端文件...".to_string());
+    let client_url = vanilla.pointer("/downloads/client/url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let client_sha1 = vanilla.pointer("/downloads/client/sha1").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let client_size = vanilla.pointer("/downloads/client/size").and_then(|v| v.as_u64()).unwrap_or(0);
+    if !client_url.is_empty() {
+        let jar_path = version_dir.join(format!("{}.jar", version_id));
+        download_with_mirror(
+            &client_url,
+            &jar_path,
+            if client_sha1.is_empty() { None } else { Some(&client_sha1) },
+            if client_size > 0 { Some(client_size) } else { None },
+            &download_source,
+            300,
+            None,
+        ).await.map_err(|e| format!("下载客户端文件失败: {}", e))?;
+    }
+
+    // 6. 下载合并后版本的全部库
+    report(30, "正在下载依赖库...".to_string());
+    let libs_dir = libraries_dir();
+    let (_ok, fail) = download_basic_libraries(&merged, &libs_dir).await;
+    if fail > 0 {
+        // 所有需下载的库均失败：不中断安装（版本被拒绝会导致整个整合包装不上）。
+        // 缺失库由“文件修复 / 启动前补全”自动下载补齐。
+        file_log(&format!("[loader] 依赖库下载失败（{} 个），将由启动前修复与补全流程补齐", fail));
+    }
+
+    report(90, "版本安装完成".to_string());
+    Ok(merged)
+}
+
+/// 若某原版版本不再被任何其他版本以 inheritsFrom / jar 引用，则删除其版本目录。
+/// 用于加载器安装完成后清理仅作 patch 输入的遗留原版目录，避免遗留独立原版目录。
+pub fn cleanup_orphan_vanilla(game_version: &str) {
+    if game_version.is_empty() {
+        return;
+    }
+    let versions_root = versions_dir();
+    let mut referenced = false;
+    if let Ok(entries) = std::fs::read_dir(&versions_root) {
+        for entry in entries.flatten() {
+            let dir_name = match entry.file_name().to_str() {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            if dir_name == game_version {
+                continue;
+            }
+            let json_path = versions_root.join(&dir_name).join(format!("{}.json", dir_name));
+            let content = match std::fs::read_to_string(&json_path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            if content.contains("\"inheritsFrom\"") || content.contains("\"jar\"") {
+                if let Ok(v) = serde_json::from_str::<Value>(&content) {
+                    if jstr(&v, "inheritsFrom") == game_version || jstr(&v, "jar") == game_version {
+                        referenced = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if referenced {
+        return;
+    }
+    let target = versions_root.join(game_version);
+    if target.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&target) {
+            file_log(&format!("[cleanup] 清理原版目录失败 {}: {}", target.display(), e));
+        } else {
+            file_log(&format!("[cleanup] 已清理无引用的原版目录: {}", target.display()));
+        }
+    }
 }
 
 /// 获取当前时间的 ISO 8601 字符串（UTC）

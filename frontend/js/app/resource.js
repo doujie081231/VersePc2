@@ -82,8 +82,9 @@ function showImportNameModal(defaultName, onConfirm) {
     }
     try {
       const result = await API.checkVersionName(name);
-      if (result.exists) {
+      if (!result.available) {
         warn.style.display = 'block';
+        warn.textContent = '⚠ ' + (result.reason || '版本名称不可用');
         hint.textContent = '';
         confirmBtn.disabled = true;
         confirmBtn.style.opacity = '0.5';

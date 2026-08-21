@@ -500,7 +500,7 @@ pub async fn install_neoforge(
     // 7. 清理 installer
     let _ = std::fs::remove_file(&installer_path);
 
-    // 8. 验证最终版本 JSON
+    // 8. 读取最终版本 JSON；若其仍带 inheritsFrom（依赖独立原版），则合并原版为独立版本
     let final_json = shared::versions_dir()
         .join(&final_version_id)
         .join(format!("{}.json", final_version_id));
@@ -509,6 +509,37 @@ pub async fn install_neoforge(
             "success": false,
             "error": "NeoForge 安装完成但版本 JSON 不存在"
         });
+    }
+
+    let loader_json = match shared::read_version_json(&final_version_id) {
+        Some(v) => v,
+        None => {
+            return json!({ "success": false, "error": "NeoForge 版本 JSON 读取失败" });
+        }
+    };
+
+    // 若 installer 生成的版本中带继承字段，则合并原版内容，产出自含独立版本
+    if loader_json.get("inheritsFrom").is_some() {
+        eprintln!(
+            "[NeoForge] 检测到继承式 JSON，合并原版 {} 产出独立版本",
+            game_version
+        );
+        match shared::install_merged_loader(game_version, &final_version_id, &loader_json, None).await {
+            Ok(_) => {
+                eprintln!("[NeoForge] 合并式安装完成: {}", final_version_id);
+            }
+            Err(e) => {
+                eprintln!("[NeoForge] 合并失败: {}", e);
+                return json!({ "success": false, "error": e });
+            }
+        }
+    } else {
+        eprintln!("[NeoForge] JSON 已是独立版本，无需合并: {}", final_version_id);
+    }
+
+    // 9. 清理不再被引用的原版目录（安装器只把原版作为 patch 输入，安装后目标版本自含）
+    if !game_version.is_empty() && game_version != final_version_id {
+        shared::cleanup_orphan_vanilla(game_version);
     }
 
     eprintln!("[NeoForge] 安装完成: {}", final_version_id);

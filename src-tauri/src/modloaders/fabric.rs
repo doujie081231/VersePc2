@@ -90,8 +90,6 @@ pub async fn get_loader_versions_for_game(game_version: &str) -> Vec<Value> {
 // ============== Fabric Loader 安装 ==============
 // 对应原项目 server/modloaders/fabric.js 的 installFabric
 
-use std::path::PathBuf;
-
 /// 安装 Fabric 模组加载器（使用默认 versionId）
 /// 对应原项目 installFabric
 ///
@@ -135,22 +133,7 @@ async fn install_fabric_impl(
         version_id, target_version_id
     );
 
-    // 1. 检查原版是否已安装
-    let base_json_path = shared::versions_dir()
-        .join(game_version)
-        .join(format!("{}.json", game_version));
-    let base_jar_path = shared::versions_dir()
-        .join(game_version)
-        .join(format!("{}.jar", game_version));
-
-    if !base_json_path.exists() || !base_jar_path.exists() {
-        return json!({
-            "success": false,
-            "error": format!("请先安装原版 {}", game_version)
-        });
-    }
-
-    // 2. 优先尝试 profile/json 端点（包含完整版本配置）
+    // 1. 获取加载器 profile JSON（不单独安装原版，下方统一合并）
     let profile_url = format!(
         "{}/versions/loader/{}/{}/profile/json",
         FABRIC_META_URL, game_version, loader_version
@@ -299,124 +282,23 @@ async fn install_fabric_impl(
         }
     };
 
-    // 4. 设置 id 和 inheritsFrom
-    profile["id"] = json!(version_id);
-    profile["inheritsFrom"] = json!(game_version);
-    if profile.get("time").is_none() {
-        profile["time"] = json!(chrono_now_iso());
-    }
-
-    // 5. 收集需要下载的库（先不可变遍历，收集下载任务）
-    let libs = profile.get("libraries").and_then(|l| l.as_array());
-    let mut libs_to_download: Vec<(String, PathBuf)> = Vec::new();
-    // 待补全 downloads.artifact.path 的库索引及其 path 值
-    let mut pending_artifact_paths: Vec<(usize, String)> = Vec::new();
-
-    if let Some(libs) = libs {
-        for (idx, lib) in libs.iter().enumerate() {
-            // 处理有 downloads.artifact.url 的库
-            if let Some(artifact) = lib.get("downloads").and_then(|d| d.get("artifact")) {
-                let url = shared::jstr(artifact, "url");
-                let path = shared::jstr(artifact, "path");
-                if !url.is_empty() && !path.is_empty() {
-                    let dest = shared::libraries_dir().join(&path);
-                    if !shared::is_jar_intact(&dest) {
-                        libs_to_download.push((url, dest));
-                    }
-                    continue;
-                }
+    // 4. 与对应原版合并，产出单一独立版本（自含原版内容，删除 inheritsFrom）
+    match shared::install_merged_loader(game_version, &version_id, &profile, None).await {
+        Ok(_) => {
+            eprintln!("[Fabric] 合并式安装完成: {}", version_id);
+            // 清理不再被引用的原版目录（合并后目标版本自含，不遗留独立原版目录）
+            if !game_version.is_empty() && game_version != version_id {
+                shared::cleanup_orphan_vanilla(game_version);
             }
-
-            // 处理仅有 name（maven 坐标）的库
-            let name = shared::jstr(lib, "name");
-            if !name.is_empty() {
-                let parts: Vec<&str> = name.split(':').collect();
-                if parts.len() >= 3 {
-                    let group_path = parts[0].replace('.', "/");
-                    let lname = parts[1];
-                    let lver = parts[2];
-                    let classifier = if parts.len() >= 4 { format!("-{}", parts[3]) } else { String::new() };
-                    let jar_name = format!("{}-{}{}.jar", lname, lver, classifier);
-                    let local_group = parts[0].replace('.', std::path::MAIN_SEPARATOR.to_string().as_str());
-                    let dest = shared::libraries_dir().join(&local_group).join(lname).join(lver).join(&jar_name);
-
-                    if !shared::is_jar_intact(&dest) {
-                        let base_url = shared::jstr(lib, "url");
-                        let base_url = if base_url.is_empty() {
-                            "https://maven.fabricmc.net/".to_string()
-                        } else {
-                            base_url
-                        };
-                        let url = format!("{}{}/{}/{}/{}", base_url, group_path, lname, lver, jar_name);
-                        libs_to_download.push((url, dest));
-                    }
-
-                    // 记录待补全的库（避免不可变借用冲突）
-                    if lib.get("downloads").is_none() {
-                        let artifact_path = format!("{}/{}/{}/{}", group_path, lname, lver, jar_name);
-                        pending_artifact_paths.push((idx, artifact_path));
-                    }
-                }
-            }
+            json!({
+                "success": true,
+                "versionId": version_id
+            })
         }
-    }
-
-    // 补全 downloads.artifact.path（可变借用，分开避免冲突）
-    if !pending_artifact_paths.is_empty() {
-        if let Some(libs) = profile.get_mut("libraries").and_then(|l| l.as_array_mut()) {
-            for (idx, artifact_path) in pending_artifact_paths {
-                if let Some(lib) = libs.get_mut(idx) {
-                    lib["downloads"] = json!({
-                        "artifact": {
-                            "path": artifact_path,
-                            "url": "",
-                            "sha1": "",
-                            "size": 0
-                        }
-                    });
-                }
-            }
+        Err(e) => {
+            eprintln!("[Fabric] 安装失败: {}", e);
+            json!({ "success": false, "error": e })
         }
-    }
-
-    // 6. 并发下载库
-    if !libs_to_download.is_empty() {
-        eprintln!("[Fabric] 需要下载 {} 个库文件", libs_to_download.len());
-        let (success, fail) = shared::download_libraries_concurrent(libs_to_download, 16).await;
-        eprintln!("[Fabric] 库下载完成: 成功 {}, 失败 {}", success, fail);
-        if fail > 0 {
-            eprintln!("[Fabric] 警告: {} 个库下载失败", fail);
-            return json!({
-                "success": false,
-                "error": format!("Fabric 加载器依赖库下载失败 {} 个，请检查网络后重试", fail)
-            });
-        }
-    } else {
-        eprintln!("[Fabric] 所有库文件已存在，无需下载");
-    }
-
-    // 7. 创建版本目录并写入 JSON
-    let version_dir = shared::versions_dir().join(&version_id);
-    if !version_dir.exists() {
-        if std::fs::create_dir_all(&version_dir).is_err() {
-            return json!({
-                "success": false,
-                "error": "无法创建版本目录"
-            });
-        }
-    }
-
-    if shared::write_version_json(&version_id, &profile) {
-        eprintln!("[Fabric] 版本 JSON 已写入: {}/{}.json", version_dir.display(), version_id);
-        json!({
-            "success": true,
-            "versionId": version_id
-        })
-    } else {
-        json!({
-            "success": false,
-            "error": "写入版本 JSON 失败"
-        })
     }
 }
 

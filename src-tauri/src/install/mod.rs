@@ -430,6 +430,32 @@ pub async fn perform_installation(
                 return;
             }
             update!(session::InstallStage::Loader, 100, "模组加载器安装完成");
+
+            // Fabric API 自动安装：detail 流程选择 Fabric 加载器时可选一并安装 Fabric API
+            if loader_type == "fabric" {
+                let api_id = loader.get("fabricApiId").and_then(|v| v.as_str()).unwrap_or("");
+                if !api_id.is_empty() {
+                    update!(session::InstallStage::Loader, 100, "正在安装 Fabric API...");
+                    let api_url = loader.get("fabricApiUrl").and_then(|v| v.as_str()).unwrap_or("");
+                    let api_filename = loader.get("fabricApiFilename").and_then(|v| v.as_str()).unwrap_or("");
+                    let api_result = crate::modloaders::fabric_api::install_fabric_api(
+                        &game_version,
+                        api_id,
+                        Some(&actual_version_id),
+                        if api_url.is_empty() { None } else { Some(api_url) },
+                        if api_filename.is_empty() { None } else { Some(api_filename) },
+                    ).await;
+                    if !api_result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        let api_err = api_result.get("error").and_then(|v| v.as_str()).unwrap_or("Fabric API 安装失败").to_string();
+                        session::update_session(&app, &session_id, |s| {
+                            s.stage = session::InstallStage::Failed;
+                            s.message = format!("Fabric API 安装失败: {}", api_err);
+                            s.errors.push(api_err);
+                        });
+                        return;
+                    }
+                }
+            }
         }
     }
     check_cancel!();

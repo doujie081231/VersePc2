@@ -1496,10 +1496,7 @@ fn push_ordinary_jvm_arg(jvm_args: &mut Vec<String>, replaced: &str) {
         return;
     }
     if replaced.starts_with("-Xmx") || replaced.starts_with("-Xms") {
-        let prefix = &replaced[..4];
-        if !jvm_args.iter().any(|e| e.starts_with(prefix)) {
-            jvm_args.push(replaced.to_string());
-        }
+        return;
     } else if !jvm_args.iter().any(|existing| existing == replaced) {
         jvm_args.push(replaced.to_string());
     }

@@ -55,10 +55,17 @@ pub fn resolve_data_dir() -> std::path::PathBuf {
             if let Some(data_dir_str) = cfg.get("dataDir").and_then(|v| v.as_str()) {
                 let data_dir = std::path::PathBuf::from(data_dir_str);
                 // 支持相对路径：基于 exe 目录解析（"./data" 随文件夹移动自动跟随）
+                // 去掉开头的 "./" 或 ".\"，否则 PathBuf::join 会拼出 "app_dir\./data"
+                // 这种带裸 "." 段落的畸形路径，导致 explorer 无法定位。
                 let data_dir = if data_dir.is_absolute() {
                     data_dir
                 } else {
-                    app_dir.join(&data_dir)
+                    let rel = data_dir.to_str().unwrap_or_default();
+                    let rel = rel
+                        .strip_prefix("./")
+                        .or_else(|| rel.strip_prefix(".\\"))
+                        .unwrap_or(rel);
+                    app_dir.join(rel)
                 };
                 if data_dir.exists() {
                     return data_dir;

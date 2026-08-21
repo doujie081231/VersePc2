@@ -109,7 +109,7 @@ pub async fn check_entitlements(
         )));
     }
 
-    // 解析响应：只要 items 非空即视为持有（与 PCL 一致，兼容 Xbox Game Pass）
+    // 解析响应：只要 items 非空即视为持有（兼容 Xbox Game Pass）
     #[derive(Deserialize)]
     struct EntitlementsResponse {
         #[serde(default)]
