@@ -5,7 +5,6 @@ use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// 生成简单 UUID v4（基于时间戳+计数器，足够离线使用）
-/// 复刻原项目 utils.generateUUID()
 pub fn generate_simple_uuid() -> String {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -32,7 +31,7 @@ pub fn generate_simple_uuid() -> String {
 }
 
 /// 生成 Minecraft 离线账号 UUID（Java 版 OfflinePlayer 算法）
-/// 复刻原项目 server/api/routes/accounts.js:178 - MD5('OfflinePlayer:' + username) 并设置 version/variant 位
+/// MD5('OfflinePlayer:' + username) 并设置 version/variant 位
 pub fn offline_uuid(username: &str) -> String {
     let input = format!("OfflinePlayer:{}", username);
     let digest = md5::compute(input.as_bytes());
@@ -54,7 +53,6 @@ pub fn offline_uuid(username: &str) -> String {
 }
 
 /// 生成当前时间的 ISO 8601 字符串（UTC，用于账号 createdAt 字段）
-/// 复刻原项目 new Date().toISOString()
 pub fn now_iso() -> String {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -142,7 +140,6 @@ pub fn get_bool(v: &Value, key: &str) -> bool {
 }
 
 // ============== 文件校验工具 ==============
-// 复刻原项目 server/utils.js 的 calculateSHA1Sync / isJarIntact
 
 /// 计算文件 SHA1（同步流式读取，对小/中文件适用）
 /// 大文件建议改用异步流式实现，但依赖检查中的库文件通常 < 50MB
@@ -163,7 +160,6 @@ pub fn calculate_sha1(path: &std::path::Path) -> Option<String> {
 }
 
 /// 校验 JAR 文件完整性（PK 头 + EOCD 尾）
-/// 复刻原项目 server/utils.js:isJarIntact
 pub fn is_jar_intact(path: &std::path::Path) -> bool {
     use std::io::{Read, Seek, SeekFrom};
 

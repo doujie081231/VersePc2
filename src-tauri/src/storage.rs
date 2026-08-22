@@ -126,7 +126,7 @@ pub fn load_settings() -> Value {
     default_settings()
 }
 
-/// 默认设置（与原项目 server/accounts.js loadSettingsCached 一致）
+/// 默认设置
 pub fn default_settings() -> Value {
     json!({
         "javaPath": "",
@@ -186,8 +186,6 @@ pub fn overwrite_settings(settings: &Value) -> bool {
 
 // ============== accounts.json ==============
 // accounts.json 存放所有账号（离线/微软/第三方）
-// 与原项目 server/accounts.js loadAccounts / saveAccounts 一致
-
 pub fn load_accounts() -> Value {
     let accounts_file = resolve_data_dir().join("accounts.json");
     if let Ok(content) = std::fs::read_to_string(&accounts_file) {
@@ -211,8 +209,6 @@ pub fn save_accounts(accounts: &Value) -> bool {
 
 // ============== favorites.json ==============
 // favorites.json 存放所有收藏夹
-// 与原项目 server/accounts.js loadFavorites / saveFavorites 一致
-
 pub fn load_favorites() -> Value {
     let favorites_file = resolve_data_dir().join("favorites.json");
     if let Ok(content) = std::fs::read_to_string(&favorites_file) {
@@ -236,7 +232,6 @@ pub fn save_favorites(favorites: &Value) -> bool {
 }
 
 // ============== 外部版本文件夹（external-folders.json） ==============
-// 兼容原项目 shared.js 的 loadExternalFolders / saveExternalFolders
 // 格式：[{ "path": "...", "name": "...", "addedAt": "ISO" }]
 
 pub fn load_external_folders() -> Vec<Value> {
@@ -514,7 +509,7 @@ fn merge_legacy_store_keys(src: &Path, store: &Store) -> bool {
 }
 
 // ============== store.json（通用 KV 存储，兼容 electron-store） ==============
-// 原 Electron 项目用 electron-store 保存一些杂项状态（如 window-config）
+// 用 electron-store 保存一些杂项状态（如 window-config）
 // Tauri 版用 store.json 替代
 
 pub struct Store {

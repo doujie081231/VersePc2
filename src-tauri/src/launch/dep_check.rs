@@ -1,6 +1,5 @@
 // launch/dep_check.rs — 依赖完整性检查
 // 职责：检查指定版本的 Java / 版本JSON / 主JAR / 库 / natives / 资源 / 前置版本 / Forge核心 / mrpack mods
-// 对应原项目 server/dependencies/check.js + server/dependencies/forge.js
 
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -172,7 +171,6 @@ fn missing_to_json(m: &MissingFile) -> Value {
 // ============== 主入口 ==============
 
 /// 检查指定版本的依赖完整性
-/// 对应原项目 server/dependencies/check.js:checkDependencies
 pub fn check_dependencies(version_id: &str, settings: &Value, external_version_dir: Option<&Path>) -> DepCheckResult {
     let mut result = DepCheckResult::new();
 
@@ -771,7 +769,6 @@ fn deep_merge_json(parent: &Value, child: &Value) -> Value {
 }
 
 /// 沿多路径搜索主 JAR
-/// 对应原项目 server/versions/version-parse.js:findMainJar
 pub(crate) fn find_main_jar(version_json: &Value, version_id: &str, external_version_dir: Option<&Path>) -> Option<PathBuf> {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
@@ -915,8 +912,7 @@ pub(crate) fn find_main_jar(version_json: &Value, version_id: &str, external_ver
 }
 
 /// 评估版本 JSON 的 rules 数组
-/// 复刻原项目 server/versions/version-merge.js:evaluateRules
-/// `has_custom_resolution` 对应原项目 features.has_custom_resolution 特性
+/// `has_custom_resolution` 特性
 pub(crate) fn evaluate_rules(rules: &Vec<Value>, has_custom_resolution: bool) -> bool {
     if rules.is_empty() {
         return true;
@@ -971,7 +967,6 @@ pub(crate) fn evaluate_rules(rules: &Vec<Value>, has_custom_resolution: bool) ->
 }
 
 /// 获取 Java 主版本范围（综合 JSON 声明、MC 版本、加载器约束）
-/// 对应原项目 server/java/java-version.js
 pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &Value) -> (u32, u32) {
     let mut min: u32 = 8;
     let mut max: u32 = 999;
@@ -1582,7 +1577,6 @@ fn check_maven_library(
 }
 
 /// 安全解析库文件路径（防路径穿越）
-/// 对应原项目 server/utils.js:safeLibPath
 fn safe_lib_path(artifact_path: &str, base_dir: &Path) -> Option<PathBuf> {
     if artifact_path.is_empty() {
         return None;
@@ -1703,7 +1697,6 @@ fn scan_inherits_forge(version_id: &str, visited: &mut std::collections::HashSet
 }
 
 /// 检查 Forge / NeoForge 核心库完整性
-/// 对应原项目 server/dependencies/forge.js:checkForgeCore
 fn check_forge_core(
     version_json: &Value,
     version_id: &str,

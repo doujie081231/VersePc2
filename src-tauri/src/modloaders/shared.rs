@@ -1,6 +1,5 @@
 // modloaders/shared.rs — 模组加载器共享工具
 // 职责：提供 HTTP 请求工具（fetch_json、fetch_text、fetch_with_racing）
-// 对应原项目 server/http-client.js 中相关函数
 //
 // 设计原则：
 //   - 所有加载器共用同一个 reqwest::Client（连接池复用）
@@ -11,7 +10,6 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 /// 共享 HTTP 客户端（懒加载）
-/// 对应原项目 http-client.js 中的 client 实例
 static HTTP_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
 
 pub fn shared_client() -> &'static reqwest::Client {
@@ -28,7 +26,6 @@ pub fn shared_client() -> &'static reqwest::Client {
 }
 
 /// 拉取 JSON
-/// 对应原项目 http.fetchJSON
 pub async fn fetch_json(url: &str) -> Result<Value, String> {
     let client = shared_client();
     let resp = client
@@ -50,7 +47,6 @@ pub async fn fetch_json(url: &str) -> Result<Value, String> {
 }
 
 /// 拉取文本
-/// 对应原项目 http.fetchText
 pub async fn fetch_text(url: &str, timeout_secs: u64) -> Result<String, String> {
     let client = shared_client();
     let resp = client
@@ -72,7 +68,6 @@ pub async fn fetch_text(url: &str, timeout_secs: u64) -> Result<String, String> 
 }
 
 /// 双源竞速：并发请求所有候选 URL，谁先成功返回就用谁
-/// 对应原项目 http.fetchWithRacing
 ///
 /// 说明：用 JoinSet 按"完成先后"取结果，而不是按 spawn 顺序等待，
 /// 从而保证镜像源先成功时不会被官方源（可能被墙/卡顿）拖住。
@@ -194,7 +189,6 @@ pub fn jarr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
 }
 
 // ============== 安装工具函数 ==============
-// 对应原项目 server/modloaders/shared.js 中的安装辅助能力
 // 提供路径解析、版本 JSON 读写、并发下载库等功能
 
 use std::path::{Path, PathBuf};
@@ -502,7 +496,6 @@ pub fn ensure_parent_dir(path: &Path) -> bool {
 }
 
 /// 并发下载多个库文件
-/// 对应原项目 fabric.js / shared.js 中的并发库下载调度
 ///
 /// # 参数
 /// - `libs`: (url, dest_path) 列表
@@ -573,7 +566,6 @@ pub fn is_jar_intact(path: &Path) -> bool {
 }
 
 // ============== Java 查找 ==============
-// 对应原项目 forge.js 中 runForgeInstallerJar 的 Java 查找逻辑
 // 优先使用 settings.javaPath，其次扫描系统已安装的 Java
 
 use crate::storage;
@@ -679,7 +671,6 @@ fn inspect_java_major(java_path: &Path) -> Option<u32> {
 }
 
 // ============== 基础版本安装 ==============
-// 对应原项目 shared.js 的 ensureBaseVersionInstalled
 // 整合包下载/导入时，若原版基础版本缺失，自动下载安装（版本 JSON + client.jar + 核心库），
 // 无需用户先手动安装原版。
 
@@ -1238,7 +1229,6 @@ pub async fn run_subprocess_with_timeout(
 }
 
 /// 用系统自带的 curl 下载文件（绕过程序内部网络无法连接某些源的情况）
-/// 对应原项目 server/http-client/download.js 的 downloadFileSyncAsync 兜底方式
 /// curl 使用系统网络通道和系统证书，能连上程序内部连不上的地址。
 ///
 /// # 参数

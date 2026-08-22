@@ -1,6 +1,5 @@
 // launch/process_manager.rs — 游戏进程管理
 // 职责：启动子进程、收集日志、状态上报
-// 对应原项目 server/launch/process-manager.js + launch-game.js
 //
 // 当前实现：
 // - do_launch：用 tokio::process::Command 启动 java + 启动参数，并行收集 stdout/stderr
@@ -363,7 +362,6 @@ pub async fn do_launch(
         );
 
         // 写入全局退出分析缓存（供 GET /api/game/exit-analysis 轮询与日志导出使用）
-        // 对应原项目 server/context.js 的 ctx.sessions.lastGameExitAnalysis
         let exit_logs = super::game_session::get_persistent_logs(50);
         super::game_session::set_exit_analysis(json!({
             "code": exit_code,
@@ -391,7 +389,6 @@ pub async fn do_launch(
 }
 
 /// 启动前设置游戏语言（简体中文）与窗口模式（全屏/窗口化）。
-/// 复刻原项目 server/launch/shared.js 的 setGameLanguage + applyWindowSettings，
 /// 失败不阻塞启动流程。
 fn set_game_language_and_window(game_dir: &str, version_json: &Value, settings: &Value) {
     let game_dir = std::path::Path::new(game_dir);

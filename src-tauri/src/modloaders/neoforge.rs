@@ -1,6 +1,5 @@
 // modloaders/neoforge.rs — NeoForge 加载器版本查询
 // 职责：从 BMCLAPI 或 Maven 拉 NeoForge 版本列表
-// 对应原项目 server/modloaders/neoforge.js 中的 getNeoForgeVersionsForGame
 //
 // 路由：
 //   GET /api/neoforge/versions?game=1.21.1
@@ -9,7 +8,7 @@
 //   - MC 1.20.1 及以前：使用旧版 Forge，版本号 47.x（含 "1.20.1-" 前缀）
 //   - MC 1.20.5+（NeoForge）：版本号格式 <MC次版本>.<MC patch>.<补丁>（如 21.1.x）
 //
-// 安装逻辑（installNeoForge）暂未迁移，下次迁移。
+// 安装逻辑暂未迁移，下次迁移。
 
 use serde_json::{json, Value};
 
@@ -23,7 +22,6 @@ const BMCLAPI_FORGE_META: &str = "https://bmclapi2.bangbang93.com/maven/net/neof
 const NEOFORGE_MAVEN_API: &str = "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 
 /// 获取指定 MC 版本的 NeoForge 版本列表
-/// 对应原项目 getNeoForgeVersionsForGame
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.21.1"
@@ -191,7 +189,6 @@ fn extract_version_tags(xml: &str) -> Vec<String> {
 }
 
 // ============== NeoForge 安装 ==============
-// 对应原项目 server/modloaders/neoforge.js 的 installNeoForge
 //
 // 实现策略：使用 NeoForge 官方 installer 的命令行模式
 //   java -jar neoforge-installer.jar --installClient <data_dir>
@@ -204,7 +201,6 @@ const NEOFORGE_MAVEN_BMCLAPI: &str = "https://bmclapi2.bangbang93.com/maven/net/
 const NEOFORGE_MAVEN_OFFICIAL: &str = "https://maven.neoforged.net/releases/net/neoforged";
 
 /// 安装 NeoForge 模组加载器
-/// 对应原项目 installNeoForge
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.21.1"

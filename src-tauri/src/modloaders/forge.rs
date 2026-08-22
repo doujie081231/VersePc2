@@ -1,6 +1,5 @@
 // modloaders/forge.rs — Forge 加载器版本查询
 // 职责：从 Forge Maven 元数据 XML 拉取指定 MC 版本的 Forge 版本列表
-// 对应原项目 server/api/routes/modloaders.js 中 GET /api/forge/versions 的内联实现
 //
 // 路由：
 //   GET /api/forge/versions?game=1.20.1
@@ -26,7 +25,6 @@ const FORGE_METADATA_URLS: &[&str] = &[
 ];
 
 /// 获取指定 MC 版本的 Forge 版本列表
-/// 对应原项目 GET /api/forge/versions
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
@@ -145,7 +143,6 @@ fn regex_escape(s: &str) -> String {
 }
 
 // ============== Forge 安装 ==============
-// 对应原项目 server/modloaders/forge.js 的 installForge
 //
 // 实现策略：使用 Forge 官方 installer 的命令行模式
 //   java -jar forge-installer.jar --installClient <data_dir>
@@ -166,7 +163,6 @@ const FORGE_MAVEN_BMCLAPI: &str = "https://bmclapi2.bangbang93.com/maven/net/min
 const FORGE_MAVEN_OFFICIAL: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
 
 /// 安装 Forge 模组加载器
-/// 对应原项目 installForge
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
@@ -332,7 +328,7 @@ pub async fn install_forge(
         eprintln!("[Forge] 尝试第 {} 个 Java: {}", idx + 1, java_path);
 
         // [Java 9+ 必需] 现代 Forge 安装器依赖 cpw.mods.bootstraplauncher 模块，
-        // 不加 --add-exports 会报模块访问错误导致安装器崩溃（与原项目 runForgeInstallerJar 一致）
+        // 不加 --add-exports 会报模块访问错误导致安装器崩溃
         let mut args: Vec<String> = Vec::new();
         if let Some((_, major, _)) = crate::java::inspect_java(std::path::Path::new(java_path)) {
             if major >= 9 {

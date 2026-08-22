@@ -1,10 +1,8 @@
 // crash_analyzer/mod.rs — 崩溃日志分析模块入口
-// 对应原项目 server/crash-analyzer/index.js
 //
 // 职责：定义 CrashAnalyzer 结构体，编排 收集 → 预处理 → 分析 → 输出 流程
 //
 // 架构说明：
-//   原 JS 项目使用"原型混入"风格，所有方法挂在 CrashAnalyzer.prototype 上
 //   Rust 改为"结构体 + 纯函数模块"，各子模块无状态，由 CrashAnalyzer 持有状态并调度
 //   这样新增分析规则（crit2/crit3/mod_analyzer）只需扩展 analyze 函数即可
 
@@ -35,7 +33,6 @@ pub struct CrashAnalyzer {
 }
 
 /// 分析输出结构
-/// 对应原项目 output.js output() 返回对象
 #[derive(Debug, Clone)]
 pub struct AnalysisOutput {
     pub detail: String,
@@ -58,7 +55,6 @@ impl CrashAnalyzer {
     }
 
     /// 主分析流程：收集 → 预处理 → 一级分析 → 输出
-    /// 对应原项目 index.js + analyze.js + output.js 的编排
     pub fn analyze(&self, version_path_index: &str) -> AnalysisOutput {
         // 步骤 1：收集日志文件
         let raw_files = collect(CollectParams {
@@ -96,7 +92,6 @@ impl CrashAnalyzer {
     }
 
     /// 手动导入分析：用户选择一个日志文件进行分析
-    /// 对应原项目 /api/crash/analyze（手动导入模式）
     pub fn analyze_file(&self, file_path: &Path) -> AnalysisOutput {
         let raw_files = match import_file(file_path) {
             Some(f) => vec![f],
@@ -146,7 +141,6 @@ impl CrashAnalyzer {
 
 impl AnalysisOutput {
     /// 序列化为 JSON（供 API 返回）
-    /// 对应原项目 output.js output() 返回对象
     pub fn to_json(&self) -> Value {
         let crash_reasons_json: Vec<Value> = self
             .crash_reasons

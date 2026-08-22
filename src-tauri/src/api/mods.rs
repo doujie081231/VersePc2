@@ -1,6 +1,5 @@
 // api/mods.rs — 模组管理路由
 // 职责：模组列表、搜索、详情、版本、下载、管理、依赖解析、对话框
-// 对应原项目 server/api/routes/mods/*.js
 //
 // 路由清单（25 个）：
 //   列表（mod-list.js，6 个）：
@@ -67,10 +66,10 @@ pub async fn handle(
 
     match key.as_str() {
         // ===== 列表 =====
-        "GET /api/mods" => Some(handle_list()),
+        "GET /api/mods" => Some(handle_list().await),
         "GET /api/mod-icon" => Some(handle_icon(params)),
         "GET /api/mods/open-save-folder" => Some(handle_open_save_folder(params)),
-        "GET /api/mods/installed" => Some(handle_installed(params)),
+        "GET /api/mods/installed" => Some(handle_installed(params).await),
         "GET /api/mods/categories" => Some(handle_categories()),
         "GET /api/mods/featured" => Some(handle_featured().await),
         // ===== 搜索 =====
@@ -105,8 +104,12 @@ pub async fn handle(
 // ============== 列表路由 ==============
 
 /// GET /api/mods — 已安装模组列表
-fn handle_list() -> ApiResult {
-    ApiResult::ok(mods::get_installed_mods())
+async fn handle_list() -> ApiResult {
+    let mut result = mods::get_installed_mods();
+    if let Some(mods_arr) = result.get_mut("mods") {
+        enrich_online_icons(mods_arr).await;
+    }
+    ApiResult::ok(result)
 }
 
 /// GET /api/mod-icon — 模组图标
@@ -181,8 +184,8 @@ fn handle_open_save_folder(params: &Option<Value>) -> ApiResult {
     ApiResult::ok(json!({ "success": true, "path": saves_dir.to_string_lossy() }))
 }
 
-/// GET /api/mods/installed — 已安装模组（简化为纯数组，对齐初代）
-fn handle_installed(params: &Option<Value>) -> ApiResult {
+/// GET /api/mods/installed — 已安装模组（简化为纯数组）
+async fn handle_installed(params: &Option<Value>) -> ApiResult {
     let version_id = params
         .as_ref()
         .and_then(|p| p.get("versionId"))
@@ -193,14 +196,60 @@ fn handle_installed(params: &Option<Value>) -> ApiResult {
         return ApiResult::err(400, "Missing versionId");
     }
     let result = mods::get_installed_mods_for_version(&version_id);
-    let mods_arr = result.get("mods").cloned().unwrap_or(json!([]));
+    let mut mods_arr = result.get("mods").cloned().unwrap_or(json!([]));
+    enrich_online_icons(&mut mods_arr).await;
     ApiResult::ok(mods_arr)
+}
+
+/// 为已安装模组列表补充线上平台图标。
+///
+/// 对每个模组按其本地 jar 的 SHA1 向 Modrinth 查询对应项目，把项目官方图标
+/// 地址（已换国内镜像）写入该模组的 icon 字段。前端在存在网络图标时直接使用，
+/// 否则回退到已解析出的 jar 内图标或本地占位。
+async fn enrich_online_icons(mods: &mut Value) {
+    let arr = match mods.as_array_mut() {
+        Some(a) => a,
+        None => return,
+    };
+    // 收集每个模组的 jar 绝对路径
+    let mut path_by_file: Vec<(String, String)> = Vec::new();
+    for m in arr.iter() {
+        let jp = m.get("_jarPath").and_then(|v| v.as_str()).unwrap_or("");
+        let fn_ = m.get("fileName").and_then(|v| v.as_str()).unwrap_or("");
+        if !jp.is_empty() {
+            path_by_file.push((fn_.to_string(), jp.to_string()));
+        }
+    }
+    if path_by_file.is_empty() {
+        return;
+    }
+    let jar_paths: Vec<PathBuf> = path_by_file.iter().map(|(_, p)| PathBuf::from(p)).collect();
+    let icon_map = mods::update::resolve_project_icons(&jar_paths).await;
+    if icon_map.is_empty() {
+        return;
+    }
+    // 按 jar 路径把网络图标回填到对应模组
+    let mut icon_by_path: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for (_, p) in &path_by_file {
+        if let Some(icon) = icon_map.get(p) {
+            icon_by_path.insert(p.clone(), icon.clone());
+        }
+    }
+    for m in arr.iter_mut() {
+        let jp = m.get("_jarPath").and_then(|v| v.as_str()).unwrap_or("");
+        if let Some(icon) = icon_by_path.get(jp) {
+            if let Some(obj) = m.as_object_mut() {
+                obj.insert("icon".to_string(), Value::String(icon.clone()));
+            }
+        }
+    }
 }
 
 /// GET /api/mods/categories — 模组分类列表
 fn handle_categories() -> ApiResult {
     // 简化：返回常用分类
-    let categories = vec![
+    let categories: Vec<&str> = vec![
         "performance", "optimization", "utility", "storage",
         "technology", "magic", "adventure", "decoration",
         "worldgen", "mobs", "food", "transportation",
@@ -2020,7 +2069,6 @@ async fn handle_select_save_folder(_body: &Option<Value>) -> ApiResult {
 // ============== 辅助函数 ==============
 
 /// 解析 mods 目录
-/// 复刻原项目 versions.getVersionModsDir 逻辑
 pub(crate) fn resolve_mods_dir(settings: &Value, version_id: &str, _mc_version: &str) -> Option<PathBuf> {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");

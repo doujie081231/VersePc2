@@ -1,5 +1,4 @@
 // api/skins.rs — 皮肤管理 API 路由
-// 对应原项目 server/api/routes/skins.js
 //
 // 路由清单：
 //   ===== 通用皮肤 =====
@@ -20,7 +19,6 @@
 //   POST /api/ms-skins/delete     删除本地皮肤
 //
 // PNG 校验：仅校验 PNG 魔数（89 50 4E 47），不做尺寸校验和缩放
-//   原项目用 sharp 做尺寸校验和 64×64 重采样，Tauri 端简化为只校验魔数
 //   理由：Minecraft 1.8+ 会自动适配非标准尺寸皮肤，sharp 引入过重
 
 use serde_json::{json, Value};
@@ -50,7 +48,7 @@ fn write_skin_log(msg: &str) {
 
 // ============== 内置皮肤资源 ==============
 // 编译时嵌入到二进制，运行时永远可用（不依赖前端 dist 构建）
-// 文件来源：src-tauri/resources/*.png（复制自原项目 img/ 目录）
+// 文件来源：src-tauri/resources/*.png
 
 const STEVE_HEAD_PNG: &[u8] = include_bytes!("../../resources/steve_head.png");
 const STEVE_SKIN_PNG: &[u8] = include_bytes!("../../resources/steve_skin.png");
@@ -62,7 +60,7 @@ const SKIN_ZOMBIE_PNG: &[u8] = include_bytes!("../../resources/skin_zombie.png")
 /// PNG 文件魔数（前 4 字节）
 const PNG_MAGIC: &[u8] = &[0x89, 0x50, 0x4E, 0x47];
 
-/// 内置默认皮肤清单（与原项目 skins.js 第 126-133 行一致）
+/// 内置默认皮肤清单
 fn builtin_default_skins() -> Vec<(&'static str, &'static str, &'static str, &'static str)> {
     // (id, name, file, model)
     vec![
@@ -314,7 +312,7 @@ async fn handle_upload_skin(body: &Option<Value>) -> ApiResult {
 /// GET /api/skin-texture — 获取整张皮肤图
 /// 参数：uuid（必填）、serverUrl、username
 ///
-/// 优先级（参考原项目 server/skins.js fetchAvatarDataFull）：
+/// 优先级：
 ///   1. 账号本地 skinFile（内置或自定义）
 ///   2. 账号 skinUrl（微软账号登录后从 Mojang 拿到的纹理 URL）
 ///   3. 外置认证服务器 /skin/{username}.png
@@ -355,7 +353,7 @@ async fn handle_skin_texture(params: &Option<Value>) -> ApiResult {
 
             // 1b. 微软/外置账号的 skinUrl 字段：从 Mojang texture URL 直接拉取整皮
             //   这是登录时从 https://api.minecraftservices.com/minecraft/profile 拿到的
-            //   textures.SKIN.url 字段，原项目保存在 acc.skinUrl
+            //   textures.SKIN.url 字段
             let skin_url = utils::get_str(acc, "skinUrl");
             if !skin_url.is_empty() {
                 if let Some(bytes) = fetch_remote_bytes(&skin_url).await {
@@ -386,7 +384,6 @@ async fn handle_skin_texture(params: &Option<Value>) -> ApiResult {
     // 3. 公共皮肤服务（按 UUID 拉取整张皮肤）
     //   注意：这里用 SKIN_SERVICES（整皮），不是 AVATAR_SERVICES（头像）
     //   避免拿到 64x64 头像图被当成 64x64 皮肤拉伸
-    //   参考 server/skins.js fetchAvatarDataFull 第 481-518 行
     let skin_services: &[&str] = &[
         "https://mc-heads.net/skin/{uuid}",
         "https://crafatar.com/skins/{uuid}",
@@ -976,7 +973,7 @@ fn png_response(bytes: &[u8]) -> ApiResult {
 
 /// 返回 PNG 图片响应（带 skin model 头）
 /// model 统一转小写返回，避免前端 accounts.js 检查 'slim' 时因大小写不匹配失败
-///   （Mojang API 返回的 variant 是 "SLIM"/"CLASSIC"，原项目 auth 模块直接存了大写）
+///   （Mojang API 返回的 variant 是 "SLIM"/"CLASSIC"）
 fn png_response_with_model(bytes: &[u8], model: String) -> ApiResult {
     let data_url = utils::bytes_to_data_url(bytes, "image/png");
     let model_lower = model.to_lowercase();

@@ -1,6 +1,5 @@
 // mods/update.rs — 模组更新检查
 // 职责：通过 SHA1 哈希批量查询 Modrinth，检查已安装模组是否有更新
-// 对应原项目 server/mods.js 的 checkModUpdates
 //
 // 流程：
 //   1. 读取 mods 目录下所有 .jar 文件
@@ -205,5 +204,109 @@ fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Option<PathBu
             .map(PathBuf::from)
             .unwrap_or_else(|| data_dir.clone());
         Some(game_dir.join("mods"))
+    }
+}
+
+/// 通过 Modrinth 按文件 SHA1 批量解析本地产物的网络项目图标地址。
+///
+/// 每个已安装的 .jar 文件计算 SHA1 后，POST /version_files 查询其对应的
+/// 线上版本，再拉取项目详情中的 icon_url，得到该产物在模组平台上的
+/// 官方图标（源站 CDN 地址，已替换为国内镜像）。图标地址供前端直接渲染，
+/// 加载失败时由前端回退到本地默认占位图。
+///
+/// 返回：jar 文件路径（Windows 反斜杠形式）→ icon_url 映射。
+pub async fn resolve_project_icons(jar_paths: &[PathBuf]) -> HashMap<String, String> {
+    let mut result: HashMap<String, String> = HashMap::new();
+    if jar_paths.is_empty() {
+        return result;
+    }
+
+    // 计算每个 jar 的 SHA1，建立 sha1 → 绝对路径 的映射
+    let mut hash_to_path: HashMap<String, String> = HashMap::new();
+    for p in jar_paths {
+        let key = p.to_string_lossy().replace('/', "\\");
+        if let Some(hash) = compute_sha1_file(p) {
+            hash_to_path.insert(hash, key);
+        }
+    }
+    if hash_to_path.is_empty() {
+        return result;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("VersePC/1.0")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    // 按 SHA1 批量查询对应线上版本
+    let hash_list: Vec<String> = hash_to_path.keys().cloned().collect();
+    let post_body = json!({ "hashes": hash_list, "algorithm": "sha1" });
+    let version_res: Value = match client
+        .post(format!("{}/version_files", MODRINTH_API))
+        .header("Content-Type", "application/json")
+        .json(&post_body)
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(v) => v,
+            Err(_) => return result,
+        },
+        _ => return result,
+    };
+
+    // 收集涉及的项目 id 并批量拉取项目信息
+    let version_obj = version_res.as_object().cloned().unwrap_or_default();
+    let mut project_ids: Vec<String> = version_obj
+        .values()
+        .filter_map(|v| v.get("project_id").and_then(|p| p.as_str()).map(|s| s.to_string()))
+        .collect();
+    project_ids.sort();
+    project_ids.dedup();
+    if project_ids.is_empty() {
+        return result;
+    }
+
+    let projects_url = format!(
+        "{}/projects?ids={}",
+        MODRINTH_API,
+        urlencoding::encode(&serde_json::to_string(&project_ids).unwrap_or_default())
+    );
+    let mut icon_by_project: HashMap<String, String> = HashMap::new();
+    if let Ok(resp) = client.get(&projects_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(projects) = resp.json::<Vec<Value>>().await {
+                for p in projects {
+                    let id = p.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                    let icon = p.get("icon_url").and_then(|i| i.as_str()).unwrap_or("");
+                    if !id.is_empty() && !icon.is_empty() {
+                        icon_by_project.insert(id.to_string(), icon.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // 组装：sha1 → 项目图标
+    for (hash, path) in hash_to_path.iter() {
+        if let Some(ver) = version_obj.get(hash) {
+            let pid = ver.get("project_id").and_then(|p| p.as_str()).unwrap_or("");
+            if let Some(icon) = icon_by_project.get(pid) {
+                result.insert(path.clone(), to_modrinth_cdn_mirror(icon));
+            }
+        }
+    }
+    result
+}
+
+/// 将 Modrinth 官方 CDN 图片地址替换为国内镜像，避免部分网络下连接失败。
+fn to_modrinth_cdn_mirror(url: &str) -> String {
+    if url.contains("cdn.modrinth.com") {
+        url.replace("cdn.modrinth.com", "mod.mcimirror.top")
+    } else if url.contains("cdn-alt.modrinth.com") {
+        url.replace("cdn-alt.modrinth.com", "mod.mcimirror.top")
+    } else {
+        url.to_string()
     }
 }

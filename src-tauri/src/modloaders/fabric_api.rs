@@ -1,6 +1,5 @@
 // modloaders/fabric_api.rs — Fabric API 模组版本查询
 // 职责：从 Modrinth API 拉取指定 MC 版本可用的 Fabric API 模组版本列表
-// 对应原项目 server/api/routes/modloaders.js 中 GET /api/fabric-api/versions 的内联实现
 //
 // 路由：
 //   GET /api/fabric-api/versions?game=1.20.1
@@ -26,7 +25,6 @@ const FABRIC_API_PROJECT_ID: &str = "P7dR8mSH";
 const MODRINTH_API_MIRROR: &str = "https://mod.mcimirror.top/modrinth/v2";
 
 /// 获取指定 MC 版本的 Fabric API 版本列表
-/// 对应原项目 GET /api/fabric-api/versions
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
@@ -172,7 +170,6 @@ pub async fn get_fabric_api_versions(game_version: &str) -> (Vec<Value>, String)
 }
 
 /// 安装指定 Fabric API 版本
-/// 对应原项目 POST /api/fabric-api/install
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号

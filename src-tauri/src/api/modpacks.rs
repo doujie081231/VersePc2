@@ -1,6 +1,5 @@
 // api/modpacks.rs — 整合包 API 路由
 // 职责：整合包搜索（Modrinth + CurseForge 双源聚合）、安装链接获取、导入
-// 对应原项目 server/api/routes/modpacks.js
 //
 // 路由：
 //   GET  /api/modpacks/search   双源聚合搜索整合包
@@ -19,7 +18,7 @@ const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 const MODRINTH_API_MIRROR: &str = "https://bmclapi2.bangbang93.com/modrinth/v2";
 /// CurseForge API 官方地址
 const CURSEFORGE_API: &str = "https://api.curseforge.com/v1";
-/// CurseForge 默认 API Key（与原项目一致）
+/// CurseForge 默认 API Key
 const DEFAULT_CF_API_KEY: &str = "$2a$10$bL4bIL5pUWqfcO7KQtnMReakwtfHbNKh6v1uTpKlzhwoueEJQnPnm";
 
 /// 处理整合包路由
@@ -530,7 +529,6 @@ async fn handle_cancel(body: &Option<Value>) -> ApiResult {
 }
 
 /// 中文搜索关键词翻译（简化版）
-/// 原项目使用 data/mod-chinese-names.js 进行精确翻译
 /// 此处先返回原查询，后续迁移完整翻译表
 fn translate_chinese_query(query: &str) -> String {
     // 检测是否包含中文
@@ -542,7 +540,7 @@ fn translate_chinese_query(query: &str) -> String {
         return query.to_string();
     }
 
-    // 简化的中文关键词映射（原项目有完整表，后续迁移）
+    // 简化的中文关键词映射（后续迁移）
     // 这里只做最常见的几个翻译
     let translations: &[(&str, &str)] = &[
         ("整合包", "modpack"),

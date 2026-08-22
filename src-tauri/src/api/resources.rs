@@ -1,6 +1,5 @@
 // api/resources.rs — 资源搜索/下载路由
 // 职责：Modrinth 资源（模组/整合包/资源包/光影/数据包）搜索、详情、版本列表、下载
-// 对应原项目 server/api/routes/resources.js
 //
 // 路由：
 //   GET  /api/resources/search    Modrinth + CurseForge 双源聚合搜索
@@ -30,13 +29,13 @@ use crate::storage;
 
 /// Modrinth API 官方地址
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
-/// Modrinth API 镜像地址（与原项目一致，国内访问更快）
+/// Modrinth API 镜像地址（国内访问更快）
 const MODRINTH_API_MIRROR: &str = "https://mod.mcimirror.top/modrinth/v2";
 /// CurseForge API 官方地址
 const CURSEFORGE_API: &str = "https://api.curseforge.com/v1";
 /// CurseForge API 镜像地址
 const CURSEFORGE_API_MIRROR: &str = "https://mod.mcimirror.top/curseforge/v1";
-/// CurseForge 默认 API Key（与原项目一致）
+/// CurseForge 默认 API Key
 const DEFAULT_CF_API_KEY: &str = "$2a$10$bL4bIL5pUWqfcO7KQtnMReakwtfHbNKh6v1uTpKlzhwoueEJQnPnm";
 
 /// 全局复用 reqwest::Client，避免每次请求都做 TLS 握手
@@ -62,7 +61,7 @@ struct CacheEntry {
 }
 
 /// 全局 API 缓存（URL → CacheEntry）
-/// 对齐原项目 cachedFetchJSON 的 60 秒 TTL 机制
+/// 60 秒 TTL 机制
 fn api_cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
     static CACHE: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -89,7 +88,7 @@ async fn cache_set(url: String, data: Value, ttl_ms: u64) {
     }
 }
 
-/// 带镜像回退的 JSON 请求，对齐原项目 request.js fetchJSON 多步策略：
+/// 带镜像回退的 JSON 请求，多步策略：
 ///   镜像 8s → 官方 10s → 官方完整超时(20s)；不走镜像时官方 10s → 官方完整超时。
 /// 关键点：
 ///   - 镜像连续失败后走熔断（_isMirrorAvailable），熔断期间只用官方，避免拖慢列表
@@ -503,7 +502,7 @@ fn build_modrinth_hit(proj: &Value, res_type: &str) -> Value {
         "title": proj.get("title").and_then(|v| v.as_str()).unwrap_or(""),
         "description": proj.get("description").and_then(|v| v.as_str()).unwrap_or(""),
         "author": proj.get("author").and_then(|v| v.as_str()).unwrap_or("").replace('_', ""),
-        "icon": proj.get("icon_url").and_then(|v| v.as_str()).unwrap_or(""),
+        "icon": to_modrinth_cdn_mirror(&proj.get("icon_url").and_then(|v| v.as_str()).unwrap_or("")),
         "downloads": proj.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0),
         "followers": proj.get("followers").and_then(|v| v.as_u64()).unwrap_or(0),
         "categories": proj.get("categories").and_then(|v| v.as_array()).cloned().unwrap_or_default(),
@@ -901,6 +900,19 @@ fn cf_loader_mask(m: &Value) -> i32 {
     mask
 }
 
+/// 将 Modrinth CDN 图片地址替换为国内镜像，避免 cdn.modrinth.com / cdn-alt.modrinth.com
+/// 在部分网络环境下连接缓慢或被重置导致图片加载失败。
+/// 对 markdown 正文（body）中内嵌的图片链接同样生效。
+fn to_modrinth_cdn_mirror(url: &str) -> String {
+    if url.contains("cdn.modrinth.com") {
+        url.replace("cdn.modrinth.com", "mod.mcimirror.top")
+    } else if url.contains("cdn-alt.modrinth.com") {
+        url.replace("cdn-alt.modrinth.com", "mod.mcimirror.top")
+    } else {
+        url.to_string()
+    }
+}
+
 /// GET /api/resources/detail — Modrinth 项目详情
 ///
 /// 查询参数：
@@ -957,9 +969,13 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
                     if url.is_empty() {
                         return None;
                     }
+                    // 走国内镜像，避免 cdn 图片在部分网络下加载失败
+                    let mut raw_url = obj.get("raw_url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                    let url_m = to_modrinth_cdn_mirror(&url);
+                    raw_url = to_modrinth_cdn_mirror(&raw_url);
                     Some(json!({
-                        "url": url,
-                        "rawUrl": obj.get("raw_url").and_then(|u| u.as_str()).unwrap_or(""),
+                        "url": url_m,
+                        "rawUrl": raw_url,
                         "title": obj.get("title").and_then(|v| v.as_str()).unwrap_or(""),
                         "description": obj.get("description").and_then(|v| v.as_str()).unwrap_or(""),
                         "created": obj.get("created").and_then(|v| v.as_str()).unwrap_or(""),
@@ -969,13 +985,16 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
         })
         .unwrap_or_default();
 
+    let mut body_text = project.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    body_text = to_modrinth_cdn_mirror(&body_text);
+
     let detail = json!({
         "id": project.get("id").and_then(|v| v.as_str()).unwrap_or(""),
         "slug": project.get("slug").and_then(|v| v.as_str()).unwrap_or(""),
         "title": project.get("title").and_then(|v| v.as_str()).unwrap_or(""),
         "description": project.get("description").and_then(|v| v.as_str()).unwrap_or(""),
-        "body": project.get("body").and_then(|v| v.as_str()).unwrap_or(""),
-        "icon": project.get("icon_url").and_then(|v| v.as_str()).unwrap_or(""),
+        "body": body_text,
+        "icon": to_modrinth_cdn_mirror(&project.get("icon_url").and_then(|v| v.as_str()).unwrap_or("")),
         "downloads": project.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0),
         "followers": project.get("followers").and_then(|v| v.as_u64()).unwrap_or(0),
         "categories": project.get("categories").and_then(|v| v.as_array()).cloned().unwrap_or_default(),
@@ -1111,7 +1130,7 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
     ApiResult::ok(json!({ "versions": result }))
 }
 
-/// 从 CurseForge 获取项目版本列表（对齐 Modrinth versions 结构）
+/// 从 CurseForge 获取项目版本列表（采用通用 versions 结构）
 /// 官方接口：GET /v1/mods/{modId}/files?pageSize=50
 async fn handle_versions_curseforge(project_id: &str) -> ApiResult {
     let settings = storage::load_settings();
@@ -1383,7 +1402,7 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
             .unwrap_or_default();
 
         // downloadUrl 为空时，根据 fileID(versionId) 和 fileName 构造 CurseForge CDN URL
-        // （对齐原项目：部分文件 API 返回 downloadUrl 为 null，但 CDN 实际可访问）
+        // （部分文件 API 返回 downloadUrl 为 null，但 CDN 实际可访问）
         // URL 格式：https://edge.forgecdn.net/files/{fileID前4位}/{fileID剩余位}/{encodeURIComponent(fileName)}
         let raw_dl_url = file_data.get("downloadUrl").and_then(|u| u.as_str()).unwrap_or("").to_string();
         let raw_file_name = file_data.get("fileName").and_then(|n| n.as_str()).unwrap_or("").to_string();
@@ -1431,7 +1450,7 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
 
         (version_data, project_info)
     } else {
-        // Modrinth（带镜像回退，对齐原项目 http.fetchJSON 行为，国内访问更快更稳）
+        // Modrinth（带镜像回退，国内访问更快更稳）
         let version_data: Value = if !version_id.is_empty() {
             let url = format!("{}/version/{}", MODRINTH_API, version_id);
             match fetch_json_with_mirror(&url, None).await {
@@ -1642,7 +1661,7 @@ async fn handle_download(app: &AppHandle, body: &Option<Value>) -> ApiResult {
         match result {
             Ok(()) => {
                 if project_type_clone == "modpack" {
-                    // 对齐原项目：下载完成后自动导入整合包（importModpackFromPath）
+                    // 下载完成后自动导入整合包
                     // 先更新为导入阶段，再调用 import_modpack 触发安装
                     resources_session::update_session(&app_handle, &session_id_for_task, |s| {
                         s.status = resources_session::ResourceStage::Install;
@@ -1823,7 +1842,6 @@ fn handle_download_cancel(body: &Option<Value>) -> ApiResult {
 }
 
 /// 解析版本子目录（如 modpacks/resourcepacks）
-/// 复刻原项目 versions.getVersionSubDir
 fn resolve_sub_dir(settings: &Value, version_id: &str, subfolder: &str) -> PathBuf {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
@@ -1849,7 +1867,6 @@ fn resolve_sub_dir(settings: &Value, version_id: &str, subfolder: &str) -> PathB
 }
 
 /// 解析版本 mods 目录
-/// 复刻原项目 versions.getVersionModsDir
 fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Option<PathBuf> {
     if version_id.is_empty() {
         return None;

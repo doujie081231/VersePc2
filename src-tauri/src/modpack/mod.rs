@@ -105,7 +105,7 @@ pub async fn import_modpack(
 
     let result = match format {
         ModpackFormat::Mrpack => {
-            // 走原生实现：1:1 复刻原项目 modrinth.js 的完整逻辑
+            // 走原生实现的完整逻辑
             // 不走 theseus 的 install_zipped_mrpack_files_with_reporter
             mrpack_native::import_mrpack(
                 app,
@@ -278,7 +278,7 @@ pub fn emit_progress_with_files(
 
 /// 标准化版本 ID（避免非法字符）
 /// 规范化版本 ID（用于版本目录名 / version.json 的 id）
-/// 原项目（HMCL 等）允许中文等 Unicode 版本名，这里只过滤 Windows 不允许的非法字符，
+/// 这里只过滤 Windows 不允许的非法字符，
 /// 而不是把所有非 ASCII 字符都替换成下划线（否则中文整合包名会变成一串 "_"）。
 pub fn normalize_version_id(name: &str) -> String {
     let trimmed = name.trim();

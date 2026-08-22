@@ -1,7 +1,6 @@
 // modloaders/fabric.rs — Fabric 加载器版本查询与安装
 // 职责：从 Fabric Meta API（含 BMCLAPI 镜像）拉取 Fabric Loader 版本列表，
 //       以及安装 Fabric Loader（拉取 profile JSON、构造版本配置、并发下载库）
-// 对应原项目 server/modloaders/fabric.js
 //
 // 路由：
 //   GET  /api/fabric/versions          → get_loader_versions()
@@ -18,7 +17,6 @@ pub const FABRIC_META_URL: &str = "https://meta.fabricmc.net/v2";
 pub const BMCLAPI_FABRIC_META: &str = "https://bmclapi2.bangbang93.com/fabric-meta";
 
 /// 获取 Fabric Loader 全部版本列表
-/// 对应原项目 getFabricLoaderVersions
 ///
 /// # 返回
 /// Vec<{version: String, stable: bool}>
@@ -50,7 +48,6 @@ pub async fn get_loader_versions() -> Vec<Value> {
 }
 
 /// 获取指定 MC 版本可用的 Fabric Loader 版本列表
-/// 对应原项目 getFabricLoaderVersionsForGame
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
@@ -88,10 +85,8 @@ pub async fn get_loader_versions_for_game(game_version: &str) -> Vec<Value> {
 }
 
 // ============== Fabric Loader 安装 ==============
-// 对应原项目 server/modloaders/fabric.js 的 installFabric
 
 /// 安装 Fabric 模组加载器（使用默认 versionId）
-/// 对应原项目 installFabric
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
@@ -289,6 +284,16 @@ async fn install_fabric_impl(
             // 清理不再被引用的原版目录（合并后目标版本自含，不遗留独立原版目录）
             if !game_version.is_empty() && game_version != version_id {
                 shared::cleanup_orphan_vanilla(game_version);
+            }
+            // 合并模式下（显式指定了 targetVersionId），清理残留的标准加载器版本目录
+            // fabric-loader-<loader>-<game>。该版本在合并前可能作为中间/历史版本存在，
+            // 合并完成后若不再被任何版本以 inheritsFrom / jar 引用，则应一并删除，
+            // 避免在版本列表中遗留孤立的加载器版本。
+            if target_version_id.is_some() {
+                let standard_loader_id = format!("fabric-loader-{}-{}", loader_version, game_version);
+                if standard_loader_id != version_id && !standard_loader_id.is_empty() {
+                    crate::modloaders::shared::cleanup_orphan_vanilla(&standard_loader_id);
+                }
             }
             json!({
                 "success": true,

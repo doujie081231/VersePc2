@@ -1,6 +1,5 @@
 // launch/mod.rs — 游戏启动模块入口
 // 职责：聚合启动相关子模块
-// 对应原项目 server/launch/index.js
 
 pub mod args_builder;
 pub mod dep_check;

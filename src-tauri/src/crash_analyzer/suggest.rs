@@ -1,5 +1,4 @@
 // crash_analyzer/suggest.rs — 修复建议生成
-// 对应原项目 server/crash-analyzer/suggest.js
 // 职责：根据 crashReasons Map 逐条生成中文修复建议文本
 
 use std::collections::HashMap;
@@ -7,7 +6,6 @@ use std::collections::HashMap;
 use super::constants::CrashReason;
 
 /// 汇总分析结果：按崩溃原因逐条生成修复建议
-/// 对应原项目 suggest.js getAnalyzeResult
 /// is_hand_analyze: 是否手动导入分析（影响未命中时的提示文案）
 pub fn get_analyze_result(
     reasons: &HashMap<CrashReason, Vec<String>>,
@@ -22,7 +20,7 @@ pub fn get_analyze_result(
             .to_string();
     }
 
-    // 按原项目的迭代顺序处理（CrashReason enum 已定义顺序）
+    // 按迭代顺序处理（CrashReason enum 已定义顺序）
     // HashMap 迭代顺序不确定，这里先收集排序，保证输出稳定
     let mut sorted_reasons: Vec<(CrashReason, Vec<String>)> = reasons
         .iter()

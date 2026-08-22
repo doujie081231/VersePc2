@@ -1,12 +1,11 @@
 // api/settings.rs — 设置相关路由
-// 兼容原项目 server/api/routes/settings.js
 // 路由清单：
 //   GET  /api/settings          读取设置
 //   POST /api/settings          保存设置（合并）
 //   POST /api/settings/set      设置单个字段
 //   POST /api/settings/reset     重置为默认值
 //   GET  /api/settings/data-dir  查询数据目录
-//   POST /api/settings/data-dir  修改/重置数据目录（对齐 electron 原项目）
+//   POST /api/settings/data-dir  修改/重置数据目录
 
 use serde_json::{json, Value};
 
@@ -66,7 +65,7 @@ pub fn handle(method: &str, path: &str, _params: &Option<Value>, body: &Option<V
             if new_dir_input.is_empty() {
                 return Some(ApiResult::err(400, "请提供有效的目录路径"));
             }
-            // 规范化为绝对路径（对齐 electron 里 path.resolve）
+            // 规范化为绝对路径
             let resolved = std::path::PathBuf::from(&new_dir_input);
             let resolved_path = if resolved.is_absolute() {
                 resolved
@@ -93,7 +92,7 @@ pub fn handle(method: &str, path: &str, _params: &Option<Value>, body: &Option<V
                 return Some(ApiResult::err(500, &format!("创建新目录失败: {}", e)));
             }
 
-            // 复制关键配置文件（对齐 electron 的 criticalFiles 列表）
+            // 复制关键配置文件
             let critical_files = [
                 "app-store.json",
                 "window-config.json",

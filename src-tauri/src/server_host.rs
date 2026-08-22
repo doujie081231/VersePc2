@@ -1,5 +1,5 @@
 // server_host.rs — 本地开服模块
-// 职责：迁移原 Electron 项目 main/server-host.js 的 11 个 IPC 通道
+// 职责：迁移其中的 11 个 IPC 通道
 // 实现：创建开服目录、下载 server.jar、spawn java 子进程、stdin/stdout 控制、模组同步
 
 use std::collections::HashMap;

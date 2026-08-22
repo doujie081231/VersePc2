@@ -1,5 +1,4 @@
 // auth/microsoft.rs — 微软 OAuth 设备代码流
-// 对应原项目 server/api/routes/accounts.js 中的 OAuth 部分（步骤 1-3）
 //
 // 流程：
 //   [1] POST /devicecode → 返回 device_code, user_code, verification_uri

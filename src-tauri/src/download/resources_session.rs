@@ -1,6 +1,5 @@
 // download/resources_session.rs — 资源下载会话管理
 // 职责：管理资源（模组/整合包/资源包/光影包/数据包）下载会话状态、进度上报、取消
-// 对应原项目 ctx.sessions.modDownloadSessions
 //
 // 与 install/session.rs 模式一致，但字段贴合资源下载场景：
 //   - phase: download / install / completed
@@ -100,7 +99,7 @@ impl ResourceSession {
         }
     }
 
-    /// 转成 JSON 给前端（字段名与原项目保持一致）
+    /// 转成 JSON 给前端
     fn to_json(&self) -> Value {
         json!({
             "sessionId": self.session_id,

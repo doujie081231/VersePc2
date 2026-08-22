@@ -1,7 +1,7 @@
 // easytier/process.rs — 陶瓦联机（Terracotta）子进程管理
 // 职责：下载并启动 terracotta.exe、主机/客户端模式切换、HTTP API 调用、状态轮询
 //
-// 启动流程（与 electron 版一致）：
+// 启动流程：
 //   1. 检查 terracotta.exe 是否已下载
 //   2. spawn terracotta.exe --hmcl <端口文件>，二进制会把 HTTP API 端口写入该文件
 //   3. 轮询端口文件获得 HTTP 端口
@@ -29,7 +29,7 @@ static MANUAL_STOP: Mutex<bool> = Mutex::new(false);
 /// 崩溃恢复运行中标志：防止恢复过程中 poller 重复触发
 static RECOVERING: Mutex<bool> = Mutex::new(false);
 
-/// Terracotta 版本（对应 electron 项目 ctx.network.TERRACOTTA_VERSION）
+/// Terracotta 版本号
 const TERRACOTTA_VERSION: &str = "0.4.2";
 
 /// 陶瓦联机错误码 -> (key, msg)
@@ -123,7 +123,7 @@ pub async fn set_idle() -> Result<(), String> {
 async fn http_get_raw(http_port: u16, path: &str) -> Result<Value, String> {
     let url = format!("http://127.0.0.1:{}{}", http_port, path);
     let client = reqwest::Client::builder()
-        // 对齐 electron：terracotta 刚启动时虚拟网卡初始化较慢，10 秒超时 + 最多 5 次重试（共 6 次尝试）
+        // terracotta 刚启动时虚拟网卡初始化较慢，10 秒超时 + 最多 5 次重试（共 6 次尝试）
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())?;
@@ -240,7 +240,7 @@ pub async fn download() -> Result<(), String> {
 
     let bytes = bytes.ok_or_else(|| format!("所有下载源均失败: {}", last_err))?;
 
-    // 解压 tar.gz（与 electron 版一致，使用系统 tar 命令）
+    // 解压 tar.gz（使用系统 tar 命令）
     let tmp_dir = tc_dir.join("_tmp_extract");
     if tmp_dir.exists() {
         let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -378,7 +378,7 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
         s.player_name = player_name.to_string();
         s.error_type = None;
         s.error_message = None;
-        // 保存成功配置（对齐 electron _terracottaSaved*）
+        // 保存成功配置
         s.saved_mode = Some(EasyTierMode::Host);
         s.saved_game_port = game_port;
         s.saved_room_code.clear();
@@ -389,7 +389,7 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
     // 拉取公共节点并开始扫描局域网游戏
     let nodes = fetch_public_nodes(false).await;
     let mut q = format!("player={}", urlencoding::encode(player_name));
-    // 主机 scanning 模式也要传 game 端口（对齐 electron 原项目扫描参数）
+    // 主机 scanning 模式也要传 game 端口
     q.push_str(&format!("&game={}", game_port));
     for n in &nodes {
         q.push_str(&format!("&public_nodes={}", urlencoding::encode(n)));
@@ -481,7 +481,7 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
         s.player_name = player_name.to_string();
         s.error_type = None;
         s.error_message = None;
-        // 保存成功配置（对齐 electron _terracottaSaved*）
+        // 保存成功配置
         s.saved_mode = Some(EasyTierMode::Guest);
         s.saved_room_code = room_code.to_string();
         s.saved_game_port = 0;
@@ -572,7 +572,7 @@ async fn stop_internal(manual: bool) {
 }
 
 /// 启动后台状态轮询：每 500ms 拉取 /state 更新全局状态
-/// 同时负责崩溃检测 + 自动恢复（对齐 electron startTerracottaDaemon）
+/// 同时负责崩溃检测 + 自动恢复
 fn start_poller(http_port: u16) {
     {
         let mut g = POLLER.lock().unwrap();
@@ -705,11 +705,11 @@ async fn try_recover_saved() -> Result<(), String> {
 }
 
 /// 解析 /state 响应并写入全局状态
-/// 返回 true 表示状态已更新；false 表示 index 未前进（旧/重复状态被忽略，对齐 HMCL daemon 的单调 index 保护）
+/// 返回 true 表示状态已更新；false 表示 index 未前进（旧/重复状态被忽略，采用单调 index 保护）
 fn update_state_from_api(v: Value) -> bool {
     let sv = v.get("state").and_then(|x| x.as_str()).unwrap_or("").to_string();
     let idx = v.get("index").and_then(|x| x.as_i64()).unwrap_or(-1);
-    // HMCL 用 index 单调递增判断：新的状态序号必须大于上次已应用序号，否则丢弃，避免旧状态回退覆盖
+    // 用单调递增的 index 判断：新的状态序号必须大于上次已应用序号，否则丢弃，避免旧状态回退覆盖
     if idx >= 0 {
         let last = state::get_state_index();
         if idx <= last {

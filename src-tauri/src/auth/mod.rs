@@ -1,5 +1,4 @@
 // auth/mod.rs — 微软账号认证模块入口
-// 对应原项目 server/api/routes/accounts.js 中微软账号登录的核心逻辑
 //
 // 完整流程：
 //   [1] microsoft::request_device_code       → device_code, user_code, verification_uri
@@ -46,7 +45,6 @@ pub fn create_http_client() -> reqwest::Client {
 
 /// 完整登录流程（步骤 3-7）
 /// 输入：device_code（步骤 1 已获取，步骤 2 用户已授权）
-/// 对应原项目 /api/msauth/poll 的核心逻辑
 pub async fn complete_login(
     client: &reqwest::Client,
     device_code: &str,
@@ -89,7 +87,6 @@ pub async fn complete_login(
 
 /// 刷新登录（步骤 3' - 7）
 /// 输入：refresh_token（之前登录保存的）
-/// 对应原项目 /api/msauth/refresh 的核心逻辑
 pub async fn refresh_login(
     client: &reqwest::Client,
     refresh_token: &str,

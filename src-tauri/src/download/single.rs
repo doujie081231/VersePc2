@@ -1,6 +1,5 @@
 // download/single.rs — 单流下载
 // 职责：单连接下载文件，支持续传、SHA1 校验、低速检测、超时重试
-// 对应原项目 server/http-client/download-single.js 的 _dlSingle
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,7 +16,7 @@ use super::chunked;
 const CHUNK_THRESHOLD: u64 = 1024 * 1024;
 
 /// TTFB 超时（秒）：发送请求后等待服务器响应头的最大时间。
-/// 对齐原项目 XMCL 引擎的 ttfbDeadline（15s）——CDN 建立了 TCP 连接但不回响应头时，
+/// ttfbDeadline ——CDN 建立了 TCP 连接但不回响应头时，
 /// 必须及时中断换源，否则会一直挂在 send() 上，表现为"下载一会卡住"。
 const TTFB_TIMEOUT_SECS: u64 = 20;
 
@@ -106,7 +105,7 @@ async fn resolve_final_url(url: &str, timeout_secs: u64) -> String {
 }
 
 /// 对多个候选源并行测速（Range:0-0 探针），按延迟升序返回
-/// 对应原项目 probeMirrorsParallel：延迟越低越优先，失败的超时排最后
+/// 延迟越低越优先，失败的超时排最后
 async fn probe_speed_sort(urls: &[String], timeout_secs: u64) -> Vec<String> {
     if urls.len() <= 1 {
         return urls.to_vec();
@@ -146,7 +145,6 @@ async fn probe_speed_sort(urls: &[String], timeout_secs: u64) -> Vec<String> {
 }
 
 /// 单流下载一个文件（带镜像回退 + SHA1 校验）
-/// 对应原项目 downloadFileWithMirror
 async fn download_with_mirror_inner(
     original_url: &str,
     dest: &Path,
@@ -173,7 +171,7 @@ async fn download_with_mirror_inner(
     // Modrinth CDN（cdn.modrinth.com/cdn-alt）直接提供文件，无需跳转解析，
     // 且其官方源在国内 TTFB 极慢（实测 >10s），跳过解析避免白白等官方源。
     // Adoptium Temurin JDK（github.com/adoptium）：走中科大 USTC 镜像，也跳过 GitHub 跳转解析，
-    // 否则 302 到 release-assets.githubusercontent.com 后镜像转换将失效（对应 electron 的 getTemurinMirrorUrl）。
+    // 否则 302 到 release-assets.githubusercontent.com 后镜像转换将失效。
     let needs_resolve = (!is_small_file
         && !original_url.contains("cdn.modrinth.com")
         && !original_url.contains("github.com/adoptium"))
@@ -213,8 +211,8 @@ async fn download_with_mirror_inner(
     let urls = probe_speed_sort(&urls, timeout_secs).await;
 
     // 大文件优先走多线程分块下载（读取设置中的并发数）。
-    // max_chunks 是"最大分块/线程上限"，默认 32（对齐原项目 maxChunksPerFile=32）。
-    // 实际并发由 chunked.rs 动态调度：初始 4 起步，速度低于下限才逐步增加（对齐原项目 P2-10/P2-11）。
+    // max_chunks 是"最大分块/线程上限"，默认 32。
+    // 实际并发由 chunked.rs 动态调度：初始 4 起步，速度低于下限才逐步增加。
     let max_chunks = crate::storage::load_settings()
         .get("maxChunksPerFile")
         .and_then(|v| v.as_u64())
@@ -295,7 +293,6 @@ async fn download_with_mirror_inner(
 }
 
 /// 单流下载一个文件（带镜像回退 + SHA1 校验），不含取消
-/// 对应原项目 downloadFileWithMirror
 pub async fn download_with_mirror(
     original_url: &str,
     dest: &Path,
@@ -343,7 +340,7 @@ pub async fn download_with_mirror_cancellable(
     .await
 }
 
-/// XMCL 等价的多镜像下载（对应原项目 downloadFileRace → xmclDownload）
+/// 多镜像下载
 ///
 /// 与 download_with_mirror 的区别：直接接收完整镜像列表，一次调用完成下载。
 /// 不再对单个 URL 做 manual 302 解析 + probe 测速 + 全局镜像熔断 + 逐 URL 二次
@@ -411,7 +408,7 @@ pub async fn download_file_race(
     Err(last_err)
 }
 
-/// 带 cache-buster 重试 + JAR 完整性校验的镜像下载（对齐初代 performRepair 的 downloadOne）
+/// 带 cache-buster 重试 + JAR 完整性校验的镜像下载
 /// - 至多重试 3 轮，第 2 轮起在原 URL 追加 `_cb=时间戳_第几轮` 强制 CDN 换路由
 /// - 下载完成后若是 .jar 且结构损坏，删除并重试
 pub async fn download_with_mirror_retry(
@@ -685,7 +682,7 @@ async fn download_once(
     // 单流读取同样加 stall 刹车：服务器卡住/滴漏时及时中断，避免永远卡在"下载中"
     let mut finished = false;
 
-    // 低速检测（对齐 XMCL DownloadSpeed）：镜像源若以极低速度"滴漏"式挤数据，
+    // 低速检测：镜像源若以极低速度"滴漏"式挤数据，
     // 30 秒 stall 超时永远不会触发（一直有数据进来），导致每个文件都慢慢爬、
     // 并发下载整体"越下越慢卡住"、进度条不动。
     // 因此额外检查：持续 LOW_SPEED_WINDOW_SECS 平均速度低于阈值且剩余字节还多时，

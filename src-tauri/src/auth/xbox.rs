@@ -1,5 +1,4 @@
 // auth/xbox.rs — Xbox Live (XBL) 和 XSTS Token 认证
-// 对应原项目 server/api/routes/accounts.js 中的 XBL/XSTS 部分（步骤 4-5）
 //
 // 流程：
 //   [4] XBL 登录：POST user.auth.xboxlive.com/user/authenticate

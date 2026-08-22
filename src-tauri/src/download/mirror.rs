@@ -1,6 +1,5 @@
 // download/mirror.rs — 镜像源管理
 // 职责：根据原始 URL 生成镜像候选列表，按下载源模式排序
-// 对应原项目 server/http-client/mirror.js 的 getMirrorUrls
 
 use std::time::{Duration, Instant};
 use std::sync::{Mutex, LazyLock};
@@ -17,7 +16,6 @@ struct MirrorHealth {
 }
 
 /// 坏源黑名单：本次会话内下载失败过的 host，后续下载直接跳过
-/// 对应原项目 AdaptiveController._badHosts
 static BAD_HOSTS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// 记录一个下载失败的源（按 host 记忆）
@@ -91,7 +89,6 @@ pub fn is_mirror_available() -> bool {
 }
 
 /// 把 Adoptium Temurin 的 GitHub 直链转换为中科大 USTC 镜像 URL
-/// 对应原项目 server/java/java-download.js 的 getTemurinMirrorUrl
 /// 形如：
 ///   https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip
 ///   → https://mirrors.ustc.edu.cn/adoptium/releases/temurin21-binaries/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip
@@ -111,7 +108,6 @@ fn temurin_ustc_mirror(github_url: &str) -> Option<String> {
 }
 
 /// 把官方 URL 替换为 BMCLAPI 镜像 URL
-/// 对应原项目 context.js 的 ctx.mirrors.BMCLAPI_MIRROR 映射表
 pub fn to_mirror_url(original: &str) -> Option<String> {
     // Adoptium Temurin JDK GitHub 直链 → 中科大 USTC 镜像（Java 下载用）
     if original.starts_with("https://github.com/adoptium/temurin") {
@@ -139,7 +135,7 @@ pub fn to_mirror_url(original: &str) -> Option<String> {
     } else if original.starts_with("https://maven.fabricmc.net/") {
         original.replace("https://maven.fabricmc.net/", "https://bmclapi2.bangbang93.com/maven/")
     } else if original.starts_with("https://cdn.modrinth.com/") {
-        // Modrinth CDN → 国内镜像（对齐整合包下载的 mcimirror 镜像）
+        // Modrinth CDN → 国内镜像
         original.replace("https://cdn.modrinth.com/", "https://mod.mcimirror.top/")
     } else if original.starts_with("https://cdn-alt.modrinth.com/") {
         original.replace("https://cdn-alt.modrinth.com/", "https://mod.mcimirror.top/")
@@ -174,7 +170,7 @@ pub fn get_mirror_urls(original: &str, download_source: &str) -> Vec<String> {
         }
     }
 
-    // libraries.minecraft.net 额外补 Forge maven 镜像，作为兜底候选（与原项目一致）
+    // libraries.minecraft.net 额外补 Forge maven 镜像，作为兜底候选
     if original.starts_with("https://libraries.minecraft.net/") {
         let forge_mirror = original.replacen(
             "https://libraries.minecraft.net/",

@@ -1,5 +1,4 @@
 // api/system.rs — 系统信息路由
-// 兼容原项目 server/api/routes/system.js
 // 路由清单：
 //   GET /api/status                启动器运行状态
 //   GET /api/system/memory         系统内存信息
@@ -898,7 +897,7 @@ fn handle_jvm_optimize_args(params: &Option<Value>) -> ApiResult {
         0
     };
 
-    // 基于模组数量估算各档内存阈值（与原项目一致）
+    // 基于模组数量估算各档内存阈值
     let (t0, t1, t2, t3) = if mod_count > 0 {
         (
             0.5 + mod_count as f64 / 150.0,

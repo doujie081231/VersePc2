@@ -1,6 +1,5 @@
 // api/download.rs — 下载/安装相关 API 路由
 // 职责：处理 install-start / install-progress / install-cancel / check-version-name
-// 对应原项目 server/api/routes/download.js + versions.js 的安装部分
 
 use serde_json::{json, Value};
 use tauri::AppHandle;

@@ -1,9 +1,7 @@
 // modpack/mrpack_native.rs — Modrinth (.mrpack) 整合包导入
 //
-// 完整复刻原项目 server/modpack/modrinth.js 的全部功能点。
 // 解析 modrinth.index.json，安装基础版本与模组加载器，下载 mods 与 overrides。
 //
-// 与原项目 1:1 对齐，不做任何简化。
 // 不走 theseus 的 install_zipped_mrpack_files_with_reporter，独立实现完整逻辑。
 
 use std::collections::HashSet;
@@ -118,7 +116,7 @@ enum LoaderKind {
 
 /// 导入 Modrinth (.mrpack) 整合包
 ///
-/// 完整复刻原项目 _importMrpack 的全部功能点：
+/// 全部功能点：
 /// 1. modrinth.index.json 解析（formatVersion/game/versionId/name/summary/files/dependencies）
 /// 2. 版本目录去重 dedupe_version_id
 /// 3. 基础版本安装 ensure_base_version_installed
@@ -747,7 +745,7 @@ async fn run_import_main(
         "mods",
     );
 
-    // Modrinth 官方 CDN 对高并发 IP 限流严重，且实测 32 并发最优（对齐原项目 modrinth.js）：
+    // Modrinth 官方 CDN 对高并发 IP 限流严重，且实测 32 并发最优：
     // 64 并发反而更慢（连接分摊单文件带宽变少，大文件长尾，且易触发 429 限速）。
     // 这里直接固定为 32，不再跟随全局 maxThreads（全局可能高达 64）。
     let parallel = 32;
@@ -1384,7 +1382,6 @@ async fn install_loader(
 // ============== 版本 JSON 创建（mergeVersionJson） ==============
 
 /// 创建版本 JSON（合并加载器 JSON 到原版 JSON 之上）
-/// 对应原项目 modrinth.js mergeVersionJson 逻辑
 fn create_version_json_with_merge(
     version_id: &str,
     version_dir: &Path,
@@ -1623,7 +1620,6 @@ fn create_fallback_version_json(
 }
 
 // ============== mergeVersionJson ==============
-// 对应原项目 modrinth.js 内联 mergeVersionJson 函数
 // 将加载器 JSON 合并到原版 JSON 之上
 
 /// 合并版本 JSON：baseJson（原版）+ loaderJson（加载器）→ merged
@@ -1857,8 +1853,6 @@ fn expand_multi_value_flags(args: &[Value]) -> Vec<Value> {
 }
 
 // ============== deduplicateJvmArgs ==============
-// 对应原项目 versions/version-merge.js deduplicateJvmArgs
-
 /// JVM 参数去重：先展开多值标志（--add-opens 等），再去重 -D/-X/-XX 开头的重复参数
 fn deduplicate_jvm_args(args: &[Value]) -> Vec<Value> {
     if args.is_empty() {
@@ -2188,7 +2182,7 @@ fn extract_file_name(f: &MrpackFile) -> String {
 
 /// 构造镜像 URL 列表（mod.mcimirror.top 镜像优先，官方源兜底）
 /// cdn.modrinth.com / cdn-alt.modrinth.com → mod.mcimirror.top
-/// 对齐原项目 modrinth.js 的 china-first 模式：镜像在前，官方在后。
+/// 镜像在前，官方在后。
 /// 官方 CDN 在国内 TTFB 极慢且对高并发 IP 限流，镜像优先可避免每 mod 都卡在官方源上。
 fn get_mirror_urls(url: &str) -> Vec<String> {
     let mut urls = Vec::new();
@@ -2348,7 +2342,7 @@ async fn download_one_mod(
             tokio::time::sleep(Duration::from_millis(3000 + round as u64 * 2000)).await;
         }
 
-        // 走 XMCL 等价的多镜像下载：一次性传入完整镜像列表（对应原项目 downloadFileRace）
+        // 多镜像下载：一次性传入完整镜像列表
         let sha1_opt = if expected_sha1.is_empty() {
             None
         } else {
@@ -2641,7 +2635,6 @@ async fn verify_file_sha1(path: &Path, expected_sha1: &str) -> bool {
 
 /// 检查 Forge 核心文件是否存在且完整
 /// forge-client.jar / client-srg.jar / client-extra.jar
-/// 对应原项目 modrinth.js 的 Forge 核心文件验证逻辑
 fn check_forge_core_files(merged_json: &Value) -> Result<(), String> {
     let libs = merged_json
         .get("libraries")

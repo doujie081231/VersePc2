@@ -1,6 +1,5 @@
 // network/mod.rs — 网络工具模块入口
 // 职责：UPnP 端口映射、公网 IP 检测、本地 IP 枚举
-// 对应原项目 server/network/ 的 upnp + public-ip 部分
 
 pub mod public_ip;
 pub mod upnp;

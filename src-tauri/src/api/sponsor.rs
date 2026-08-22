@@ -1,5 +1,4 @@
 // api/sponsor.rs — 赞助者路由
-// 兼容原项目 server/api/routes/sponsor.js
 // 路由清单：
 //   POST /api/sponsor/verify  校验赞助订单号是否在真实白名单中
 //   GET  /api/sponsor/info    返回赞助白名单数量（供界面展示）

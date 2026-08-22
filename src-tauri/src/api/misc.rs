@@ -1,6 +1,5 @@
 // api/misc.rs — 杂项 API 路由
 // 职责：当前上下文、快捷方式、截图、服务器 ping、背景图
-// 对应原项目 server/api/routes/misc.js
 //
 // 路由：
 //   GET  /api/current-context      聚合当前选中版本/模组/Java 等信息
@@ -573,7 +572,6 @@ fn is_screenshot_path_allowed(path: &Path) -> bool {
 }
 
 /// Minecraft Server List Ping 协议实现
-/// 对应原项目 network.mcPing
 ///
 /// 协议步骤：
 /// 1. TCP 连接

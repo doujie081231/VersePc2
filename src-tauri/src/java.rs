@@ -5,7 +5,6 @@
 //   3. 读写 custom-java-list.json（手动添加的 Java）
 //   4. 当前 Java 路径存到 settings.json
 //
-// 与原项目差异：
 //   - 简化扫描目录（只扫 Program Files / JAVA_HOME / .minecraft/runtime 等几个常见位置）
 //   - 不依赖 worker_thread（Tauri 用 async 命令，不会阻塞主进程）
 //   - 不修改系统环境变量（避免权限问题，只存到 settings.json）
@@ -330,7 +329,7 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
     }
 
     // 9. Windows 注册表 JavaSoft（用户用安装器装的 Java 会写入注册表，但可能不在 PATH/常见目录）
-    //    对应原项目 detectSystemJava 的注册表查询，避免"装了 Java 却检测不到"
+    //    避免"装了 Java 却检测不到"
     #[cfg(target_os = "windows")]
     {
         for java_exe in scan_registry_java_paths() {
@@ -411,7 +410,7 @@ fn scan_java_subdirs(
         return;
     }
     // 关键点：如果 dir 本身就是 Java Home（C:\Java\bin\java.exe 存在），直接匹配，
-    // 这样用户把 JDK 解压成单层 C:\Java 的情况也能识别（对齐初代启动器）
+    // 这样用户把 JDK 解压成单层 C:\Java 的情况也能识别
     let self_java = dir_path.join("bin").join("java.exe");
     if self_java.exists() {
         add(paths, found, self_java);
@@ -1048,7 +1047,6 @@ fn read_java_status(session_id: &str) -> Option<Value> {
 }
 
 // ============== Java 导入（压缩包/文件夹） ==============
-// 对应原项目 server/java/java-custom.js 的 importJavaArchive / importJavaDirectory
 // 以及 server/api/routes/java.js 的 /api/java/import 路由。
 // 导入成功后将解压/复制后的 Java 写入 custom-java-list.json（source='imported'）。
 
@@ -1640,7 +1638,6 @@ async fn install_java_async(session_id: String, major_version: u64) {
 // ============== Tauri 命令 ==============
 
 /// Tauri 命令：java_detect
-/// 兼容原项目 GET /api/java/detect
 #[tauri::command]
 pub async fn java_detect() -> Value {
     let java_list = tokio::task::spawn_blocking(|| detect_all()).await.unwrap_or_default();
@@ -1727,7 +1724,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         "POST /api/java/add-manual" => {
             let data = body.clone().unwrap_or(Value::Null);
-            // 前端 api.js 传入字段为 javaPath（与原项目 /api/java/add-manual 契约一致）
+            // 前端 api.js 传入字段为 javaPath
             let path_str = utils::get_str(&data, "javaPath");
             if path_str.is_empty() {
                 return Some(ApiResult::err(400, "Missing javaPath"));
@@ -1782,7 +1779,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         "POST /api/java/remove-custom" => {
             let data = body.clone().unwrap_or(Value::Null);
-            // 前端 api.js 传入字段为 javaHome（与原项目 /api/java/remove-custom 契约一致）
+            // 前端 api.js 传入字段为 javaHome
             let java_home_str = utils::get_str(&data, "javaHome");
             let delete_files = data.get("deleteFiles").and_then(|v| v.as_bool()).unwrap_or(false);
             if java_home_str.is_empty() {
@@ -1877,7 +1874,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
         }
 
         "POST /api/java/import" => {
-            // 导入 Java（压缩包或文件夹），与原项目 /api/java/import 契约一致：
+            // 导入 Java（压缩包或文件夹）：
             // body: { type: 'archive'|'directory', path: '...' }
             let data = body.clone().unwrap_or(Value::Null);
             let import_type = utils::get_str(&data, "type");
@@ -1922,7 +1919,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
             })))
         }
 
-        // 自动安装：先检测本地已有 Java，满足要求直接返回；否则启动下载（对应原项目 autoInstallJava）
+        // 自动安装：先检测本地已有 Java，满足要求直接返回；否则启动下载
         "POST /api/java/auto-install" => {
             let data = body.clone().unwrap_or(Value::Null);
             let required_version = data
@@ -1994,7 +1991,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
 
         "POST /api/java/configure-env" => {
             // 简化实现：不修改系统环境变量，仅记录到 settings.json
-            // 避免系统权限问题，与原项目行为一致
+            // 避免系统权限问题
             let data = body.clone().unwrap_or(Value::Null);
             let java_path = crate::utils::get_str(&data, "javaPath").to_string();
             if !java_path.is_empty() {
@@ -2055,7 +2052,6 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
         }
 
         // ===== 取消 Java 下载任务（GET/POST 共用） =====
-        // 原项目路由：* /api/java/cancel
         // 实现：设置全局取消标志，让正在下载的 install 任务感知并中止
         // 当前 install/download 路由还是占位，cancel 先返回成功并清理会话
         "GET /api/java/cancel" | "POST /api/java/cancel" => {

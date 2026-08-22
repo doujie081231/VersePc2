@@ -1,12 +1,11 @@
 // api/msauth.rs — 微软账号认证 API 路由
-// 对应原项目 server/api/routes/accounts.js 中的微软账号路由部分
 //
 // 路由清单：
 //   POST /api/msauth/device-code  启动登录流程，获取设备码
 //   POST /api/msauth/poll         轮询登录状态，完成全链路并写入账号
 //   POST /api/msauth/refresh      刷新 Token
 //
-// 注意：原项目没有 cancel 端点，前端只需停止轮询即可
+// 注意：没有 cancel 端点，前端只需停止轮询即可
 
 use serde_json::{json, Value};
 

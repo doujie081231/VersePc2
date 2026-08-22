@@ -1,5 +1,4 @@
 // crash_analyzer/file_collector.rs — 日志文件收集与导入
-// 对应原项目 server/crash-analyzer/file-collector.js
 // 职责：从 .minecraft 目录按时间窗口收集 crash-reports/版本目录/latest.log/hs_err_pid
 
 use std::path::Path;
@@ -22,7 +21,6 @@ pub struct CollectParams<'a> {
 }
 
 /// 步骤 1：收集可能存在的日志文件
-/// 对应原项目 file-collector.js collect
 ///
 /// 流程：
 /// 1. crash-reports 目录下的 crash-*.txt
@@ -143,8 +141,7 @@ pub fn collect(params: CollectParams) -> Vec<RawLogFile> {
 }
 
 /// 导入单个日志文件（手动分析场景）
-/// 对应原项目 file-collector.js importFile
-/// 注意：原项目支持 .jar/.zip 解压，这里暂不支持（用户手动分析场景较少）
+/// 注意：暂不支持 .jar/.zip 解压（用户手动分析场景较少）
 pub fn import_file(file_path: &Path) -> Option<RawLogFile> {
     if !file_path.exists() {
         return None;

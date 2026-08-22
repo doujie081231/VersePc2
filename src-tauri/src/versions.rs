@@ -1,5 +1,4 @@
 // versions.rs — Minecraft 版本管理
-// 兼容原项目 server/api/routes/versions.js 核心功能
 // 路由清单：
 //   GET  /api/versions                       版本列表（远程 + 本地）
 //   GET  /api/version/list-folders           外部文件夹列表
@@ -67,7 +66,7 @@ const MOJANG_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/versio
 const BMCLAPI_MANIFEST_URL: &str = "https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
 
 // ============== 内置方块图标（编译时嵌入二进制） ==============
-// 原项目从 dist/img/ 读取，这里用 include_bytes! 嵌入，运行时永远可用
+// 这里用 include_bytes! 嵌入，运行时永远可用
 const ICON_GRASS: &[u8] = include_bytes!("../../frontend/img/Grass.png");
 const ICON_COMMAND_BLOCK: &[u8] = include_bytes!("../../frontend/img/CommandBlock.png");
 const ICON_GOLD_BLOCK: &[u8] = include_bytes!("../../frontend/img/GoldBlock.png");
@@ -429,7 +428,6 @@ fn clean_external_marker(version_id: &str) -> String {
 }
 
 /// 判断版本是否属于某个外部文件夹
-/// 对应原项目 server/versions/version-dir.js:resolveExternalVersionDir。
 /// 不依赖 " [外部N]" 后缀：只要该版本 ID 在 external-folders.json 的任一
 /// 外部文件夹下存在版本目录，就判定为外部版本。
 fn resolve_external_version_dir(version_id: &str) -> Option<String> {
@@ -464,7 +462,6 @@ fn is_external_version(version_id: &str) -> bool {
 }
 
 /// 过滤版本列表可见性
-/// 对应原项目 server/versions/version-filter.js:filterVersionsByVisibility
 ///
 /// 规则：
 /// - 被整合包继承且自身 mods 为空的加载器版本（Forge/Fabric/NeoForge/OptiFine/LiteLoader）隐藏
@@ -582,7 +579,28 @@ fn inherit_loader_from_parent(versions: &mut Vec<Value>) {
             continue;
         }
         let parent = snapshot.iter().find(|c| utils::get_str(c, "id") == inherits);
-        let Some(parent) = parent else { continue };
+        let Some(parent) = parent else {
+            // 父版本目录缺失（如独立加载器版本被清理后）时，无法从父版本对象继承加载器类型，
+            // 改为按 inheritsFrom 的 ID 文本来推断加载器类型，避免兼容子（整合包）被误判为原版/铁砧图标。
+            let inherits_lower = inherits.to_lowercase();
+            if let Value::Object(m) = v {
+                if inherits_lower.contains("fabric") {
+                    m.insert("isFabric".to_string(), Value::Bool(true));
+                }
+                if inherits_lower.contains("neoforge") {
+                    m.insert("isNeoForge".to_string(), Value::Bool(true));
+                } else if inherits_lower.contains("forge") {
+                    m.insert("isForge".to_string(), Value::Bool(true));
+                }
+                if inherits_lower.contains("optifine") {
+                    m.insert("isOptiFine".to_string(), Value::Bool(true));
+                }
+                if inherits_lower.contains("liteloader") {
+                    m.insert("isLiteLoader".to_string(), Value::Bool(true));
+                }
+            }
+            continue;
+        };
         let p_forge = parent.get("isForge").and_then(|x| x.as_bool()).unwrap_or(false);
         let p_fabric = parent.get("isFabric").and_then(|x| x.as_bool()).unwrap_or(false);
         let p_neoforge = parent.get("isNeoForge").and_then(|x| x.as_bool()).unwrap_or(false);
@@ -810,7 +828,7 @@ fn detect_loader(parsed: &Value, id: &str, inherits_from: &str, version_dir: Opt
             is_modpack = true;
         }
     }
-    // 目录标记文件缺失时，按版本 ID + 继承关系判断（对齐原项目 version-parse.js）：
+    // 目录标记文件缺失时，按版本 ID + 继承关系判断：
     // 版本 ID 不是"纯 MC 版本号"、也不是"加载器 ID"，则视为整合包。
     // 这样即使整合包顶层没有 pack-info.json/pack.png（如仅含 icon.png），也能正确识别。
     if !is_modpack {
@@ -1152,7 +1170,6 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
             inherit_loader_from_parent(&mut all_local);
 
             // 过滤被整合包继承且自身 mods 为空的加载器版本（如 Forge 底座版本），
-            // 与原项目 version-list.js 的可见性过滤保持一致
             all_local = filter_loader_visibility(all_local);
 
             // 收集本地 ID（用于标记远程版本）
@@ -1939,7 +1956,6 @@ fn open_in_explorer(path: &Path) -> bool {
 }
 
 /// 送回回收站（Windows 用 PowerShell VisualBasic）
-/// 对齐原项目 server/api/routes/versions.js 的回收站实现：
 /// `[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(..., 'OnlyErrorDialogs', 'SendToRecycleBin')`
 /// 相比 Shell.Application 的 InvokeVerb('delete')（异步、不可靠、被占用时静默失败），
 /// 该方式同步执行、明确指定 SendToRecycleBin，能正确返回失败状态供上层回退。
@@ -2216,7 +2232,7 @@ async fn run_repair_session(session_id: &str, version_id: &str, abort: Arc<Atomi
         return;
     }
 
-    // 并发下载缺失文件（对齐初代 downloadOne 并发数 8 + cache-buster/完整性重试）
+    // 并发下载缺失文件
     const PARALLEL: usize = 8;
     let repaired = std::sync::Arc::new(std::sync::Mutex::new(0u32));
     // 为并发流克隆引用，保留原变量供完成阶段使用

@@ -1,6 +1,5 @@
 // mods/mod.rs — 模组管理模块入口
 // 职责：JAR 文件解析、图标提取与缓存、已安装模组列表扫描、更新检查
-// 对应原项目 server/mods.js
 //
 // JAR 解析流程：
 //   1. 用 zip crate 打开 JAR 文件

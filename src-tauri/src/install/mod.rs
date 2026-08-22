@@ -1,6 +1,5 @@
 // install/mod.rs — 安装编排模块入口
 // 职责：协调版本安装流程，调用 download 模块下载文件，管理安装会话
-// 对应原项目 server/modloaders/index.js 的 performInstallation
 
 pub mod session;
 
@@ -14,7 +13,7 @@ use crate::modloaders;
 use crate::storage;
 use crate::utils;
 
-/// 安装阶段权重（对应原项目 STAGE_WEIGHTS）
+/// 安装阶段权重
 const STAGE_WEIGHTS: &[(session::InstallStage, u32)] = &[
     (session::InstallStage::VersionJson, 1),
     (session::InstallStage::ClientJar, 5),
@@ -45,7 +44,6 @@ fn calc_progress(current_stage: &session::InstallStage, stage_pct: u32) -> u32 {
 }
 
 /// 安装入口
-/// 对应原项目 POST /api/install-start
 pub async fn perform_installation(
     app: AppHandle,
     session_id: String,
@@ -342,7 +340,7 @@ pub async fn perform_installation(
     update!(session::InstallStage::Assets, 100, "资源文件已下载");
     check_cancel!();
 
-    // 阶段 5：安装模组加载器（对应原项目 performInstallation 的 loaderInfo 处理）
+    // 阶段 5：安装模组加载器
     // 用户在前端下载页面选择了加载器（Forge/NeoForge/Fabric/OptiFine）时触发
     if let Some(loader) = &loader_info {
         let loader_type = loader.get("type").and_then(|v| v.as_str()).unwrap_or("");

@@ -1,5 +1,4 @@
 // filesystem.rs — 文件系统路由
-// 兼容原项目 server/api/routes/filesystem.js
 // 路由清单：
 //   GET  /api/fs/browse               浏览文件系统（带白名单校验）
 //   POST /api/open-folder             打开预定义文件夹
@@ -17,7 +16,7 @@ use std::path::PathBuf;
 use crate::storage;
 use crate::utils;
 
-/// 路径白名单校验（与原项目 /api/fs/browse 一致）
+/// 路径白名单校验
 /// 只允许访问：DATA_DIR、用户主目录、桌面、文档、下载、.minecraft
 fn is_path_allowed(path: &std::path::Path) -> bool {
     let path = match path.canonicalize() {
@@ -361,7 +360,7 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
                 { "name": ".minecraft", "path": home_dir_str, "icon": "minecraft" },
                 { "name": "VersePC 数据", "path": data_dir_str, "icon": "versepc" }
             ]);
-            // 注意：原项目直接返回数组，不是对象包裹
+            // 注意：直接返回数组，不是对象包裹
             Some(ApiResult::ok(quick_access))
         }
 

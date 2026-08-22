@@ -1011,9 +1011,10 @@ function showVersionNameModal(defaultName, versionUrl, versionId, loaderInfo, do
     }
     try {
       const result = await API.checkVersionName(name);
-      nameExists = result.exists;
+      nameExists = !result.available;
       if (nameExists) {
         warn.style.display = 'block';
+        warn.textContent = '⚠ ' + (result.reason || '版本名称不可用');
         hint.textContent = '';
         confirmBtn.disabled = true;
         confirmBtn.style.opacity = '0.5';

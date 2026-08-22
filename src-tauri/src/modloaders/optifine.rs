@@ -2,16 +2,12 @@
 // 职责：
 //   1. 从 optifine.net 解析 HTML 拉取指定 MC 版本的 OptiFine 版本列表
 //   2. 下载 OptiFine installer JAR 并创建独立版本目录
-// 对应原项目：
-//   - server/api/routes/modloaders.js 中 GET /api/optifine/versions 的内联实现
-//   - server/api/routes/modloaders.js 中 POST /api/optifine/install 的内联实现
-//   - server/modloaders/optifine.js 的 mergeOptiFineToVersion（已合并到本文件）
 //
 // 路由：
 //   GET  /api/optifine/versions?game=1.20.1
 //   POST /api/optifine/install            body: { gameVersion, optifineType, targetVersionId? }
 //
-// 安装策略（与原项目一致）：
+// 安装策略：
 //   - 主路径：从 installer JAR 中读取 version.json，合并 OptiFine 库后写入版本目录
 //   - 降级路径：installer 内无 version.json，手动构建 fallback JSON（launchwrapper + tweakClass）
 
@@ -107,7 +103,6 @@ async fn optifine_versions_from_official(game_version: &str) -> Option<Vec<Value
 }
 
 /// 获取指定 MC 版本的 OptiFine 版本列表
-/// 对应原项目 GET /api/optifine/versions
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"
@@ -130,7 +125,6 @@ pub async fn get_optifine_versions(game_version: &str) -> Vec<Value> {
 }
 
 // ============== OptiFine 安装 ==============
-// 对应原项目 server/api/routes/modloaders.js 中 POST /api/optifine/install
 //
 // 实现策略：
 //   1. 下载 OptiFine installer JAR（同时它也是 OptiFine 主库本体）
@@ -164,7 +158,6 @@ async fn resolve_optifine_download_url(filename: &str) -> Result<String, String>
 }
 
 /// 安装 OptiFine 模组加载器
-/// 对应原项目 POST /api/optifine/install
 ///
 /// # 参数
 /// - `game_version`: Minecraft 版本号，如 "1.20.1"

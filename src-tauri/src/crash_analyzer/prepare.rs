@@ -1,5 +1,4 @@
 // crash_analyzer/prepare.rs — 日志预处理与分类
-// 对应原项目 server/crash-analyzer/prepare.js
 // 职责：按文件名分类（HsErr/CrashReport/MinecraftLog/ExtraLog），截取头尾行用于分析
 
 use std::collections::HashMap;
@@ -27,7 +26,6 @@ pub struct PreparedLogs {
 }
 
 /// 步骤 2：预处理日志文件
-/// 对应原项目 prepare.js prepare
 ///
 /// 流程：
 /// 1. 按文件名分类
@@ -186,7 +184,6 @@ fn is_minecraft_log(file_name: &str) -> bool {
 }
 
 /// 提取日志头部 head_lines 行 + 尾部 tail_lines 行（去重）
-/// 对应原项目 prepare.js getHeadTailLines
 pub fn get_head_tail_lines(lines: &[String], head_lines: usize, tail_lines: usize) -> String {
     if lines.len() <= head_lines + tail_lines {
         // 全量去重

@@ -1,5 +1,4 @@
 // auth/token.rs — Token 加密与解密
-// 对应原项目 server/accounts.js encryptToken / decryptToken / getTokenEncKey
 //
 // 加密格式（与旧版完全兼容）：
 //   外层： "enc:" + iv_hex + ":" + ciphertext_hex
@@ -17,7 +16,7 @@ type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 /// 派生加密密钥
-/// 与原项目 getTokenEncKey 完全一致：SHA256(hostname + username + DATA_DIR)
+/// SHA256(hostname + username + DATA_DIR)
 fn get_token_enc_key() -> [u8; 32] {
     let hostname = hostname::get()
         .ok()
@@ -41,7 +40,6 @@ fn get_token_enc_key() -> [u8; 32] {
 
 /// 加密 Token
 /// 返回格式：iv_hex + ":" + ciphertext_hex（不含 "enc:" 前缀）
-/// 对应原项目 accounts.js encryptToken
 pub fn encrypt_token(plaintext: &str) -> Option<String> {
     let key = get_token_enc_key();
 
@@ -76,7 +74,6 @@ pub fn encrypt_token(plaintext: &str) -> Option<String> {
 
 /// 解密 Token
 /// 输入：iv_hex + ":" + ciphertext_hex（不含 "enc:" 前缀）
-/// 对应原项目 accounts.js decryptToken
 pub fn decrypt_token(data: &str) -> Option<String> {
     let parts: Vec<&str> = data.split(':').collect();
     if parts.len() != 2 {

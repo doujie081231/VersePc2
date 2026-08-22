@@ -36,7 +36,7 @@ use tauri::{Emitter, Manager, PhysicalPosition, Position};
 
 // ============== Windows 内存压缩：EmptyWorkingSet ==============
 // 调用 Windows psapi.dll 的 EmptyWorkingSet，将进程不活跃的内存页交换出物理内存
-// 这就是 electron 项目"最小化后内存数字大幅下降"的核心手段
+// 这就是"最小化后内存数字大幅下降"的核心手段
 #[cfg(target_os = "windows")]
 fn trim_working_set() {
     use std::ffi::c_void;
@@ -168,7 +168,7 @@ fn trim_working_set_tree() {
     trim_working_set();
 }
 
-/// 执行一次完整的内存优化（对齐 electron 项目的 _doFullMemoryOptimize）
+/// 执行一次完整的内存优化
 /// 1. 提示前端做垃圾回收 + 壁纸挂起
 /// 2. 压缩整个进程树的工作集（含 WebView2 子进程，任务管理器里可见的内存明显下降）
 fn do_full_memory_optimize(app_handle: &tauri::AppHandle) {
@@ -311,8 +311,6 @@ fn get_app_version() -> String {
 }
 
 // ============== 设置存储命令（store.json KV 存储） ==============
-// 兼容原项目 window.electronAPI.store.get(key) / set(key, value)
-
 #[tauri::command]
 fn store_get(state: tauri::State<storage::Store>, key: String) -> Option<Value> {
     state.get(&key)
@@ -717,7 +715,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             println!("[boot] setup start {}", chrono::Local::now().format("%H:%M:%S%.3f"));
-            // 初始化存储：使用便携版数据目录（与原项目一致，数据跟 exe 走）
+            // 初始化存储：使用便携版数据目录（数据跟 exe 走）
             // 目录创建失败不阻塞启动：resolve_data_dir 已尽量保证可写（不可写会回退用户目录），
             // 若仍失败则继续启动，避免"数据目录异常导致软件打不开"。
             let data_dir = storage::resolve_data_dir();
@@ -765,7 +763,7 @@ pub fn run() {
                 });
             }
 
-            // 最小化/恢复内存优化（对齐 electron 项目行为）
+            // 最小化/恢复内存优化
             // - 最小化：延迟 1.5s 后第一次优化，之后每 30s 循环执行
             // - 恢复：立即停止循环，通知前端恢复壁纸
             // - 空闲 3 分钟无操作：自动执行一次优化

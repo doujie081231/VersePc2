@@ -1,6 +1,5 @@
 // launch/game_session.rs — 游戏会话与实例管理
 // 职责：管理游戏运行实例、日志缓冲、状态上报
-// 对应原项目 server/context.js 的 ctx.sessions.gameInstances + gameLogBuffer
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -145,7 +144,6 @@ pub fn get_logs(session_id: &str, count: usize, offset: usize) -> Vec<String> {
 
 // ============================================================================
 // 全局缓存：退出分析 + 持久化游戏日志
-// 对应原项目 server/context.js 的 ctx.sessions.lastGameExitAnalysis + gameLogBuffer
 // ----------------------------------------------------------------------------
 // 问题背景：
 //   - 游戏实例在进程退出后会被 remove_instance 移除，绑在实例上的 log_buffer 随之丢失，

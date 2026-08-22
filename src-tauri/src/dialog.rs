@@ -1,6 +1,5 @@
 // dialog.rs — 文件对话框命令
 // 使用 tauri-plugin-dialog 官方插件实现原生文件选择
-// 兼容原项目 dialog-open / dialog:select-folder / dialog:select-file
 
 use serde_json::{json, Value};
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -178,7 +177,7 @@ pub async fn select_folder(app: tauri::AppHandle, title: Option<String>, default
 }
 
 /// api_proxy 内部用的 select-folder 路由处理函数
-/// 返回结构兼容原项目：{ success: true, path } 或 { success: false, cancelled: true }
+/// 返回结构：{ success: true, path } 或 { success: false, cancelled: true }
 pub async fn select_folder_api(
     app: &tauri::AppHandle,
     title: Option<String>,

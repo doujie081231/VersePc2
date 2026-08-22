@@ -1,6 +1,6 @@
 // favicon.rs — 网站图标获取
 // 供工具箱页面使用，前端通过 invoke('get_favicon', { domain }) 调用
-// 优先使用 Yandex（国内可访问），与原始 Electron 版本一致
+// 优先使用 Yandex（国内可访问）
 
 use serde_json::json;
 use std::time::Duration;
@@ -32,7 +32,7 @@ async fn try_fetch_favicon(client: &reqwest::Client, url: &str) -> Option<String
 /// Tauri 命令：get_favicon
 /// 前端通过 invoke('get_favicon', { domain }) 调用
 /// 返回 { data_url } — base64 data URL 或空字符串
-/// 服务优先级（与原 Electron 项目一致）：
+/// 服务优先级：
 ///   1. Yandex（国内可访问）
 ///   2. DuckDuckGo
 ///   3. Google

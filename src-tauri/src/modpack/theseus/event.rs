@@ -153,7 +153,7 @@ pub async fn emit_install_job(snapshot: &serde_json::Value) -> Result<()> {
 
 /// 并发执行流，每个元素调用 f，带并发限制和进度回调
 ///
-/// 参考 theseus 的 loading_try_for_each_concurrent
+/// 带加载进度封装的并发流遍历
 /// 参数：
 ///   - stream: 产出 Result<T, Error> 的流
 ///   - limit: 并发限制（None 表示使用默认值）

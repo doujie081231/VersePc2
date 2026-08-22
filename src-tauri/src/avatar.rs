@@ -1,7 +1,5 @@
 // avatar.rs — 账号头像处理 + 皮肤纹理
-// 兼容原项目 /api/avatar 路由
-//
-// 实现策略（与原项目 server/skins.js fetchAvatarData 一致）：
+// 实现策略：
 //   1. 离线账号：直接读取项目内置 img/steve_head.png，返回 base64 data URL
 //   2. 账号 skinUrl 字段（微软/外置账号登录时从 Mojang 拿到的 texture URL）：
 //      HTTP 拉取整张皮肤 PNG，标记 is_full_skin=true（前端会用 canvas 裁剪头像）
@@ -18,7 +16,7 @@ use std::time::Duration;
 use crate::storage;
 use crate::utils;
 
-/// 公共 Avatar 服务列表（与原项目 server/context.js 第 264-269 行一致）
+/// 公共 Avatar 服务列表
 /// 这些服务返回 64x64 头像（不是整张皮肤）
 const AVATAR_SERVICES: &[&str] = &[
     "https://minotar.net/helm/{uuid}.png",
@@ -298,7 +296,7 @@ pub async fn get_avatar(
 
     // 2. 读取账号的 skinUrl 字段（微软/外置账号登录后从 Mojang 拿到的纹理 URL）
     //   这是登录时从 https://api.minecraftservices.com/minecraft/profile 拿到的
-    //   textures.SKIN.url 字段，原项目保存在 acc.skinUrl
+    //   textures.SKIN.url 字段
     //   skinUrl 指向的是整张皮肤 PNG，所以 is_full_skin=true（前端会裁剪头像）
     let mut stored_skin_url = String::new();
     let accounts = crate::storage::load_accounts();

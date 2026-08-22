@@ -1,6 +1,5 @@
 // api/modloaders.rs — 模组加载器路由分发
 // 职责：处理 /api/fabric/* /api/forge/* /api/neoforge/* /api/optifine/* /api/fabric-api/* 路由
-// 对应原项目 server/api/routes/modloaders.js
 //
 // 路由清单：
 //   GET  /api/fabric/versions           获取 Fabric Loader 版本列表

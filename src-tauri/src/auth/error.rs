@@ -1,5 +1,4 @@
 // auth/error.rs — 认证错误类型与 XErr 错误码映射
-// 对应原项目 server/api/routes/accounts.js 中的错误处理
 
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 
@@ -81,7 +80,6 @@ impl Serialize for AuthError {
 }
 
 /// XErr 错误码 → 中文提示
-/// 对应原项目 server/api/routes/accounts.js 中的 XErr 处理
 pub fn xerr_message(xerr: u64) -> &'static str {
     match xerr {
         2148916233 => "该微软账号没有关联 Xbox 账号，请先在 Xbox 官网关联",

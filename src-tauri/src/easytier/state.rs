@@ -1,12 +1,11 @@
 // easytier/state.rs — 陶瓦联机（Terracotta）状态管理
 // 职责：维护运行状态、模式、房间码、虚拟 IP、游戏端口、原始 /state 状态等
-// 对应原项目 ctx.network.terracottaStatus
 
 use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
-/// 最大连续崩溃自动恢复次数（对齐 electron：超过这个阈值就停止自动拉起，避免死循环）
+/// 最大连续崩溃自动恢复次数（超过这个阈值就停止自动拉起，避免死循环）
 pub const MAX_CRASH_RECOVERY: u32 = 5;
 
 /// 陶瓦联机运行模式
@@ -47,7 +46,7 @@ pub struct EasyTierStatus {
     pub state: Option<Value>,
     /// 原始 /state 的 index 字段
     pub state_index: i64,
-    /// 崩溃恢复需要的"上次成功配置"（对齐 electron _terracottaSaved*）
+    /// 崩溃恢复需要的"上次成功配置"
     pub saved_mode: Option<EasyTierMode>,
     pub saved_room_code: String,
     pub saved_game_port: u16,
@@ -158,7 +157,7 @@ pub fn reset_to_idle() {
     init_status();
     let mut g = STATUS.lock().unwrap();
     if let Some(s) = g.as_mut() {
-        // 崩溃恢复所需字段（对齐 electron：saved_mode / saved_room / saved_port / saved_player / crash_count）
+        // 崩溃恢复所需字段（saved_mode / saved_room / saved_port / saved_player / crash_count）
         let saved_mode = s.saved_mode.clone();
         let saved_room = std::mem::take(&mut s.saved_room_code);
         let saved_port = s.saved_game_port;

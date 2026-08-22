@@ -1,6 +1,5 @@
 // network/upnp.rs — UPnP IGD 端口映射
 // 职责：SSDP 网关发现 + SOAP 端口映射增删
-// 对应原项目 server/network/upnp.js
 //
 // 协议流程：
 //   1. SSDP M-SEARCH：UDP 多播 239.255.255.250:1900，发现 IGD 设备

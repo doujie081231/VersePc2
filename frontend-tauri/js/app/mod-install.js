@@ -259,14 +259,34 @@ function showModpackNameModal(defaultName, projectId, versionId) {
     const name = input.value.trim();
     if (!name) {
       hint.textContent = '';
+      warn.style.display = 'none';
       confirmBtn.disabled = true;
       confirmBtn.style.opacity = '0.5';
       return;
     }
-    hint.textContent = '✓';
-    confirmBtn.disabled = false;
-    confirmBtn.style.opacity = '1';
-    confirmBtn.style.cursor = 'pointer';
+    try {
+      const result = await API.checkVersionName(name);
+      if (!result.available) {
+        warn.style.display = 'block';
+        warn.textContent = '⚠ ' + (result.reason || '版本名称不可用');
+        hint.textContent = '';
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
+      } else {
+        warn.style.display = 'none';
+        hint.textContent = '✓ 名称可用';
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.style.cursor = 'pointer';
+      }
+    } catch (e) {
+      warn.style.display = 'none';
+      hint.textContent = '';
+      confirmBtn.disabled = false;
+      confirmBtn.style.opacity = '1';
+      confirmBtn.style.cursor = 'pointer';
+    }
   }
 
   input.addEventListener('input', checkName);

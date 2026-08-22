@@ -1,6 +1,5 @@
 // install/session.rs — 安装会话管理
 // 职责：管理安装会话状态、进度上报、取消机制
-// 对应原项目 versions.js 的 ctx.sessions.installSessions + SSE 推送
 
 use std::collections::HashMap;
 use std::sync::Arc;

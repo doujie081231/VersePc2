@@ -1,5 +1,4 @@
 // api/crash.rs — 崩溃分析相关 API 路由
-// 对应原项目 server/api/routes/crash.js
 //
 // 路由清单：
 //   POST /api/crash/analyze       手动导入日志文件分析
@@ -16,7 +15,6 @@ use crate::launch;
 use crate::storage;
 
 /// 构建崩溃日志搜索目录集合（按版本解析真实游戏目录）
-/// 复刻 handle_list_logs / handle_log_content / handle_export 原有目录逻辑，
 /// 并补充版本实际游戏目录，覆盖隔离版本 `data/versions/<id>/crash-reports`。
 fn version_crash_search_dirs(version_id: &str) -> Vec<PathBuf> {
     let data_dir = storage::resolve_data_dir();

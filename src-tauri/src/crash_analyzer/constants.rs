@@ -1,6 +1,5 @@
 // crash_analyzer/constants.rs — 崩溃原因枚举与默认路径常量
-// 对应原项目 server/crash-analyzer/constants.js
-// 注意：原 JS 用字符串作为 key，Rust 改为 enum，通过 as_str() 提供中文描述
+// 注意：用字符串作为 key，Rust 改为 enum，通过 as_str() 提供中文描述
 
 use std::path::PathBuf;
 
@@ -12,7 +11,7 @@ pub fn default_minecraft_dir() -> PathBuf {
 }
 
 /// 崩溃原因枚举
-/// 原项目用字符串值（中文描述）作为 Map key，Rust 用 enum + as_str() 实现
+/// 用字符串值（中文描述）作为 Map key，Rust 用 enum + as_str() 实现
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CrashReason {
     JavaVersionTooHigh,
@@ -75,7 +74,7 @@ pub enum CrashReason {
 }
 
 impl CrashReason {
-    /// 返回面向用户的中文描述（与原项目 CrashReason 的 value 完全一致）
+    /// 返回面向用户的中文描述
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::JavaVersionTooHigh => "Java版本过高",

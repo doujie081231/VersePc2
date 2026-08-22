@@ -1,6 +1,5 @@
 // api/game.rs — 游戏运行相关 API 路由
 // 职责：处理 /api/game/* 路由
-// 对应原项目 server/api/routes/game.js
 //
 // 路由清单：
 //   GET  /api/game/status         返回正在运行的游戏实例列表
@@ -157,7 +156,6 @@ fn handle_game_log(params: &Option<Value>) -> ApiResult {
 
 /// GET /api/game/exit-analysis — 返回上次游戏退出分析结果
 /// 数据由 process_manager 在游戏进程退出时写入全局缓存（game_session::set_exit_analysis），
-/// 对应原项目 server/context.js 的 ctx.sessions.lastGameExitAnalysis。
 fn handle_exit_analysis() -> ApiResult {
     let analysis = game_session::get_exit_analysis();
     ApiResult::ok(json!({
@@ -860,7 +858,7 @@ fn handle_log_export(params: &Option<Value>) -> ApiResult {
     let timestamp = utils::now_iso().replace([':', '.'], "-");
     let file_name = format!("VersePC_Log_{}.txt", &timestamp[..timestamp.len().min(19)]);
 
-    // 写入临时文件（与原项目一致），随后返回内容
+    // 写入临时文件，随后返回内容
     let temp_dir = data_dir.join("temp");
     let _ = std::fs::create_dir_all(&temp_dir);
     let export_path = temp_dir.join(&file_name);

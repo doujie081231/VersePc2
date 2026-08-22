@@ -1,9 +1,7 @@
 // modpack/curseforge.rs — CurseForge 整合包导入
 //
-// 完整复刻原项目 server/modpack/curseforge.js 的全部 25 个功能点。
 // 解析 manifest.json，安装基础版本与模组加载器，批量下载 mods 与 overrides。
 //
-// 与原项目 1:1 对齐，不做任何简化。
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -143,7 +141,7 @@ fn import_log(msg: &str) {
 
 /// 导入 CurseForge 整合包
 ///
-/// 完整复刻原项目 _importCurseForge 的 25 个功能点：
+/// 25 个功能点：
 /// 1. manifest.json 解析（mcVersion 校验 + modLoaders 解析 + 元数据保留）
 /// 2. 版本目录去重 _dedupeVersionId
 /// 3. 基础版本安装 ensureBaseVersionInstalled
@@ -376,7 +374,7 @@ pub async fn import_curseforge(
                 "backup_{}",
                 cf_shared::now_timestamp()
             ));
-            // 注意：原项目是 versionDir + '.backup_<timestamp>'，
+            // 注意：原实现是 versionDir + '.backup_<timestamp>'，
             // 但 with_extension 会把 version_id 的最后一段当作扩展名替换
             // 这里需要用完全不同的方式：在 version_dir 同级创建 .backup_<ts> 目录
             let bk_dir = version_dir
@@ -1545,7 +1543,6 @@ fn get_mirror_urls(url: &str) -> Vec<String> {
 // ============== percent-decode 文件名 ==============
 
 /// 从 URL 提取 basename 并 percent-decode
-/// 对应原项目 decodeURIComponent(path.basename(downloadUrl))
 fn percent_decode_basename(url: &str) -> Option<String> {
     let path = url.split('?').next().unwrap_or(url);
     let basename = path.rsplit('/').next()?;
@@ -1760,7 +1757,6 @@ async fn download_one_mod(
     }
 
     // 3. URL 校验 + 兜底获取
-    // 对齐原项目 curseforge.js 第 407-428 行：
     //   只要拿到了 fileName，即便 downloadUrl 为空，也要按 fileID 分段构造 edge.forgecdn.net CDN URL。
     //   CurseForge 部分文件 API 返回 downloadUrl 为 null，但 CDN 实际可访问。
     let mut resolved_url: Option<String> = download_url.clone();
@@ -1918,7 +1914,7 @@ async fn download_one_mod(
             tokio::time::sleep(Duration::from_millis(3000 + round as u64 * 2000)).await;
         }
 
-        // 走 XMCL 等价的多镜像下载：一次性传入完整镜像列表（对应原项目 downloadFileRace）
+        // 多镜像下载：一次性传入完整镜像列表
         let sha1_opt = if expected_sha1.is_empty() {
             None
         } else {

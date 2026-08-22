@@ -1,6 +1,5 @@
 // mods/list.rs — 已安装模组列表扫描
 // 职责：扫描版本 mods 目录 + 共享 mods 目录 + .minecraft/mods，检测重复和冲突
-// 对应原项目 server/mods.js 的 getInstalledMods
 
 use std::path::PathBuf;
 
@@ -21,7 +20,7 @@ pub fn get_installed_mods() -> Value {
     build_installed_mods(&settings, &version_id)
 }
 
-/// 获取指定版本的已安装模组列表（对齐初代 /api/mods/installed）
+/// 获取指定版本的已安装模组列表
 pub fn get_installed_mods_for_version(version_id: &str) -> Value {
     let settings = storage::load_settings();
     build_installed_mods(&settings, version_id)
@@ -90,7 +89,8 @@ fn build_installed_mods(settings: &Value, version_id: &str) -> Value {
                 "source": source,
                 "icon": if parsed.icon.is_empty() { "".to_string() } else { format!("/api/mod-icon?hash={}", parsed.icon) },
                 "author": parsed.author,
-                "projectId": parsed.project_id
+                "projectId": parsed.project_id,
+                "_jarPath": jar_path.to_string_lossy().replace('/', "\\")
             }));
         }
     };
@@ -240,7 +240,6 @@ fn format_size(bytes: u64) -> String {
 }
 
 /// 解析版本 mods 目录
-/// 复刻原项目 versions.getVersionModsDir
 fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Option<PathBuf> {
     if version_id.is_empty() {
         return None;
@@ -307,7 +306,6 @@ fn resolve_external_version_mods_dir(version_id: &str) -> Option<PathBuf> {
 }
 
 /// 解析存档目录（screenshots/saves 等用）
-/// 复刻原项目 versions.resolveSavesDir
 pub fn resolve_saves_dir(version_id: &str) -> PathBuf {
     let settings = storage::load_settings();
     let version_id = if version_id.is_empty() {
@@ -327,7 +325,6 @@ pub fn resolve_saves_dir(version_id: &str) -> PathBuf {
 }
 
 /// 解析版本游戏目录
-/// 复刻原项目 versions.getVersionGameDir
 fn resolve_version_game_dir(settings: &Value, version_id: &str) -> PathBuf {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");

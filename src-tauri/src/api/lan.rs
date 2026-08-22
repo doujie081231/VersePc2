@@ -1,6 +1,5 @@
 // api/lan.rs — 局域网与 EasyTier 路由
 // 职责：LAN 房间管理、UPnP 端口映射、EasyTier 虚拟局域网
-// 对应原项目 server/api/routes/lan.js
 //
 // 路由清单（19 个）：
 //   LAN（8）：

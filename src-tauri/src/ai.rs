@@ -1,7 +1,6 @@
 // ai.rs — AI 对话代理
 // 在 Rust 后端发起 AI API 请求，绕过 WebView 的 CORS 限制
 // 支持 openai / anthropic / google 三种接口格式
-// 对应原项目 main/ai-proxy.js 的 ai:chat 逻辑
 
 use serde_json::{json, Value};
 use std::time::Duration;

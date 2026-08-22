@@ -1,6 +1,5 @@
 // mods/jar.rs — JAR 文件解析与图标提取
 // 职责：从 JAR 文件中提取模组元数据（名称、版本、作者、图标）
-// 对应原项目 server/mods.js 的 parseModJar + extractModIcon
 //
 // 支持格式：
 //   - fabric.mod.json（Fabric）

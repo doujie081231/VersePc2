@@ -1,5 +1,4 @@
 // api/favorites.rs — 收藏夹相关路由
-// 兼容原项目 server/api/routes/favorites.js
 // 路由清单：
 //   GET  /api/favorites           获取所有收藏夹
 //   GET  /api/favorites/export    导出收藏夹

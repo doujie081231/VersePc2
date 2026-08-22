@@ -1,5 +1,4 @@
 // api/accounts.rs — 账号相关路由
-// 兼容原项目 server/api/routes/accounts.js
 // 路由清单：
 //   GET  /api/accounts                              获取账号列表
 //   POST /api/accounts/add-offline                  添加离线账号
@@ -349,7 +348,7 @@ async fn handle_thirdparty_login(body: &Option<Value>) -> ApiResult {
     let skin_url = extract_skin_url_from_auth_result(&final_auth_result);
     let skin_model = extract_skin_model_from_auth_result(&final_auth_result);
 
-    // 确保 authlib-injector jar 就位（与原项目一致）
+    // 确保 authlib-injector jar 就位
     let _ = authlib::ensure_authlib_injector().await;
 
     let new_account = build_thirdparty_account(

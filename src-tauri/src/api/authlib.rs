@@ -1,6 +1,5 @@
 // api/authlib.rs — authlib-injector 第三方登录支持
 // 职责：查询 authlib-injector 最新版本信息，下载 jar 并校验 SHA256
-// 对应原项目 server/api/routes/authlib.js
 //
 // 路由：
 //   GET /api/authlib-injector/info      拉取最新版本号、下载地址、文件大小

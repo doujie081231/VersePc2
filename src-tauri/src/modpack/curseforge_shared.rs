@@ -1,10 +1,8 @@
 // modpack/curseforge_shared.rs — CurseForge 整合包导入共享工具
 //
-// 完整复刻原项目 server/modpack/shared.js + server/modloaders/shared.js 中的
 // 版本去重、JAR 修复、路径校验、资源包重定位、模组清单、加载器兼容性检查、
 // 库文件验证、版本链清理等共用工具。
 //
-// 与原项目 1:1 对齐，不做任何简化。
 
 use std::fs;
 use std::io::{Read, Write};
@@ -22,8 +20,6 @@ pub const DEFAULT_MODPACK_CONCURRENCY: usize = 64;
 pub const MAX_MODPACK_CONCURRENCY: usize = 64;
 
 // ============== 版本 ID 去重 ==============
-// 对应原项目 shared.js _dedupeVersionId
-
 /// 重复版本名自动去重，避免覆盖已有版本
 /// 重名时追加 (2)~(999)
 pub fn dedupe_version_id(base_name: &str) -> String {
@@ -41,7 +37,7 @@ pub fn dedupe_version_id(base_name: &str) -> String {
 }
 
 // ============== 清理 .downloading 残留 ==============
-// 对应原项目 shared.js _cleanDownloadingResidue
+//
 
 /// 清理 mods 目录下的 .downloading 残留临时文件
 /// 下载中断/失败时 .downloading 文件会残留，续传时基于错误偏移量追加导致 SHA1 必然失败
@@ -72,8 +68,6 @@ pub fn clean_downloading_residue(version_dir: &Path) -> usize {
 }
 
 // ============== 路径安全校验 ==============
-// 对应原项目 shared.js isModpackPathSafe
-
 const WIN_RESERVED_NAMES: &[&str] = &[
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
@@ -101,8 +95,6 @@ pub fn is_modpack_path_safe(entry_path: &str) -> bool {
 }
 
 // ============== 资源包检测与重定位 ==============
-// 对应原项目 shared.js _isResourcePackZip + relocateMisplacedResourcePacks
-
 /// 检测 zip 是否为资源包（有 pack.mcmeta 且无 mods.toml/mcmod.info）
 pub fn is_resource_pack_zip(zip_path: &Path) -> bool {
     let file = match fs::File::open(zip_path) {
@@ -183,8 +175,6 @@ pub struct RelocateResult {
 }
 
 // ============== 模组清单保存 ==============
-// 对应原项目 shared.js _saveModManifest
-
 /// 保存模组清单到版本目录，供启动前校验使用
 pub fn save_mod_manifest(version_dir: &Path, mods: &[Value]) {
     let manifest_path = version_dir.join("mod-manifest.json");
@@ -207,8 +197,6 @@ pub fn save_mod_manifest(version_dir: &Path, mods: &[Value]) {
 }
 
 // ============== 并发与超时 ==============
-// 对应原项目 shared.js resolveConcurrency + computeModTimeout
-
 /// 根据 settings.maxThreads 解析模组下载并发数，默认 64，上限 64
 pub fn resolve_concurrency(settings: &Value) -> usize {
     let max_threads = settings
@@ -234,8 +222,6 @@ pub fn compute_mod_timeout(size_bytes: i64) -> u64 {
 }
 
 // ============== JAR 完整性校验 ==============
-// 对应原项目 utils.js isJarIntact + isJarIntactDeep
-
 /// 轻量校验：ZIP 头魔数 + 大小 > 1KB + EOCD 尾
 pub fn is_jar_intact(path: &Path) -> bool {
     if !path.exists() {
@@ -315,7 +301,6 @@ pub fn is_jar_intact_deep(path: &Path) -> bool {
 }
 
 // ============== 损坏 JAR 修复 ==============
-// 对应原项目 shared.js _repairCorruptedModJars
 // 完整实现：PowerShell Expand-Archive + unzip 命令 + zip crate 重打包
 
 /// 扫描 mods 目录下所有 .jar 文件，修复损坏的 JAR
@@ -583,7 +568,6 @@ fn repack_files(jar_path: &Path, files: &[PathBuf], base_dir: &Path) -> bool {
 }
 
 // ============== 版本链清理 ==============
-// 对应原项目 versions/version-list.js cleanupVersionChain
 
 /// 清理版本链：删除版本目录及其继承链中的非原版目录
 /// 原版目录（如 1.20.1）不删除
@@ -657,7 +641,6 @@ fn find_version_chain(version_id: &str) -> Vec<String> {
 }
 
 // ============== 版本 JSON 递归解析 ==============
-// 对应原项目 versions.resolveVersionJson
 
 /// 递归解析版本 JSON（合并 inheritsFrom 的 libraries + downloads.client）
 pub fn resolve_version_json(version_id: &str) -> Option<Value> {
@@ -732,7 +715,6 @@ fn resolve_version_json_recursive(version_id: &str, versions_dir: &Path) -> Opti
 }
 
 // ============== 加载器库验证 ==============
-// 对应原项目 modloaders/shared.js verifyLoaderLibs
 
 /// 验证加载器库文件是否完整
 /// 检查 libraries 目录下所有库文件是否存在且完整
@@ -804,7 +786,6 @@ fn resolve_lib_path(lib: &Value) -> Option<PathBuf> {
 }
 
 // ============== 导入库验证 ==============
-// 对应原项目 modloaders/shared.js verifyImportLibs
 
 /// 验证导入整合包的库文件是否完整
 /// 返回 (ok, checked, missing)
@@ -934,7 +915,6 @@ pub async fn verify_import_libs(version_id: &str) -> (bool, usize, usize) {
 }
 
 // ============== 加载器兼容性检查 ==============
-// 对应原项目 modloaders/shared.js ensureLoaderCompat
 
 /// 检查并升级加载器版本（如果 mods 目录中的模组要求更高版本）
 /// 简化实现：只检查当前加载器版本 JSON 是否存在且 libs 完整
@@ -1145,7 +1125,6 @@ fn compare_semver(a: &str, b: &str) -> i32 {
 }
 
 // ============== JAR modId 读取 ==============
-// 对应原项目 utils.js readJarModId
 
 /// 从 JAR 文件中读取 modId
 /// 依次尝试：META-INF/mods.toml → mcmod.info → fabric.mod.json

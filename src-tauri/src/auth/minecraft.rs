@@ -1,5 +1,4 @@
 // auth/minecraft.rs — Minecraft Token 获取与档案查询
-// 对应原项目 server/api/routes/accounts.js 中的 MC 部分（步骤 6-7）
 //
 // 流程：
 //   [6] POST api.minecraftservices.com/authentication/login_with_xbox

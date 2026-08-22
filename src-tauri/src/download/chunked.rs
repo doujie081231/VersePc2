@@ -1,6 +1,5 @@
 // download/chunked.rs — 多线程分块下载
-// 职责：并发 Range 请求分块下载大文件，突破单连接限速，对齐原项目多线程下载
-// 对应原项目 server/http-client/download-chunked.js
+// 职责：并发 Range 请求分块下载大文件，突破单连接限速
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -20,23 +19,23 @@ fn chunk_path(dest: &Path, idx: usize) -> PathBuf {
     dest.with_file_name(name)
 }
 
-/// 分块阈值：大于该字节数才启用分块（原项目 1MB）
+/// 分块阈值：大于该字节数才启用分块
 const CHUNK_THRESHOLD: u64 = 1024 * 1024;
-/// 最小分块大小（原项目 512KB）
+/// 最小分块大小
 const MIN_CHUNK_SIZE: u64 = 512 * 1024;
-/// 最大并发分块数（原项目上限 64，实际受 maxChunksPerFile 设置约束）
+/// 最大并发分块数（实际受 maxChunksPerFile 设置约束）
 const MAX_CHUNKS: usize = 64;
-/// 单块 stall 超时（秒）：对齐 XMCL stallTimeout 默认 30s
+/// 单块 stall 超时（秒）：默认 30s
 const CHUNK_STALL_SECS: u64 = 30;
-/// 初始并发分块数（对齐原项目 _MAX_INITIAL_THREADS=4：前 4 个分块不受速度限制）
+/// 初始并发分块数（前 4 个分块不受速度限制）
 const INITIAL_CHUNKS: usize = 4;
-/// 速度下限（字节/秒）：低于此值才新增分块并发（对齐原项目 _speedFloor 初始 256KB/s）
+/// 速度下限（字节/秒）：低于此值才新增分块并发（初始 256KB/s）
 const SPEED_FLOOR_BASE: u64 = 256 * 1024;
 
 /// 全局连接预算：限制所有文件的分块连接总数，避免多个大文件各开满并发导致
 /// 连接爆炸（如 64 mod × 64 分块 = 4096 连接），从而触发 CDN 限流反而拖慢速度。
-/// 对齐 XMCL 引擎思路：连接池充足到能并行下载多个大文件，但不至于无限并发。
-/// 默认 256（对齐原项目 DownloadManager 的 connectionLimit 上限）。
+/// 连接池充足到能并行下载多个大文件，但不至于无限并发。
+/// 默认 256。
 fn global_conn_budget() -> usize {
     crate::storage::load_settings()
         .get("downloadConcurrency")
@@ -47,7 +46,7 @@ fn global_conn_budget() -> usize {
 }
 static GLOBAL_CONN: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(global_conn_budget()));
 
-/// 动态并发调度器（对齐原项目 download-chunked.js 的 P2-10/P2-11 线程决策逻辑）：
+/// 动态并发调度器：
 /// - 初始 4 个分块并发，不受速度限制（保证基础并发）
 /// - 滑动窗口采样实际下载速度（每 200ms）
 /// - 速度下限 floor = max(256KB/s, 实际平均速度 * 0.85)，随速度动态调整
@@ -92,7 +91,7 @@ impl ChunkScheduler {
         }
     }
 
-    /// 当前是否应启动新的分块任务（对齐原项目 _shouldAddThread）
+    /// 当前是否应启动新的分块任务
     fn should_add(&self) -> bool {
         let launched = self.launched.load(Ordering::SeqCst);
         // 前 INITIAL_CHUNKS 个分块不受速度限制，保证基础并发
@@ -222,7 +221,7 @@ async fn download_chunked_once(
     let scheduler = Arc::new(ChunkScheduler::new(max_chunks, bytes_done.clone()));
 
     // 下载分块，写入 dest.c{i}
-    // 每个分块任务先等待调度器允许启动（对齐原项目 _safeDlChunk 的 _shouldAddThread），
+    // 每个分块任务先等待调度器允许启动，
     // 允许后再占连接下载，实现"4 起步 + 速度不够才加并发"的动态线程池。
     let mut handles = Vec::with_capacity(chunk_count);
     for (idx, (s, e)) in chunks.into_iter().enumerate() {
@@ -238,7 +237,7 @@ async fn download_chunked_once(
         let scheduler = scheduler.clone();
 
         handles.push(tokio::spawn(async move {
-            // 等待调度器允许启动（每次检查间隔 50ms，与原项目 while 轮询一致）
+            // 等待调度器允许启动（每次检查间隔 50ms）
             loop {
                 if scheduler.should_add() {
                     break;

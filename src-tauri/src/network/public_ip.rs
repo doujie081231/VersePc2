@@ -1,6 +1,5 @@
 // network/public_ip.rs — 公网 IP 检测
 // 职责：通过 HTTP 服务查询本机公网 IP
-// 对应原项目 server/network/public-ip.js
 //
 // 多源回退：ipify.cn → ifconfig.me → icanhazip.com
 // 缓存 5 分钟避免频繁请求

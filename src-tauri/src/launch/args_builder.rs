@@ -1,6 +1,5 @@
 // launch/args_builder.rs — 启动参数构建
 // 职责：从版本 JSON + 设置 + 账号 构建完整的 JVM/游戏启动参数
-// 对应原项目 server/launch/args-builder.js:buildLaunchArguments
 //
 // 设计原则：
 // 1. 复用 dep_check 模块中已迁移的通用辅助函数（find_external_root、find_main_jar、
@@ -30,7 +29,6 @@ pub struct LaunchArguments {
 }
 
 /// 构建 Minecraft 启动参数
-/// 对应原项目 args-builder.js:buildLaunchArguments
 ///
 /// `external_version_dir`：外部版本目录路径（非外部版本传 None）
 /// `custom_game_dir`：自定义游戏目录（覆盖默认决策）
@@ -559,7 +557,6 @@ fn sanitize_jvm_args(args: &mut Vec<String>) {
 // ============================ 辅助函数 ============================
 
 /// 替换字符串中的 ${var} 和 $var 变量
-/// 复刻原项目 server/utils.js:replaceVariables
 fn replace_variables(input: &str, vars: &HashMap<String, String>) -> String {
     let mut result = input.to_string();
     for (key, value) in vars {
@@ -810,7 +807,6 @@ fn find_lib_by_fallback(name: &str, bases: &[PathBuf]) -> Option<String> {
 }
 
 /// 计算 natives 目录路径并从版本 JSON 的 native 库中解压原生二进制文件
-/// 复刻原项目 natives.js:extractNatives
 ///
 /// 从 version_json.libraries 中识别 native 库，解压其中的 .dll/.so/.dylib/.jnilib
 /// 到 natives 目录。带完整性校验：关键原生库齐全且 jar 未更新时跳过解压。
@@ -1092,7 +1088,6 @@ fn extract_native_jar(jar_path: &Path, natives_dir: &Path) {
 }
 
 /// 解析版本游戏目录
-/// 复刻原项目 args-builder.js 中的 gameDir 决策
 pub(crate) fn resolve_game_dir(
     version_id: &str,
     custom_game_dir: Option<&str>,
@@ -1120,7 +1115,6 @@ pub(crate) fn resolve_game_dir(
 }
 
 /// 简化版版本隔离判定
-/// 复刻原项目 server/versions/version-dir.js:resolveVersionIsolation
 pub(crate) fn resolve_version_isolation(version_id: &str) -> bool {
     if version_id.is_empty() || version_id.contains(" [外部") {
         return !version_id.is_empty();
@@ -1398,7 +1392,6 @@ fn push_jpms_flags(jvm_args: &mut Vec<String>) {
 }
 
 /// 收集版本 JSON 中的 JVM 参数
-/// 复刻原项目 args-builder.js 中"收集版本 JSON 中的 JVM 参数"逻辑
 fn collect_jvm_args_from_json(
     jvm_args: &mut Vec<String>,
     version_json: &Value,
@@ -1554,7 +1547,6 @@ fn is_gc_arg(s: &str) -> bool {
 }
 
 /// 检测是否已存在 GC 参数
-/// 复刻原项目 natives.js:hasGarbageCollectorArg
 fn has_garbage_collector_arg(args: &[String]) -> bool {
     args.iter().any(|a| {
         // -XX:+Use<XXX>GC / -XX:-Use<XXX>GC / -XX:+Use<XXX>Collector / -XX:-Use<XXX>Collector
@@ -1787,7 +1779,7 @@ fn collect_game_args_from_json(
 }
 
 /// 游戏窗口分辨率修正：减去标题栏+边框，避免窗口铺满屏幕时标题栏被顶出屏幕外。
-/// 对所有版本（原版 / Forge / NeoForge / Fabric）统一生效，与原项目一致。
+/// 对所有版本（原版 / Forge / NeoForge / Fabric）统一生效。
 fn adjust_window_resolution(res_w: u32, res_h: u32, _game_args: &[String]) -> (u32, u32) {
     let (screen_w, screen_h, work_h) = get_screen_size();
     if screen_w == 0 || screen_h == 0 {
@@ -1851,7 +1843,6 @@ fn ensure_flag_arg(game_args: &mut Vec<String>, flag: &str, value: &str) {
 }
 
 /// 游戏参数去重：对单值选项去重，保留首次出现的值
-/// 复刻原项目 server/versions/version-merge.js:deduplicateGameArgs
 fn deduplicate_game_args(args: &[String]) -> Vec<String> {
     if args.is_empty() {
         return Vec::new();

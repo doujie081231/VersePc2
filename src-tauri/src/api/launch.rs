@@ -1,6 +1,5 @@
 // api/launch.rs — 启动相关 API 路由
 // 职责：处理 /api/launch/* 路由
-// 对应原项目 server/api/routes/launch.js
 //
 // 路由清单：
 //   POST /api/launch              启动游戏（含启动设置读取、依赖检查、调用 do_launch）
@@ -32,7 +31,6 @@ use crate::utils;
 use serde::{Deserialize, Serialize};
 
 // ============== 启动/下载会话：launchSessions ==============
-// 对齐原 electron 项目 ctx.sessions.launchSessions
 // 支持前端轮询 GET /api/launch/session-status，避免 download-deps HTTP 超时
 #[derive(Default, Clone)]
 struct LaunchSession {
@@ -99,7 +97,7 @@ fn now_ms() -> u64 {
 }
 
 /// 启动锁：防止重复点击导致启动多个游戏实例
-/// 30 秒后自动释放（与原项目行为一致）
+/// 30 秒后自动释放
 static LAUNCH_LOCK: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn try_acquire_launch_lock() -> bool {
@@ -188,7 +186,7 @@ pub async fn handle(
             match sess {
                 Some(s) => {
                     let status_end = matches!(s.status.as_str(), "launched" | "launch_failed" | "failed" | "completed");
-                    // 已结束的会话 60 秒后清理（对齐 electron）
+                    // 已结束的会话 60 秒后清理
                     if status_end {
                         let sid_owned = sid.to_string();
                         std::thread::spawn(move || {
@@ -443,7 +441,7 @@ fn handle_launch_check(_params: &Option<Value>, body: &Option<Value>) -> ApiResu
 
     let dep_result = dep_check::check_dependencies(&clean_id, &settings, external_path.as_deref());
 
-    // 与原 Electron 后端保持一致：把 dep_result 的字段展开到顶层
+    // 把 dep_result 的字段展开到顶层
     // 前端直接用 depCheck.java / depCheck.maxVersion 等访问
     let mut body = serde_json::Map::new();
     body.insert("success".to_string(), Value::Bool(true));
@@ -647,7 +645,6 @@ fn clean_external_marker(version_id: &str) -> String {
 }
 
 /// 解析外部版本目录
-/// 对应原项目 server/versions/version-dir.js:resolveExternalVersionDir
 /// 简化版：从 store 中读取 externalVersionFolders，匹配版本 ID
 fn resolve_external_version_dir(version_id: &str) -> Option<String> {
     // 从 external-folders.json 读取外部版本目录列表
@@ -681,7 +678,6 @@ fn resolve_external_version_dir(version_id: &str) -> Option<String> {
 }
 
 /// 应用前端 store 中的启动设置覆盖（窗口大小、全屏、自定义信息、窗口标题）
-/// 对应原项目 server/api/routes/launch.js 中读取 app-store.json 的逻辑
 fn apply_launch_settings_overrides(settings: &mut Value) {
     let data_dir = storage::resolve_data_dir();
     // 前端设置通过 store_get/set 写入 store.json（见 storage.rs Store::new）
@@ -730,7 +726,6 @@ fn apply_launch_settings_overrides(settings: &mut Value) {
 }
 
 /// 应用版本级设置覆盖（customInfo、windowTitle、fullscreen、resolution、memory）
-/// 对应原项目 server/api/routes/launch.js 中读取版本设置的逻辑
 fn apply_version_settings(settings: &mut Value, version_id: &str) {
     let ver_settings = storage::load_version_settings(version_id, false);
 
@@ -816,8 +811,8 @@ fn record_launch_time(version_id: &str) {
 /// 3. 逐个下载缺失文件，通过 'launch-download-progress' 事件推送进度
 /// 4. 返回 { success, completed, failed, failedFiles }
 ///
-/// 简化策略：同步下载，不并发（原项目支持并发下载，此处先做可用版本）
-/// POST /api/launch/download-deps — 下载缺失依赖文件（对齐 electron 异步会话版）
+/// 简化策略：同步下载，不并发
+/// POST /api/launch/download-deps — 下载缺失依赖文件
 ///
 /// 请求体：{ versionId, sessionId? }
 ///
@@ -885,7 +880,7 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
         }
     }
 
-    // 3. 立即返回，不等待下载完成（解决 HTTP 超时问题，对齐 electron）
+    // 3. 立即返回，不等待下载完成（解决 HTTP 超时问题）
     let missing_count = missing_files.len() as u32;
     let response = ApiResult::ok(json!({
         "success": true,
@@ -905,7 +900,7 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
 
     tauri::async_runtime::spawn(async move {
         let total = missing_files.len() as u32;
-        // 并发下载池（对齐初代 downloadOne 并发数 8）
+        // 并发下载池
         const PARALLEL: usize = 8;
         // (completed, failed, failed_files, errors)
         let stats = std::sync::Arc::new(Mutex::new(LaunchDlStats::default()));
