@@ -604,7 +604,16 @@
     enderlinkOnline: enderlinkOnline
   };
 
-  window.electronAPI = electronAPI;
+  // ============== 统一 IPC 面 window.bridge ==============
+  // 单一通信面：底层 invoke、业务传输(apiProxy)、能力方法与业务 API 全部收敛在一个对象上。
+  // 能力方法（窗口/系统/对话框/剪贴板/存储/事件/更新器/AI/联机模块）先平铺进来，
+  // 业务大对象由 api.js 在加载后挂到 bridge.api 上。
+  window.bridge = {};
+  window.bridge.invoke = invoke;
+  window.bridge.api = null;
+  Object.keys(electronAPI).forEach(function (k) {
+    window.bridge[k] = electronAPI[k];
+  });
 
   // ============== 额外：暴露 api_proxy 让 api.js 使用 ==============
   // 在 window.__TAURI_PROXY__ 上暴露一个统一调用函数
@@ -630,24 +639,26 @@
       }
     };
   }
+  window.bridge.apiProxy = window.__TAURI_PROXY__.apiProxy;
 
-  // ============== 额外的全局函数存根 ==============
-
-  // 如果某些页面直接调用了 window.electronAPI.xxx 而不在预置列表中，
-  // 提供兜底 fallback
-  if (typeof Proxy !== 'undefined') {
-    window.electronAPI = new Proxy(window.electronAPI, {
-      get: function (target, prop) {
-        if (prop in target) return target[prop];
-        // 对于未定义的方法返回存根函数（避免 "is not a function" 崩溃）
+  // ============== 兜底存根（避免未知方法崩溃） ==============
+  function _withFallback(target) {
+    if (typeof Proxy === 'undefined') return target;
+    return new Proxy(target, {
+      get: function (t, prop) {
+        if (prop in t) return t[prop];
         if (typeof prop === 'string' && !prop.startsWith('__')) {
-          console.warn('[tauri-bridge] 访问未实现的 electronAPI.' + prop + '，返回空函数');
+          console.warn('[tauri-bridge] 访问未实现的视桥接口 ' + String(prop) + '，返回空函数');
           return function () { return Promise.resolve(null); };
         }
-        return target[prop];
+        return t[prop];
       }
     });
   }
 
-  console.log('[tauri-bridge] Tauri 环境已检测到，electronAPI 桥接层已加载');
+  // 统一通信面以 window.bridge 为准；window.electronAPI 保留为兼容别名（同一对象）。
+  window.bridge = _withFallback(window.bridge);
+  window.electronAPI = window.bridge;
+
+  console.log('[tauri-bridge] Tauri 环境已检测到，统一桥接层 window.bridge 已加载');
 })();

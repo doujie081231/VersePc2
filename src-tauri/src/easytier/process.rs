@@ -125,6 +125,10 @@ async fn http_get_raw(http_port: u16, path: &str) -> Result<Value, String> {
     let client = reqwest::Client::builder()
         // terracotta 刚启动时虚拟网卡初始化较慢，10 秒超时 + 最多 5 次重试（共 6 次尝试）
         .timeout(Duration::from_secs(10))
+        // 本地 127.0.0.1 控制接口绝不能走系统/Clash 代理：代理够不到本机，会返回
+        // 一份 HTML 错误页，导致控制调用反复失败且错误信息里全是网页片断。
+        .no_proxy()
+        .user_agent("VersePC-Terracotta/1.0")
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -136,7 +140,14 @@ async fn http_get_raw(http_port: u16, path: &str) -> Result<Value, String> {
                 if !resp.status().is_success() {
                     let code = resp.status();
                     let body = resp.text().await.unwrap_or_default();
-                    let preview: String = body.chars().take(200).collect();
+                    // 控制接口应返回 JSON/空；若返回 HTML（通常是代理/Nginx 错误页），
+                    // 只给出简洁说明，不把整段网页片断塞进用户可见的错误信息。
+                    let trimmed = body.trim();
+                    let preview = if trimmed.starts_with('<') {
+                        "非 JSON 的 HTML 响应（本地控制接口异常）".to_string()
+                    } else {
+                        trimmed.chars().take(200).collect()
+                    };
                     last_err = Some(format!("HTTP {}: {}", code, preview));
                     if attempt < retries {
                         tokio::time::sleep(Duration::from_millis(800)).await;

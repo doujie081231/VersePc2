@@ -136,9 +136,12 @@ async function _tauriApiProxy(method, path, params, body) {
     });
 
     const _work = (async () => {
-        // 优先使用 tauri-bridge.js 建立的 window.__TAURI_PROXY__
-        if (window.__TAURI_PROXY__ && window.__TAURI_PROXY__.apiProxy) {
-            return await window.__TAURI_PROXY__.apiProxy(method, path, params, body);
+        // 统一走单一桥接面 window.bridge.apiProxy（tauri-bridge.js 建立）
+        const apiProxy =
+            (window.bridge && window.bridge.apiProxy) ||
+            (window.__TAURI_PROXY__ && window.__TAURI_PROXY__.apiProxy);
+        if (apiProxy) {
+            return await apiProxy(method, path, params, body);
         }
         // 兜底：直接 invoke（Tauri v2 的 __TAURI_INTERNALS__ 没有 .core，invoke 在自身）
         const core = (window.__TAURI__ && window.__TAURI__.core) ||
@@ -151,7 +154,7 @@ async function _tauriApiProxy(method, path, params, body) {
                 json: () => Promise.resolve(result.body)
             };
         }
-        throw new Error('[API] Tauri API proxy 不可用');
+        throw new Error('[API] 统一桥接层 window.bridge 不可用');
     })();
 
     try {
@@ -338,7 +341,7 @@ async function apiDelete(path, data = {}) {
 const API = {
     // === 系统信息 ===
     getSystemMemory: () => apiGet('/api/system/memory'),
-    memoryOptimize: () => window.electronAPI?.memoryOptimize?.() || Promise.reject(new Error('electronAPI.memoryOptimize not available')),
+    memoryOptimize: () => window.bridge?.memoryOptimize?.() || Promise.reject(new Error('记忆优化能力不可用')),
 
     // === 游戏版本管理 ===
     getVersions: (refresh = false) => apiGet('/api/versions', { refresh: refresh ? 'true' : '' }),
@@ -675,4 +678,15 @@ const API = {
         }
     },
 };
+
+// ============== 统一 IPC 面：把业务 API 挂到 window.bridge.api ==============
+// 整个前端只有一个通信入口 window.bridge：
+//   window.bridge.api.*           REST 业务方法（本文件 API 大对象）
+//   window.bridge.apiProxy/invoke 底层传输
+//   其余能力方法（窗口/系统/对话框/联机模块等）平铺在同层
+window.API = API;
+if (window.bridge) {
+  window.bridge.api = API;
+}
+
 /* @versepc-protected: anti-ai-plagiarism-v1.0 */

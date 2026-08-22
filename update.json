@@ -1,13 +1,13 @@
 {
-  "version": "0.8.0",
-  "releaseName": "v0.8.0",
-  "releaseDate": "2026-08-20",
-  "releaseNotes": "VersePC2 v0.8.0\n\n修复:\n- 修复已安装版本页外部文件夹下拉无法展开的问题\n- 修复模组与资源详情页误显示兼容性卡片的问题\n\n改进:\n- 已安装版本项统一改为设置图标按钮，界面更简洁\n- 外部文件夹选择改为展开子菜单，可直接重命名、打开文件夹、移除\n- 启动内存分配按当前可用内存渐进计算，并去除初始堆下限，分配更贴近实际系统资源\n- 清理若干冗余说明文字",
+  "version": "1.0.0",
+  "releaseName": "v1.0.0",
+  "releaseDate": "2026-08-22",
+  "releaseNotes": "VersePC2 v1.0.0\n\n功能:\n- 已安装模组图标：按 jar SHA1 从 Modrinth 解析项目图标，加载失败自动回退本地占位\n- 整合包/模组图片下载走国内镜像，修复 CDN 连接失败问题\n\n修复:\n- 修复陶瓦联机无法加入房间（本地控制接口被系统代理拦截，现强制直连本机）\n- 修复 Fabric 整合包加载器继承判断，以及合并时残留加载器版本问题\n- 清理若干引用外部项目的无效注释\n\n改进:\n- 统一前后端 IPC 通信面（window.bridge），收敛重复调用方式\n- 构建版本号升级至 1.0.0",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v0.8.0/VersePC2-0.8.0.exe",
-      "size": 73137152,
-      "sha256": "31A371BE768D18D3209E50674A89E22E6F4ADEFE7A9CCA1CB51CCA0F99C9734D"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.0.0/VersePC2-1.0.0.exe",
+      "size": 68816896,
+      "sha256": "3a15954ec3bffc4a363d65a4af8923a8832b4aeccfa7b44f0a8326f7f523faf2"
     }
   }
 }
