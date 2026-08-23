@@ -524,14 +524,52 @@ pub async fn private_server_check(_app: AppHandle, address: String) -> Value {
 }
 
 /// 复制地址到剪贴板
+/// 通过系统剪贴板命令实现，三平台通用、不引入 Windows 专属依赖（避免在 mac/Linux 上带出 Windows 链接库）。
 #[tauri::command]
 pub fn private_server_copy_address(address: String) -> Value {
-    match arboard::Clipboard::new() {
-        Ok(mut cb) => match cb.set_text(&address) {
-            Ok(_) => json!({ "ok": true }),
+    #[cfg(target_os = "windows")]
+    {
+        let safe = address.replace('\\', "\\\\").replace('"', "\\\"");
+        let out = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-Command")
+            .arg(format!("Set-Clipboard -Value \"{}\"", safe))
+            .output();
+        match out {
+            Ok(o) if o.status.success() => json!({ "ok": true }),
+            _ => json!({ "ok": false, "error": "写入剪贴板失败" }),
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        match Command::new("pbcopy").stdin(Stdio::piped()).spawn() {
+            Ok(mut child) => {
+                if let Some(mut si) = child.stdin.take() {
+                    let _ = si.write_all(address.as_bytes());
+                    drop(si);
+                }
+                match child.wait() {
+                    Ok(st) if st.success() => json!({ "ok": true }),
+                    _ => json!({ "ok": false, "error": "写入剪贴板失败" }),
+                }
+            }
             Err(e) => json!({ "ok": false, "error": e.to_string() }),
-        },
-        Err(e) => json!({ "ok": false, "error": e.to_string() }),
+        }
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let safe = address.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!(
+            "printf '%s' \"{}\" | (command -v wl-copy >/dev/null && wl-copy || (command -v xsel >/dev/null && xsel --clipboard --input || xclip -selection clipboard))",
+            safe
+        );
+        match std::process::Command::new("sh").arg("-c").arg(&script).status() {
+            Ok(st) if st.success() => json!({ "ok": true }),
+            Ok(_) => json!({ "ok": false, "error": "写入剪贴板失败" }),
+            Err(e) => json!({ "ok": false, "error": e.to_string() }),
+        }
     }
 }
 
