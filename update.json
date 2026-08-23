@@ -1,13 +1,13 @@
 {
-  "version": "1.0.0",
-  "releaseName": "v1.0.0",
+  "version": "1.1.0",
+  "releaseName": "v1.1.0",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "VersePC2 v1.0.0\n\n改进:\n- 统一 IPC 通信面（window.bridge），精简双代理\n- 修复 Terracotta 本地控制接口被系统代理截断导致联机失败的问题\n- 修复整合包图片 CDN 连接失败，改用国内镜像\n- 已安装模组图标从 Modrinth 解析真实图标\n- Fabric 整合包合并时清理残留加载器版本\n- 改用 MSVC 工具链构建，单文件运行，无需额外 WebView2Loader.dll",
+  "releaseNotes": "VersePC2 v1.1.0\n\n新增:\n- 插件市场（统一 Gitee 插件仓库），支持下载/更新/卸载插件\n- 插件前端运行时：支持新增侧边栏页面（SVG 图标）+ Vue、插入卡片、个性化（主题/挂件/整个前端自定义）\n- 开服功能内置为插件（创建服务端/启动/停止/控制台/指令）\n- 开发文档站（GitHub Pages 托管）\n\n改进:\n- 修复插件包下载 sha256 校验失败问题\n- 修复导入整合包时 Forge 成对 JVM 参数（--add-opens）被折叠导致启动失败\n- 修复已安装模组图标不显示\n- 统一 IPC 通信面（window.bridge）",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.0.0/VersePC2-1.0.0.exe",
-      "size": 73296384,
-      "sha256": "7C89BFC9602F5F9114D18FC3E38341B599F9F61BDD4388E163C963D19F18C8B1"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.0/VersePC2-1.1.0.exe",
+      "size": 73438208,
+      "sha256": "9B837D1D87436D79BBE07B6D0A4D01252BD485E5371CD52277018733C85048AF"
     }
   }
 }
