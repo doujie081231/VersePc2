@@ -1,0 +1,77 @@
+# release-build.yml — 在 GitHub 上构建 macOS（Intel + Apple Silicon）与 Linux 版本，
+# 并将产物自动上传到对应的 release/tag。
+# 触发：推送 v* 标签 或 手动触发。Windows 版在本地/单独构建，不在此矩阵内。
+name: Build macOS & Linux
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS 需两种架构：Intel 用 macos-13，Apple Silicon 用 macos-14
+          - os: macos-13
+            artifact: macos-x86_64
+            label: macOS_x86_64
+          - os: macos-14
+            artifact: macos-aarch64
+            label: macOS_arm64
+          - os: ubuntu-24.04
+            artifact: linux-x86_64
+            label: Linux_x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ""
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.os }}
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      # tauri build 的 beforeBuildCommand 会自动运行 scripts/prepare-frontend.mjs（现已跨平台）
+      - name: Build & bundle (Tauri)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'VersePC2 ${{ matrix.label }} ${{ github.ref_name }}'
+          releaseBody: '由 GitHub Actions 自动构建的 ${{ matrix.label }} 版本'
+          releaseDraft: false
+          releasePrerelease: false
+          includeUpdaterJson: false

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VersePC Setup</title>
+    <link rel="stylesheet" href="css/installer.css">
+</head>
+<body>
+    <div class="installer-window">
+        <div class="title-bar">
+            <div class="title-bar-left">
+                <svg class="title-bar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5">
+                    <path d="M14.531 12.469L6.619 20.38a1.5 1.5 0 0 1-2.122-2.122l7.912-7.912"/>
+                    <path d="M15.686 4.314A12.5 12.5 0 0 0 5.461 2.958l-1.392 1.392a1.5 1.5 0 0 0 0 2.122l2.293 2.293"/>
+                    <path d="M19.686 8.314a12.5 12.5 0 0 1 1.356 10.225l-1.392 1.392a1.5 1.5 0 0 1-2.122 0l-2.293-2.293"/>
+                </svg>
+                <span class="title-bar-text">VersePC Setup</span>
+            </div>
+            <div class="title-bar-right">
+                <button class="title-btn minimize-btn" onclick="installerAPI.minimizeWindow()">
+                    <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5"/></svg>
+                </button>
+                <button class="title-btn close-btn" onclick="installerAPI.closeWindow()">
+                    <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.5"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="step active" id="step-welcome">
+                <div class="welcome-glow"></div>
+                <svg class="welcome-logo" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.2">
+                    <path d="M14.531 12.469L6.619 20.38a1.5 1.5 0 0 1-2.122-2.122l7.912-7.912"/>
+                    <path d="M15.686 4.314A12.5 12.5 0 0 0 5.461 2.958l-1.392 1.392a1.5 1.5 0 0 0 0 2.122l2.293 2.293"/>
+                    <path d="M19.686 8.314a12.5 12.5 0 0 1 1.356 10.225l-1.392 1.392a1.5 1.5 0 0 1-2.122 0l-2.293-2.293"/>
+                </svg>
+                <h1 class="welcome-title">欢迎使用 VersePC</h1>
+                <p class="welcome-subtitle">Minecraft 启动器</p>
+                <p class="welcome-desc">点击"下一步"选择安装位置并开始安装</p>
+                <div class="welcome-features">
+                    <div class="feature-item">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <span>多版本管理</span>
+                    </div>
+                    <div class="feature-item">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <span>模组下载安装</span>
+                    </div>
+                    <div class="feature-item">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <span>联机功能</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step" id="step-path">
+                <h2 class="step-title">选择安装位置</h2>
+                <p class="step-desc">选择 VersePC 的安装目录</p>
+                <div class="path-group">
+                    <input type="text" id="install-path" class="path-input" readonly placeholder="选择安装路径...">
+                    <button class="browse-btn" onclick="browsePath()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                        浏览
+                    </button>
+                </div>
+                <div class="path-info" id="path-info">
+                    <div class="disk-info" id="disk-info">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01"/></svg>
+                        <span id="disk-space-text">计算可用空间中...</span>
+                    </div>
+                </div>
+                <div class="verse-hint" id="verse-hint" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span>该目录包含多个文件，将自动创建 <strong>Verse</strong> 文件夹</span>
+                </div>
+                <div class="installed-badge" id="installed-badge" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span>已安装</span>
+                    <span class="installed-info" id="installed-info"></span>
+                </div>
+                <div class="install-size-info">
+                    <span class="size-label">预计安装大小:</span>
+                    <span class="size-value">约 80 MB</span>
+                </div>
+            </div>
+
+            <div class="step" id="step-installing">
+                <h2 class="step-title" id="installing-title">正在安装</h2>
+                <p class="step-desc" id="install-status">正在准备安装...</p>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                </div>
+                <div class="install-detail" id="install-detail">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span id="current-file">准备中...</span>
+                </div>
+            </div>
+
+            <div class="step" id="step-finish">
+                <div class="finish-glow"></div>
+                <svg class="finish-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12l3 3 5-5" stroke-width="2"/>
+                </svg>
+                <h2 class="finish-title" id="finish-title">安装完成!</h2>
+                <p class="finish-desc" id="finish-desc">VersePC 已成功安装到您的计算机</p>
+                <label class="launch-checkbox">
+                    <input type="checkbox" id="launch-after-install" checked>
+                    <span class="checkbox-custom"></span>
+                    <span>安装完成后启动 VersePC</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="nav-bar">
+            <div class="nav-left">
+                <button class="nav-btn nav-btn-secondary" id="btn-back" onclick="goBack()" style="display:none">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                    上一步
+                </button>
+            </div>
+            <div class="nav-right">
+                <button class="nav-btn nav-btn-secondary" id="btn-cancel" onclick="installerAPI.closeWindow()">
+                    取消
+                </button>
+                <button class="nav-btn nav-btn-primary" id="btn-next" onclick="goNext()">
+                    下一步
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/renderer.js"></script>
+</body>
+</html>
