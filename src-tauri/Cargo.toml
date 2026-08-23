@@ -58,7 +58,6 @@ async-walkdir = "0.2"
 tracing = "0.1"
 futures = "0.3"
 sysinfo = "0.30"
-arboard = "3"
 
 # Windows 专属依赖：仅注册表读取（JavaSoft 扫描、WebView2 检测）用到，
 # 声明为 windows target 专属，保证 macOS/Linux 也能顺利编译
