@@ -1,6 +1,7 @@
 # release-build.yml — 在 GitHub 上构建 macOS（Intel + Apple Silicon）与 Linux 版本，
-# 并将产物自动上传到对应的 release/tag。
-# 触发：推送 v* 标签 或 手动触发。Windows 版在本地/单独构建，不在此矩阵内。
+# 并把安装包直接上传到对应 tag 的 release。
+# 刻意只用 `run:` 内置步骤（不依赖任何第三方 action），在任何 Actions 权限设置下都能运行。
+# 触发：手动 workflow_dispatch（ref 填 v1.1.1 等 tag）或推送 v* tag。
 name: Build macOS & Linux
 
 on:
@@ -19,22 +20,20 @@ jobs:
       matrix:
         include:
           # macOS 需两种架构：Intel 用 macos-13，Apple Silicon 用 macos-14
-          - os: macos-13
-            artifact: macos-x86_64
-            label: macOS_x86_64
-          - os: macos-14
-            artifact: macos-aarch64
-            label: macOS_arm64
-          - os: ubuntu-24.04
-            artifact: linux-x86_64
-            label: Linux_x86_64
+          - { os: macos-13,  artifact: macos-x86_64,  label: macOS_x86_64 }
+          - { os: macos-14,  artifact: macos-aarch64, label: macOS_arm64 }
+          - { os: ubuntu-24.04, artifact: linux-x86_64, label: Linux_x86_64 }
     runs-on: ${{ matrix.os }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout (${{ github.ref_name }})
+        run: |
+          git clone --depth 1 --branch "${GITHUB_REF_NAME}" https://github.com/doujie081231/VersePc2.git .
+          git rev-parse --short HEAD
 
       - name: Install Linux system dependencies
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -44,34 +43,65 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Setup Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ""
+      # 关键：直接用 cargo 构建 bin（不等价于 cargo tauri build）。
+      # `cargo tauri build` 会构建 cdylib/staticlib crate-type，Linux/mac 上会强制链接所有
+      # 依赖里的 #[link]（含 Windows 库），出现 "unable to find library -lkernel32"。
+      # 普通 bin 链接只含实际生效的库，可正常通过。前端资源需先 prepare（generate_context! 编译期读取）。
+      - name: Prepare frontend assets
+        run: node scripts/prepare-frontend.mjs
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-          key: ${{ matrix.os }}
+      - name: Build release binary
+        run: cargo build --release --bin verse-tauri
 
-      - name: Install frontend dependencies
-        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-
-      # tauri build 的 beforeBuildCommand 会自动运行 scripts/prepare-frontend.mjs（现已跨平台）
-      - name: Build & bundle (Tauri)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'VersePC2 ${{ matrix.label }} ${{ github.ref_name }}'
-          releaseBody: '由 GitHub Actions 自动构建的 ${{ matrix.label }} 版本'
-          releaseDraft: false
-          releasePrerelease: false
-          includeUpdaterJson: false
+      - name: Package & upload installers
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+          BIN="src-tauri/target/release/verse-tauri"
+          chmod +x "$BIN"
+          files=()
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cp "$BIN" "VersePC2-${VERSION}-linux-x86_64"
+            files+=( "VersePC2-${VERSION}-linux-x86_64" )
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            APP="VersePC2.app"
+            mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
+            cp "$BIN" "${APP}/Contents/MacOS/VersePC2"
+            cat > "${APP}/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
+  <key>CFBundleExecutable</key><string>VersePC2</string>
+  <key>CFBundleIdentifier</key><string>com.versepc.launcher</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>VersePC2</string>
+  <key>CFBundleDisplayName</key><string>VersePC2</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>LSMinimumSystemVersion</key><string>10.13</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict>
+</plist>
+PLIST
+            # 拷贝打包进编译产物的图标（若有）
+            [ -f src-tauri/icons/icon.icns ] && cp src-tauri/icons/icon.icns "${APP}/Contents/Resources/icon.icns"
+            ARCH="x86_64"; [ "${RUNNER_ARCH}" = "ARM64" ] && ARCH="aarch64"
+            zip -r "-y" "VersePC2-${VERSION}-macos-${ARCH}.zip" "${APP}"
+            files+=( "VersePC2-${VERSION}-macos-${ARCH}.zip" )
+          fi
+          echo "uploading: ${files[@]}"
+          for f in "${files[@]}"; do
+            gh release upload "${TAG}" "$f" --clobber
+          done
