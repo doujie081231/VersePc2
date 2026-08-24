@@ -431,34 +431,22 @@ async fn stream_download(
     let mut transferred = resume;
     let mut last_report = Instant::now();
     let mut last_bytes = resume;
-    let mut window_bytes: u64 = 0;
-    let mut window_start = Instant::now();
-    let stall_detect = expected_size > 1024 * 1024;
+    // 距上次收到数据的时刻；仅当超过 IDLE_TIMEOUT 仍无任何字节时才判源失效，
+    // 避免把 Gitee 高峰期"慢但仍在传"的连接误杀。
+    let idle_timeout = Duration::from_secs(60);
 
     loop {
-        let waited = tokio::time::timeout(Duration::from_secs(30), stream.next()).await;
+        let waited = tokio::time::timeout(idle_timeout, stream.next()).await;
         let chunk = match waited {
             Ok(Some(r)) => r.map_err(|e| format!("下载中断: {}", e))?,
             Ok(None) => break,
-            Err(_) => return Err("下载长时间无数据，切换镜像".to_string()),
+            Err(_) => {
+                // 60 秒整未收到任何数据块：判定该源暂时失效（切换/续传）
+                return Err("下载长时间无数据，切换镜像".to_string());
+            }
         };
         transferred += chunk.len() as u64;
         f.write_all(&chunk).await.map_err(|e| format!("写入失败: {}", e))?;
-        window_bytes += chunk.len() as u64;
-
-        let remaining = total.saturating_sub(transferred);
-        // 仅在剩余较多且一段时间内完全未收到任何字节时才判定该源失效，
-        // 避免把因瞬时速度波动仍在正常传输的源误判为失败而反复切换镜像。
-        if stall_detect && remaining > 1024 * 1024 {
-            let win_elapsed = window_start.elapsed().as_secs();
-            if win_elapsed >= 10 {
-                if window_bytes == 0 {
-                    return Err("源长时间无数据，切换镜像".to_string());
-                }
-                window_bytes = 0;
-                window_start = Instant::now();
-            }
-        }
 
         if last_report.elapsed().as_millis() >= 300 {
             let elapsed = last_report.elapsed().as_secs_f64().max(0.001);
@@ -568,7 +556,15 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
     let data_dir = crate::storage::resolve_data_dir();
     let tmp_dir = data_dir.join("updates");
     let _ = fs::create_dir_all(&tmp_dir);
-    let target = tmp_dir.join(format!("VersePC2-{}.exe", release.tag_ver));
+    // 下载文件按平台命名：Windows .exe / macOS .zip / Linux 无后缀
+    let file_name = match current_update_key() {
+        "win-x64" => format!("VersePC2-{}.exe", release.tag_ver),
+        "linux-x86_64" => format!("VersePC2-{}-linux-x86_64", release.tag_ver),
+        "macos-x86_64" => format!("VersePC2-{}-macos-x86_64.zip", release.tag_ver),
+        "macos-aarch64" => format!("VersePC2-{}-macos-aarch64.zip", release.tag_ver),
+        _ => format!("VersePC2-{}", release.tag_ver),
+    };
+    let target = tmp_dir.join(file_name);
 
     match download_with_fallback(&app, &asset.url, &target, asset.size, asset.sha256.as_deref()).await {
         Ok(()) => {
@@ -593,40 +589,94 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
 
 // ============== 安装更新（全量自动替换） ==============
 
-fn install_and_restart(app: &AppHandle, new_exe: &Path) -> Result<(), String> {
+fn install_and_restart(app: &AppHandle, new_pkg: &Path) -> Result<(), String> {
     let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dir = current_exe
         .parent()
         .ok_or("无法定位安装目录")?
         .to_path_buf();
-    let script = dir.join("_versepc_update.bat");
-
     let exe_name = current_exe
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let n = new_exe.to_string_lossy().replace('/', "\\");
-    let c = current_exe.to_string_lossy().replace('/', "\\");
 
-    // 脚本流程：等待当前 exe 退出 → 替换 exe → 启动新 exe → 删除脚本
-    let content = format!(
-        "@echo off\r\nchcp 65001 >nul\r\n:wait\r\ntasklist /fi \"imagename eq {exe}\" | find /i \"{exe}\" >nul\r\nif not errorlevel 1 (\r\n  timeout /t 1 /nobreak >nul\r\n  goto wait\r\n)\r\nmove /y \"{new}\" \"{cur}\" >nul\r\nif errorlevel 1 goto done\r\nstart \"\" \"{cur}\"\r\n:done\r\ndel /q \"%~f0\"\r\n",
-        exe = exe_name,
-        new = n,
-        cur = c
-    );
-    fs::write(&script, content).map_err(|e| format!("无法写入更新脚本: {}", e))?;
+    #[cfg(target_os = "windows")]
+    {
+        let script = dir.join("_versepc_update.bat");
+        let n = new_pkg.to_string_lossy().replace('/', "\\");
+        let c = current_exe.to_string_lossy().replace('/', "\\");
+        // 等待当前 exe 退出 → 替换 exe → 启动新 exe → 删除脚本
+        let content = format!(
+            "@echo off\r\nchcp 65001 >nul\r\n:wait\r\ntasklist /fi \"imagename eq {exe}\" | find /i \"{exe}\" >nul\r\nif not errorlevel 1 (\r\n  timeout /t 1 /nobreak >nul\r\n  goto wait\r\n)\r\nmove /y \"{new}\" \"{cur}\" >nul\r\nif errorlevel 1 goto done\r\nstart \"\" \"{cur}\"\r\n:done\r\ndel /q \"%~f0\"\r\n",
+            exe = exe_name, new = n, cur = c
+        );
+        fs::write(&script, content).map_err(|e| format!("无法写入更新脚本: {}", e))?;
+        let script_str = script.to_string_lossy().replace('/', "\\");
+        Command::new("cmd")
+            .args(["/c", "start", "", "/min", &script_str])
+            .spawn()
+            .map_err(|e| format!("无法启动更新脚本: {}", e))?;
+        app.exit(0);
+        return Ok(());
+    }
 
-    // 隐藏窗口启动替换脚本（独立进程，不受本应用退出影响）
-    let script_str = script.to_string_lossy().replace('/', "\\");
-    Command::new("cmd")
-        .args(["/c", "start", "", "/min", &script_str])
-        .spawn()
-        .map_err(|e| format!("无法启动更新脚本: {}", e))?;
+    #[cfg(target_os = "linux")]
+    {
+        // new_pkg 是单个可执行文件：替换当前二进制后重启
+        let script = dir.join("_versepc_update.sh");
+        let n = new_pkg.to_string_lossy();
+        let c = current_exe.to_string_lossy();
+        let content = format!(
+            "#!/bin/sh\n\
+             while pgrep -f \"{c}\" >/dev/null 2>&1; do sleep 1; done\n\
+             cp \"{n}\" \"{c}\" && chmod +x \"{c}\"\n\
+             nohup \"{c}\" >/dev/null 2>&1 &\n\
+             rm -f \"$0\"\n"
+        );
+        fs::write(&script, content).map_err(|e| format!("无法写入更新脚本: {}", e))?;
+        Command::new("/bin/sh").arg(&script).spawn().map_err(|e| format!("无法启动更新脚本: {}", e))?;
+        app.exit(0);
+        return Ok(());
+    }
 
-    // 退出本应用，交由脚本完成替换
-    app.exit(0);
-    Ok(())
+    #[cfg(target_os = "macos")]
+    {
+        // new_pkg 是含 VersePC2.app 的 zip：解压后整包替换旧 .app，再 open 新 app
+        let app_bundle = current_exe
+            .ancestors()
+            .find(|p| p.file_name().map(|f| f == "VersePC2.app").unwrap_or(false))
+            .map(|p| p.to_path_buf())
+            .unwrap_or(dir.clone());
+        let parent = app_bundle
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| dir.clone());
+        let script = parent.join("_versepc_update.sh");
+        let zip = new_pkg.to_string_lossy();
+        let app = app_bundle.to_string_lossy();
+        let content = format!(
+            "#!/bin/sh\n\
+             while pgrep -f \"{app}/Contents/MacOS/VersePC2\" >/dev/null 2>&1; do sleep 1; done\n\
+             TMP=\"$(mktemp -d)\"\n\
+             cd \"$TMP\" && unzip -o -q \"{zip}\" || exit 1\n\
+             rm -rf \"{app}\"\n\
+             mv \"$TMP/VersePC2.app\" \"{app}\"\n\
+             chmod +x \"{app}/Contents/MacOS/VersePC2\"\n\
+             open \"{app}\"\n\
+             rm -rf \"$TMP\"\n\
+             rm -f \"$0\"\n"
+        );
+        fs::write(&script, content).map_err(|e| format!("无法写入更新脚本: {}", e))?;
+        Command::new("/bin/sh").arg(&script).spawn().map_err(|e| format!("无法启动更新脚本: {}", e))?;
+        app.exit(0);
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (exe_name, dir);
+        Err("当前平台暂不支持自动更新".to_string())
+    }
 }
 
 #[tauri::command]
