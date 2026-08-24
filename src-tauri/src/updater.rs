@@ -109,6 +109,26 @@ fn current_version() -> (u32, u32, u32) {
     parse_version(env!("CARGO_PKG_VERSION"))
 }
 
+/// 返回 update.json `files` 中对应当前平台的键名（win-x64 / linux-x86_64 / macos-x86_64 / macos-aarch64）
+fn current_update_key() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        if cfg!(target_arch = "aarch64") {
+            "macos-aarch64"
+        } else {
+            "macos-x86_64"
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "linux-x86_64"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        "win-x64"
+    }
+}
+
 fn parse_version(s: &str) -> (u32, u32, u32) {
     let mut parts = s
         .trim_start_matches('v')
@@ -236,7 +256,8 @@ async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRel
         return Ok(None);
     }
 
-    let files = v.get("files").and_then(|x| x.get("win-x64"));
+    // 依据当前运行平台选择 update.json 中对应的文件键，macOS/Linux 也能拉到各自的更新包
+    let files = v.get("files").and_then(|x| x.get(current_update_key()));
     let asset = files.map(|f| UpdateAsset {
         url: f.get("url").and_then(|x| x.as_str()).unwrap_or("").to_string(),
         size: f.get("size").and_then(|x| x.as_u64()).unwrap_or(0),
