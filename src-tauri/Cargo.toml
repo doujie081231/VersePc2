@@ -1,6 +1,6 @@
 [package]
 name = "verse-tauri"
-version = "1.1.1"
+version = "1.1.2"
 description = "VersePC Tauri 框架替换项目"
 edition = "2024"
 # 通过 rust-version 说明需要较新的编译器；let-chains 语法在 2024 edition 下可用
