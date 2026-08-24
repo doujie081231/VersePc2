@@ -75,26 +75,7 @@ jobs:
             APP="VersePC2.app"
             mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
             cp "$BIN" "${APP}/Contents/MacOS/VersePC2"
-            cat > "${APP}/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
-  <key>CFBundleExecutable</key><string>VersePC2</string>
-  <key>CFBundleIdentifier</key><string>com.versepc.launcher</string>
-  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleName</key><string>VersePC2</string>
-  <key>CFBundleDisplayName</key><string>VersePC2</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
-  <key>CFBundleVersion</key><string>${VERSION}</string>
-  <key>LSMinimumSystemVersion</key><string>10.13</string>
-  <key>NSHighResolutionCapable</key><true/>
-  <key>NSPrincipalClass</key><string>NSApplication</string>
-</dict>
-</plist>
-PLIST
+            cp src-tauri/Info.plist "${APP}/Contents/Info.plist"
             # 拷贝打包进编译产物的图标（若有）
             [ -f src-tauri/icons/icon.icns ] && cp src-tauri/icons/icon.icns "${APP}/Contents/Resources/icon.icns"
             ARCH="x86_64"; [ "${RUNNER_ARCH}" = "ARM64" ] && ARCH="aarch64"
