@@ -211,6 +211,12 @@ fn window_show(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 async fn window_close(window: tauri::WebviewWindow) {
+    // 自动更新：若已有下载完成的更新包，直接进入"替换+重启"流程（安装脚本会退出进程并重启新版本），
+    // 不再播放关闭动画，避免旧进程占用 exe 导致替换失败。
+    if crate::updater::auto_install_on_close(&window.app_handle()) {
+        return;
+    }
+
     // 关闭前触发前端 CSS 关闭动画
     let _ = window.emit("request-close-animate", ());
 
@@ -943,6 +949,17 @@ pub fn run() {
             enderlink_online::enderlink_stop,
             enderlink_online::enderlink_status,
         ])
+        .on_window_event(|window, event| {
+            // 自动更新：主窗口被系统关闭（Alt+F4 / 任务栏关闭）时，若已有下载完成的更新包，
+            // 阻止默认关闭并进入"替换+重启"流程（安装脚本负责退出进程并重启新版本）。
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main"
+                    && crate::updater::auto_install_on_close(&window.app_handle())
+                {
+                    api.prevent_close();
+                }
+            }
+        })
         .on_page_load(|_window, _payload| {
             println!("[boot] page_load {}", chrono::Local::now().format("%H:%M:%S%.3f"));
         })
