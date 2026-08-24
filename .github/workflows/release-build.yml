@@ -90,8 +90,8 @@ jobs:
           chmod +x "$BIN"
           files=()
           if [ "$RUNNER_OS" = "Linux" ]; then
-            cp "$BIN" "VersePC2-${VERSION}-linux-x86_64"
-            files+=( "VersePC2-${VERSION}-linux-x86_64" )
+            cp "$BIN" "VersePC2-linux-x86_64"
+            files+=( "VersePC2-linux-x86_64" )
           elif [ "$RUNNER_OS" = "macOS" ]; then
             APP="VersePC2.app"
             mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
@@ -100,8 +100,8 @@ jobs:
             # 拷贝打包进编译产物的图标（若有）
             [ -f src-tauri/icons/icon.icns ] && cp src-tauri/icons/icon.icns "${APP}/Contents/Resources/icon.icns"
             ARCH="aarch64"; [ -n "${{ matrix.target }}" ] && ARCH="x86_64"
-            zip -r "-y" "VersePC2-${VERSION}-macos-${ARCH}.zip" "${APP}"
-            files+=( "VersePC2-${VERSION}-macos-${ARCH}.zip" )
+            zip -r "-y" "VersePC2-macos-${ARCH}.zip" "${APP}"
+            files+=( "VersePC2-macos-${ARCH}.zip" )
           fi
           echo "uploading: ${files[@]}"
           for f in "${files[@]}"; do
