@@ -76,21 +76,13 @@ let modSelectedVersions = new Map();
 
 
 
-/* 
- * 平台功能显隐：非 Windows 平台隐藏仅 Windows 可用/不生效的入口。
- * 自更新采用 .bat+tasklist 替换 exe，且 update.json 仅提供 win-x64 包，
- * 在 macOS/Linux 上无法使用，故一并隐藏；模板为延迟插入，需在启动与页面渲染后各调用一次。
+/*
+ * 平台功能显隐：仅在 Windows 可用/不生效的入口用 .win-only 标记隐藏。
+ * 自更新在三平台均可用（Windows .bat、macOS .app 替换、Linux 二进制替换），
+ * 因此 updater 相关区块不再隐藏，仅隐藏真正的 Windows 专属功能。
  */
 function hideWinOnlyFeatures() {
   document.querySelectorAll('.win-only').forEach((el) => (el.style.display = 'none'));
-  var upd = document.getElementById('updater-btn-group');
-  if (upd) upd.style.display = 'none';
-  var status = document.getElementById('updater-status-area');
-  if (status) status.style.display = 'none';
-  var notes = document.getElementById('updater-release-notes');
-  if (notes) notes.style.display = 'none';
-  var accel = document.getElementById('updater-accel-info');
-  if (accel) accel.style.display = 'none';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
