@@ -57,6 +57,15 @@ jobs:
       - name: Prepare frontend assets
         run: node scripts/prepare-frontend.mjs
 
+      # 某些依赖在非 Windows 上仍传 -lkernel32/-lshell32（Windows dylib），但无实际符号引用。
+      # 放置空的 stub 归档使链接可解析这些 -l（-Wl,--as-needed 会丢弃未引用的），从而正常产出 bin。
+      - name: Provide empty Windows stub libs (macOS/Linux)
+        run: |
+          mkdir -p winstubs
+          printf '!<arch>\n' > winstubs/libkernel32.a
+          printf '!<arch>\n' > winstubs/libshell32.a
+          echo "RUSTFLAGS=-L $(pwd)/winstubs" >> "$GITHUB_ENV"
+
       - name: Build release binary
         run: cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml
 
