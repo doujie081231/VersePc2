@@ -36,6 +36,25 @@ const JPEG_MAGIC: &[u8] = &[0xFF, 0xD8, 0xFF];
 /// 这样无论 exe 在哪运行都能找到，不依赖外部文件
 const STEVE_HEAD_PNG: &[u8] = include_bytes!("../resources/steve_head.png");
 
+/// 内置默认皮肤整皮 PNG，编译时嵌入（与 api/skins.rs 保持一致）
+const STEVE_SKIN_PNG: &[u8] = include_bytes!("../resources/steve_skin.png");
+const SKIN_ALEX_PNG: &[u8] = include_bytes!("../resources/skin_alex.png");
+const SKIN_ZOMBIE_PNG: &[u8] = include_bytes!("../resources/skin_zombie.png");
+const SKIN_ENDERMAN_PNG: &[u8] = include_bytes!("../resources/skin_enderman.png");
+const SKIN_CREEPER_PNG: &[u8] = include_bytes!("../resources/skin_creeper.png");
+
+/// 皮肤文件 → 内置皮肤字节
+fn builtin_skin_bytes(file: &str) -> Option<&'static [u8]> {
+    match file {
+        "steve_skin.png" => Some(STEVE_SKIN_PNG),
+        "skin_alex.png" => Some(SKIN_ALEX_PNG),
+        "skin_zombie.png" => Some(SKIN_ZOMBIE_PNG),
+        "skin_enderman.png" => Some(SKIN_ENDERMAN_PNG),
+        "skin_creeper.png" => Some(SKIN_CREEPER_PNG),
+        _ => None,
+    }
+}
+
 /// 返回内置 steve_head.png 的 data URL
 /// 编译时已嵌入二进制，运行时永远可用
 fn steve_head_data_url(_app: &tauri::AppHandle) -> Option<String> {
@@ -277,8 +296,38 @@ pub async fn get_avatar(
     let username = username.unwrap_or_default();
     println!("[avatar] is_offline={}, server_url={}, username={}", is_offline, server_url, username);
 
-    // 1. 离线账号：直接返回内置 Steve 头像
+    // 1. 离线账号：返回所选默认皮肤（内置/自定义）的头部，未选时回退 Steve 头
     if is_offline && server_url.is_empty() {
+        // 离线账号：优先返回账号所选皮肤的头部（内置或自定义），跟随切换皮肤生效
+        let accounts = crate::storage::load_accounts();
+        let mut chosen_skin: Option<(Vec<u8>, bool)> = None; // (皮肤字节, 是否为完整皮)
+        if let Some(arr) = accounts.as_array() {
+            if let Some(acc) = arr
+                .iter()
+                .find(|a| crate::utils::get_str(a, "uuid").replace('-', "") == clean_uuid)
+            {
+                let skin_file = crate::utils::get_str(acc, "skinFile");
+                if !skin_file.is_empty() {
+                    if let Some(embedded) = builtin_skin_bytes(&skin_file) {
+                        chosen_skin = Some((embedded.to_vec(), true));
+                    } else {
+                        let custom_path =
+                            crate::storage::resolve_data_dir().join("img").join(&skin_file);
+                        if let Ok(bytes) = std::fs::read(&custom_path) {
+                            chosen_skin = Some((bytes, true));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((skin_bytes, _full)) = chosen_skin {
+            let data_url = crate::utils::bytes_to_data_url(&skin_bytes, "image/png");
+            return json!({
+                "success": true,
+                "data_url": data_url,
+                "is_full_skin": true
+            });
+        }
         if let Some(data_url) = steve_head_data_url(&app) {
             return json!({
                 "success": true,
@@ -447,14 +496,10 @@ pub async fn get_skin_texture(
             let skin_model = utils::get_str(acc, "skinModel");
 
             if !skin_file.is_empty() {
-                // 内置皮肤
-                if let Some(_) = get_builtin_skin_bytes(&skin_file) {
-                    // 内置皮肤直接读取资源文件
-                    let builtin_path = storage::resolve_data_dir().join("img").join(&skin_file);
-                    if let Ok(bytes) = std::fs::read(&builtin_path) {
-                        let data_url = utils::bytes_to_data_url(&bytes, "image/png");
-                        return SkinTextureResult { data_url, model: skin_model, success: true };
-                    }
+                // 内置皮肤：直接用编译期嵌入的整皮字节（不依赖 DATA_DIR/img）
+                if let Some(baked) = builtin_skin_bytes(&skin_file) {
+                    let data_url = utils::bytes_to_data_url(baked, "image/png");
+                    return SkinTextureResult { data_url, model: skin_model, success: true };
                 }
                 // 用户自定义皮肤
                 let custom_path = storage::resolve_data_dir().join("img").join(&skin_file);
@@ -520,15 +565,4 @@ pub async fn get_skin_texture(
 
     // 4. 全部失败
     SkinTextureResult { data_url: String::new(), model: "default".to_string(), success: false }
-}
-
-/// 获取内置皮肤字节（从 storage 读取）
-fn get_builtin_skin_bytes(skin_file: &str) -> Option<Vec<u8>> {
-    let builtin_skins = ["steve.png", "alex.png", "zombie.png", "enderman.png", "creeper.png"];
-    if builtin_skins.contains(&skin_file) {
-        let path = storage::resolve_data_dir().join("img").join(skin_file);
-        std::fs::read(&path).ok()
-    } else {
-        None
-    }
 }
