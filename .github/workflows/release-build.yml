@@ -57,13 +57,14 @@ jobs:
       - name: Prepare frontend assets
         run: node scripts/prepare-frontend.mjs
 
-      # 某些依赖在非 Windows 上仍传 -lkernel32/-lshell32（Windows dylib），但无实际符号引用。
-      # 放置空的 stub 归档使链接可解析这些 -l（-Wl,--as-needed 会丢弃未引用的），从而正常产出 bin。
-      - name: Provide empty Windows stub libs (macOS/Linux)
+      # 某些依赖在非 Windows 编译时仍引用少量 Win32 API，但运行时从不真正调用（cfg!(windows) 短路）。
+      # 编译仓库内 scripts/winstubs.c 提供 no-op 实现，使这些"死引用"在链接期得到解析。
+      - name: Provide Windows no-op stubs (macOS/Linux)
         run: |
           mkdir -p winstubs
-          printf '!<arch>\n' > winstubs/libkernel32.a
-          printf '!<arch>\n' > winstubs/libshell32.a
+          cc -c -O2 -o winstubs/stub.o scripts/winstubs.c
+          ar rcs winstubs/libkernel32.a winstubs/stub.o
+          cp winstubs/libkernel32.a winstubs/libshell32.a
           echo "RUSTFLAGS=-L $(pwd)/winstubs" >> "$GITHUB_ENV"
 
       - name: Build release binary
