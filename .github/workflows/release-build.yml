@@ -19,10 +19,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS 需两种架构：Intel 用 macos-13，Apple Silicon 用 macos-14
-          - { os: macos-13,  artifact: macos-x86_64,  label: macOS_x86_64 }
-          - { os: macos-14,  artifact: macos-aarch64, label: macOS_arm64 }
-          - { os: ubuntu-24.04, artifact: linux-x86_64, label: Linux_x86_64 }
+          # macOS 两种架构都在 macos-14 (ARM) 上构建：
+          #   原生 = Apple Silicon (aarch64)；交叉编译 x86_64-apple-darwin = Intel。
+          # macos-13 已被 GitHub 退役，不再作为 Intel runner 使用。
+          - { os: macos-14, target: x86_64-apple-darwin, label: macOS_x86_64 }
+          - { os: macos-14, target: "", label: macOS_arm64 }
+          - { os: ubuntu-24.04, target: "", label: Linux_x86_64 }
     runs-on: ${{ matrix.os }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -47,6 +49,7 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          if [ -n "${{ matrix.target }}" ]; then rustup target add "${{ matrix.target }}"; fi
           rustc --version
           cargo --version
 
@@ -62,20 +65,28 @@ jobs:
       - name: Provide Windows no-op stubs (macOS/Linux)
         run: |
           mkdir -p winstubs
-          cc -c -O2 -o winstubs/stub.o scripts/winstubs.c
+          ARCHFLAG=""
+          [ -n "${{ matrix.target }}" ] && ARCHFLAG="-arch x86_64"
+          cc -c -O2 $ARCHFLAG -o winstubs/stub.o scripts/winstubs.c
           ar rcs winstubs/libkernel32.a winstubs/stub.o
           cp winstubs/libkernel32.a winstubs/libshell32.a
           echo "RUSTFLAGS=-L $(pwd)/winstubs" >> "$GITHUB_ENV"
 
       - name: Build release binary
-        run: cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml
+        run: |
+          TARGET="${{ matrix.target }}"
+          ARGS=""
+          [ -n "$TARGET" ] && ARGS="--target $TARGET"
+          cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml $ARGS
+          # 记录二进制实际路径，供打包步骤使用
+          if [ -n "$TARGET" ]; then echo "BUILD_BIN=src-tauri/target/$TARGET/release/verse-tauri" >> "$GITHUB_ENV"; else echo "BUILD_BIN=src-tauri/target/release/verse-tauri" >> "$GITHUB_ENV"; fi
 
       - name: Package & upload installers
         run: |
           set -e
           VERSION="${GITHUB_REF_NAME#v}"
           TAG="${GITHUB_REF_NAME}"
-          BIN="src-tauri/target/release/verse-tauri"
+          BIN="$BUILD_BIN"
           chmod +x "$BIN"
           files=()
           if [ "$RUNNER_OS" = "Linux" ]; then
@@ -88,7 +99,7 @@ jobs:
             cp src-tauri/Info.plist "${APP}/Contents/Info.plist"
             # 拷贝打包进编译产物的图标（若有）
             [ -f src-tauri/icons/icon.icns ] && cp src-tauri/icons/icon.icns "${APP}/Contents/Resources/icon.icns"
-            ARCH="x86_64"; [ "${RUNNER_ARCH}" = "ARM64" ] && ARCH="aarch64"
+            ARCH="aarch64"; [ -n "${{ matrix.target }}" ] && ARCH="x86_64"
             zip -r "-y" "VersePC2-${VERSION}-macos-${ARCH}.zip" "${APP}"
             files+=( "VersePC2-${VERSION}-macos-${ARCH}.zip" )
           fi
