@@ -33,10 +33,9 @@
             }
         } catch (e) {}
 
-        // 启动时自动检查更新：仅 Windows 平台做自更新检查（自更新依赖 .bat+tasklist 替换 exe 且
-        // update.json 仅提供 win-x64 包）；macOS/Linux 上跳过，不弹"发现新版本"卡片。
+        // 启动时自动检查更新：三平台均支持自更新，统一检查。
         try {
-            if (api.updater.checkForUpdates && api.isWindows) {
+            if (api.updater.checkForUpdates) {
                 await api.updater.checkForUpdates();
             }
         } catch (e) {
