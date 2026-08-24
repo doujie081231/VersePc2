@@ -9,7 +9,10 @@ default-run = "verse-tauri"
 
 [lib]
 name = "verse_tauri_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# 桌面端只用 rlib 即可。cdylib/staticlib 仅用于 iOS/mobile 锚点；
+# 它们在 Linux/macOS 上会以 cdylib 强制链接所有依赖里的 #[link]（含 Windows 库），
+# 导致 "unable to find library -lkernel32" 的跨平台链接失败，故不再声明。
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
