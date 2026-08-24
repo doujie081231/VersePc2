@@ -58,8 +58,8 @@ console.log(`[build-portable] 编译产物: ${exeSrc}`);
 
 mkdirSync(portableDir, { recursive: true });
 
-const exeName = `VersePC2-${version}.exe`;
-copyFileSync(exeSrc, join(portableDir, exeName));
+// 打包产物统一为固定名 VersePC2.exe，不带版本后缀；
+// 升级时更新器把新包覆盖到正在运行的 exe 文件名上，使安装后的 exe 始终是 VersePC2.exe。
 copyFileSync(exeSrc, join(portableDir, 'VersePC2.exe'));
 
 // 5. 复制运行所需的配套 DLL（GNU/MinGW 构建动态链接 WebView2Loader.dll，缺失会导致无法启动）
@@ -80,5 +80,4 @@ console.log(`[build-portable] 已复制配套 DLL: ${dllSrc}`);
 
 console.log(`\n[build-portable] 便携版打包完成！`);
 console.log(`[build-portable] 输出目录: ${portableDir}`);
-console.log(`[build-portable] 版本文件: ${exeName}`);
-console.log(`[build-portable] 最新版副本: VersePC2.exe`);
+console.log(`[build-portable] 产物: VersePC2.exe`);
