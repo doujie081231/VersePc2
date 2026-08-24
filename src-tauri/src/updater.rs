@@ -353,6 +353,13 @@ pub async fn updater_check_for_updates(app: AppHandle) -> Result<Value, String> 
         "releaseNotes": release.body,
     }));
 
+    // 自动更新：检测到新版本即后台自动下载，无需用户点击。下载完成后在用户关闭程序时自动替换。
+    let app2 = app.clone();
+    let rel2 = release.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = download_update_inner(&app2, &rel2).await;
+    });
+
     Ok(json!({ "available": true, "version": release.tag_ver }))
 }
 
@@ -549,9 +556,21 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
         guard.as_ref().map(|s| s.release.clone())
     };
     let release = release.ok_or("没有可用的更新信息，请先检查更新")?;
-    let asset = release.asset.clone().ok_or("未找到适用于当前平台的安装包")?;
+    match download_update_inner(&app, &release).await {
+        Ok(()) => Ok(json!({ "success": true })),
+        Err(e) => Ok(json!({ "success": false, "error": e })),
+    }
+}
 
-    emit(&app, "start-download", &json!({}));
+/// 下载更新包本体（幂等：目标文件已存在且校验通过则跳过，前端会收到进度事件）。
+/// 手动「下载」按钮与"检查到更新即自动下载"共用此实现。
+async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Result<(), String> {
+    let asset = release
+        .asset
+        .clone()
+        .ok_or("未找到适用于当前平台的安装包")?;
+
+    emit(app, "start-download", &json!({}));
 
     let data_dir = crate::storage::resolve_data_dir();
     let tmp_dir = data_dir.join("updates");
@@ -566,7 +585,7 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
     };
     let target = tmp_dir.join(file_name);
 
-    match download_with_fallback(&app, &asset.url, &target, asset.size, asset.sha256.as_deref()).await {
+    match download_with_fallback(app, &asset.url, &target, asset.size, asset.sha256.as_deref()).await {
         Ok(()) => {
             {
                 let mut guard = UPDATE_STATE.lock().unwrap();
@@ -574,15 +593,15 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
                     s.downloaded_path = Some(target);
                 }
             }
-            emit(&app, "update-downloaded", &json!({
+            emit(app, "update-downloaded", &json!({
                 "version": release.tag_ver,
                 "releaseName": release.tag,
             }));
-            Ok(json!({ "success": true }))
+            Ok(())
         }
         Err(e) => {
-            emit(&app, "update-error", &json!({ "message": e }));
-            Ok(json!({ "success": false, "error": e }))
+            emit(app, "update-error", &json!({ "message": e }));
+            Err(e)
         }
     }
 }
@@ -605,9 +624,10 @@ fn install_and_restart(app: &AppHandle, new_pkg: &Path) -> Result<(), String> {
         let script = dir.join("_versepc_update.bat");
         let n = new_pkg.to_string_lossy().replace('/', "\\");
         let c = current_exe.to_string_lossy().replace('/', "\\");
-        // 等待当前 exe 退出 → 替换 exe → 启动新 exe → 删除脚本
+        // 等待当前实例退出（约8秒）→ 若后台残留则强制结束 → 替换 exe → 启动新 exe → 删除脚本
+        // 说明：关窗后进程可能仍在后台占用 exe（导致 move 改名失败），必须兜底 taskkill 强制结束再替换
         let content = format!(
-            "@echo off\r\nchcp 65001 >nul\r\n:wait\r\ntasklist /fi \"imagename eq {exe}\" | find /i \"{exe}\" >nul\r\nif not errorlevel 1 (\r\n  timeout /t 1 /nobreak >nul\r\n  goto wait\r\n)\r\nmove /y \"{new}\" \"{cur}\" >nul\r\nif errorlevel 1 goto done\r\nstart \"\" \"{cur}\"\r\n:done\r\ndel /q \"%~f0\"\r\n",
+            "@echo off\r\nchcp 65001 >nul\r\nset /a tries=0\r\n:wait\r\ntasklist /fi \"imagename eq {exe}\" 2>nul | find /i \"{exe}\" >nul\r\nif errorlevel 1 goto replace\r\nset /a tries+=1\r\nif %tries% geq 8 goto kill\r\ntimeout /t 1 /nobreak >nul\r\ngoto wait\r\n:kill\r\ntaskkill /f /im \"{exe}\" >nul 2>nul\r\ntimeout /t 2 /nobreak >nul\r\n:replace\r\nmove /y \"{new}\" \"{cur}\" >nul\r\nif errorlevel 1 (\r\n  taskkill /f /im \"{exe}\" >nul 2>nul\r\n  timeout /t 2 /nobreak >nul\r\n  move /y \"{new}\" \"{cur}\" >nul\r\n)\r\nif errorlevel 1 goto done\r\nstart \"\" \"{cur}\"\r\n:done\r\ndel /q \"%~f0\"\r\n",
             exe = exe_name, new = n, cur = c
         );
         fs::write(&script, content).map_err(|e| format!("无法写入更新脚本: {}", e))?;
@@ -677,6 +697,31 @@ fn install_and_restart(app: &AppHandle, new_pkg: &Path) -> Result<(), String> {
         let _ = (exe_name, dir);
         Err("当前平台暂不支持自动更新".to_string())
     }
+}
+
+/// 是否存在已下载完成、等待替换生效的更新包
+pub fn pending_downloaded_path() -> Option<PathBuf> {
+    UPDATE_STATE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|s| s.downloaded_path.clone())
+}
+
+/// 用户关闭程序时调用：若已有下载完成的更新包，写入一次性"已更新"提示后执行替换退出。
+/// 返回 true 表示已进入更新替换流程，调用方应跳过正常的关闭动画/关闭逻辑（进程由安装脚本负责退出并重启）。
+pub fn auto_install_on_close(app: &tauri::AppHandle) -> bool {
+    let Some(p) = pending_downloaded_path() else {
+        return false;
+    };
+    if !p.exists() {
+        return false;
+    }
+    if let Some(s) = UPDATE_STATE.lock().unwrap().as_ref() {
+        write_pending_notice(&s.release.tag_ver, &s.release.body);
+    }
+    let _ = install_and_restart(app, &p);
+    true
 }
 
 #[tauri::command]
