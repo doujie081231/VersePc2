@@ -58,7 +58,7 @@ jobs:
         run: node scripts/prepare-frontend.mjs
 
       - name: Build release binary
-        run: cargo build --release --bin verse-tauri
+        run: cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml
 
       - name: Package & upload installers
         run: |
