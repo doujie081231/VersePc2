@@ -653,16 +653,16 @@ fn install_and_restart(app: &AppHandle, new_pkg: &Path) -> Result<(), String> {
             .unwrap_or_else(|| dir.clone());
         let script = parent.join("_versepc_update.sh");
         let zip = new_pkg.to_string_lossy();
-        let app = app_bundle.to_string_lossy();
+        let ab = app_bundle.to_string_lossy();
         let content = format!(
             "#!/bin/sh\n\
-             while pgrep -f \"{app}/Contents/MacOS/VersePC2\" >/dev/null 2>&1; do sleep 1; done\n\
+             while pgrep -f \"{ab}/Contents/MacOS/VersePC2\" >/dev/null 2>&1; do sleep 1; done\n\
              TMP=\"$(mktemp -d)\"\n\
              cd \"$TMP\" && unzip -o -q \"{zip}\" || exit 1\n\
-             rm -rf \"{app}\"\n\
-             mv \"$TMP/VersePC2.app\" \"{app}\"\n\
-             chmod +x \"{app}/Contents/MacOS/VersePC2\"\n\
-             open \"{app}\"\n\
+             rm -rf \"{ab}\"\n\
+             mv \"$TMP/VersePC2.app\" \"{ab}\"\n\
+             chmod +x \"{ab}/Contents/MacOS/VersePC2\"\n\
+             open \"{ab}\"\n\
              rm -rf \"$TMP\"\n\
              rm -f \"$0\"\n"
         );
