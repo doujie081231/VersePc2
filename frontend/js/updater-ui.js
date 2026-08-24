@@ -150,7 +150,7 @@
                 downloadBtn.style.display = '';
                 installBtn.style.display = 'none';
                 showReleaseNotes(data.releaseNotes);
-                showUpdatePopup(data);
+                // 自动更新：发现新版本后由后端自动下载，不再弹出"发现新版本"弹窗卡片。
                 addUpdateDots();
                 break;
 
