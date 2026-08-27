@@ -168,12 +168,18 @@ async function handleLaunch() {
       if (depCheck.mainJar.ok) {
         setLaunchStep('files-check', 'success', depCheck.mainJar.message);
       } else {
-        setLaunchStep('files-check', 'error', depCheck.mainJar.message);
-        showLaunchError(depCheck.mainJar.message);
-        launchBtn.disabled = false;
-        homeLaunchBtn.disabled = false;
-        window._versepc_launching = false;
-        return;
+        // 主 JAR 缺失但有可下载补全项时，继续走后续的自动补全流程（与库/Forge核心一致），而不是直接报错
+        const mainJarDownloadable = (depCheck.missingFiles || []).some(f => f.kind === 'main_jar' && f.url);
+        if (mainJarDownloadable) {
+          setLaunchStep('files-check', 'warning', `${depCheck.mainJar.message}，正在自动补全...`);
+        } else {
+          setLaunchStep('files-check', 'error', depCheck.mainJar.message);
+          showLaunchError(depCheck.mainJar.message);
+          launchBtn.disabled = false;
+          homeLaunchBtn.disabled = false;
+          window._versepc_launching = false;
+          return;
+        }
       }
     } else {
       setLaunchStep('files-check', 'success', '游戏文件完整');
