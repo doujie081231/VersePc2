@@ -237,7 +237,7 @@ const PageSettingsOther = {
             <div class="card">
               <h3>关于 VersePC2</h3>
               <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;" id="updater-version-info">当前版本：加载中...</p>
-              <div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-secondary,rgba(255,255,255,0.03));border:1px solid var(--border-color,rgba(255,255,255,0.06));border-radius:8px;">
+              <div id="updater-accel-info" style="margin-bottom:12px;padding:10px 14px;background:var(--bg-secondary,rgba(255,255,255,0.03));border:1px solid var(--border-color,rgba(255,255,255,0.06));border-radius:8px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                   <span style="font-size:13px;color:var(--text-primary);">更新加速</span>
                   <span style="font-size:11px;padding:1px 8px;background:rgba(76,175,80,0.15);color:#4caf50;border-radius:10px;">多源自动</span>
