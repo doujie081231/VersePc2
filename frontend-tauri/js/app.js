@@ -76,14 +76,26 @@ let modSelectedVersions = new Map();
 
 
 
+/*
+ * 平台功能显隐：仅在 Windows 可用/不生效的入口用 .win-only 标记隐藏。
+ * 自更新在三平台均可用（Windows .bat、macOS .app 替换、Linux 二进制替换），
+ * 因此 updater 相关区块不再隐藏，仅隐藏真正的 Windows 专属功能。
+ */
+function hideWinOnlyFeatures() {
+  document.querySelectorAll('.win-only').forEach((el) => (el.style.display = 'none'));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   init();
   setTimeout(initSettingsPages, 500);
   renderSponsors();
   // 启动时不再自动弹出"更新公告"，新版本提示由更新检测单独处理，避免同时出现两个弹窗
 
-  if (window.electronAPI?.platform && window.electronAPI.platform !== 'win32') {
-    document.querySelectorAll('.win-only').forEach((el) => (el.style.display = 'none'));
+  // 非 Windows 平台隐藏仅 Windows 可用/不生效的功能入口
+  if (window.electronAPI && !window.electronAPI.isWindows) {
+    hideWinOnlyFeatures();
+    // 设置页模板延迟插入，稍后再补一次，确保自更新等入口被隐藏
+    setTimeout(hideWinOnlyFeatures, 700);
   }
 });
 
