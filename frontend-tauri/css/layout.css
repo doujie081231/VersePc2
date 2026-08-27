@@ -1213,59 +1213,6 @@ body.sidebar-collapsed .content-area {
 .title-bar { display: none !important; }
 
 /* ============================================================
-   实验性页面蒙版：盖住底层功能，仅显示调整提示
-   ============================================================ */
-.explore-mask {
-    position: absolute;
-    inset: 0;
-    z-index: 20;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.38);
-    backdrop-filter: blur(6px) saturate(1.1);
-    -webkit-backdrop-filter: blur(6px) saturate(1.1);
-}
-.explore-mask-card {
-    text-align: center;
-    color: #fff;
-    padding: 28px 40px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.25) inset,
-        0 20px 50px rgba(0, 0, 0, 0.35);
-    max-width: 420px;
-}
-.explore-mask-icon {
-    width: 52px;
-    height: 52px;
-    margin: 0 auto 14px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-.explore-mask-icon svg {
-    width: 28px;
-    height: 28px;
-}
-.explore-mask-card h3 {
-    margin: 0 0 8px;
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 1.5;
-}
-.explore-mask-card p {
-    margin: 0;
-    font-size: 13px;
-    opacity: 0.85;
-}
-
-/* ============================================================
    账户页面重做：左添加按钮 + 中间主选 + 右堆叠
    ============================================================ */
 .account-list-hidden { display: none !important; }
