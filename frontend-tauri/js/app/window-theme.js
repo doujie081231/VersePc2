@@ -87,7 +87,7 @@ function setupWindowControls() {
   const windowModeCheckbox = document.getElementById('setting-window-mode');
   const exitLauncherBtn = document.getElementById('exit-launcher-btn');
 
-  const isMac = window.electronAPI?.platform === 'darwin';
+  const isMac = window.electronAPI?.isMac === true;
   if (isMac) {
     document.body.classList.add('is-mac');
   }
@@ -228,7 +228,7 @@ function updateWindowButtons() {
   const maximizeBtn = document.getElementById('win-btn-maximize');
   const restoreBtn = document.getElementById('win-btn-restore');
 
-  if (!controls || window.electronAPI?.platform === 'darwin') return;
+  if (!controls || window.electronAPI?.isMac === true) return;
 
   controls.style.display = 'flex';
   if (isWindowMode) {
