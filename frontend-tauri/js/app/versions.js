@@ -452,7 +452,7 @@ async function navigateToPage(pageName) {
     return;
   }
 
-  if (pageName === 'explore' || pageName === 'private-server' || pageName === 'server-host') {
+  if (pageName === 'plugins' || pageName === 'private-server' || pageName === 'server-host') {
     if (currentPage) {
       currentPage.classList.remove('active');
       currentPage.style.animation = '';
@@ -629,16 +629,6 @@ async function navigateToPage(pageName) {
     setTimeout(() => resetCarouselPosition(), 350);
     setTimeout(() => resetCarouselPosition(), 700);
   }
-}
-
-function acceptExperimentalDisclaimer() {
-  try { localStorage.setItem('versepc_disclaimer_accepted', '1'); } catch (e) {}
-  const disclaimerModal = document.getElementById('experimental-disclaimer-modal');
-  if (disclaimerModal) {
-    disclaimerModal.classList.remove('modal-visible');
-    disclaimerModal.style.display = 'none';
-  }
-  document.getElementById('page-explore').classList.add('active');
 }
 
 function goBackFromDetail() {
