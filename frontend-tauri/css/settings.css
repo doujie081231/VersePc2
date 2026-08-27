@@ -476,7 +476,7 @@
     min-height: 0;
 }
 
-#page-explore.active {
+#page-plugins.active {
     display: flex;
     flex-direction: column;
     flex: 1;
