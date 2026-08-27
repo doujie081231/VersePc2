@@ -256,15 +256,29 @@
 
   // ============== 系统工具 ==============
 
-  var platform;
-  try {
-    platform = navigator.platform || 'win32';
-  } catch (e) {
-    platform = 'win32';
+  // 规范化平台命名：统一为 'windows' / 'macos' / 'linux' / 'ios' / 'android' / 'unknown'。
+  // navigator.platform 由 WebView2 / WebKit 内核决定，Win 上为 "Win32"、macOS 为 "MacIntel"，
+  // 与 Tauri 运行时名（windows/macos/linux）不一致，必须归一化后再给前端判断。
+  function _detectPlatform() {
+    var ua = (navigator.userAgent || '').toLowerCase();
+    var p = (navigator.platform || '').toLowerCase();
+    if (ua.indexOf('mac os') >= 0 || ua.indexOf('macintosh') >= 0 || p.indexOf('mac') >= 0) return 'macos';
+    if (window.navigator.platform && /iphone|ipad|ipod/i.test(window.navigator.platform)) return 'ios';
+    if (ua.indexOf('android') >= 0) return 'android';
+    if (ua.indexOf('linux') >= 0 || p.indexOf('linux') >= 0) return 'linux';
+    if (ua.indexOf('win') >= 0 || p.indexOf('win') >= 0) return 'windows';
+    return 'unknown';
   }
 
+  var _platformKey = _detectPlatform();
+
   var system = {
-    platform: platform,
+    // 归一化平台键：windows / macos / linux / ios / android / unknown
+    platform: _platformKey,
+    // 便捷布尔判断，供前端按平台隐藏不可用功能入口
+    isWindows: _platformKey === 'windows',
+    isMac: _platformKey === 'macos',
+    isLinux: _platformKey === 'linux',
     memoryOptimize: function () {
       // Tauri 中通过 api_proxy 调用 POST /api/memory-optimize 执行内存优化
       return invoke('api_proxy', {
@@ -582,6 +596,9 @@
 
     // 系统
     platform: system.platform,
+    isWindows: system.isWindows,
+    isMac: system.isMac,
+    isLinux: system.isLinux,
     memoryOptimize: system.memoryOptimize,
     openExternal: system.openExternal,
     getDefaultModPath: system.getDefaultModPath,
