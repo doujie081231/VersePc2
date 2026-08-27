@@ -38,6 +38,70 @@ async function _tauriFetch(url, options = {}) {
   };
 }
 
+/**
+ * 从 /api/ 接口拉取图片 dataUrl。
+ * Tauri 下 `<img src="/api/...">` 没有本地 HTTP 服务器，无法直接请求；
+ * 必须通过 _tauriFetch 走 invoke 通道，把后端返回的 dataUrl 设为 img.src。
+ * 非 Tauri / 浏览器环境回退为原 URL。
+ */
+async function _fetchDataUrl(url) {
+  try {
+    const resp = await _tauriFetch(url);
+    const data = await resp.json();
+    if (data && data.success && data.dataUrl) return data.dataUrl;
+    if (data && data.data_url) return data.data_url;
+  } catch (e) {}
+  return url;
+}
+
+/**
+ * 皮肤变更后刷新 3D 预览。
+ * Tauri 下 /api/skin-texture 不可达，优先用 get_skin_texture 命令拿 dataUrl 再渲染，
+ * 避免 loadSkin('/api/...') 抛错导致上层误报「更换/上传失败」。
+ */
+async function _reloadSkinViewer() {
+  if (!_currentDetailAccount || !_skinViewer) return;
+  const acc = _currentDetailAccount;
+  const accUuid = (acc.uuid || '').replace(/-/g, '');
+  try {
+    if (window.__TAURI__ && window.__TAURI__.core) {
+      const result = await window.__TAURI__.core.invoke('get_skin_texture', {
+        uuid: accUuid,
+        serverUrl: acc.serverUrl || undefined,
+        username: acc.username || undefined
+      });
+      if (result && result.success && result.data_url) {
+        const model = (result.model === 'slim' || result.model === 'default')
+          ? result.model
+          : (acc._resolvedSkinModel || 'default');
+        await _skinViewer.loadSkin(result.data_url, { model });
+        acc._resolvedSkinModel = model;
+        return;
+      }
+    }
+  } catch (e) {}
+  // 非 Tauri 或 invoke 失败：HTTP 回退（可能失败，静默）
+  try {
+    if (accUuid) {
+      const skinUrl = `/api/skin-texture?uuid=${accUuid}&_=${Date.now()}`;
+      await _skinViewer.loadSkin(skinUrl);
+    }
+  } catch (e) {}
+}
+
+/** 让账号的头像缓存失效，强制按最新皮肤重新拉取头像 */
+function _invalidateAvatarCache(acc) {
+  if (!acc) return;
+  const accUuid = (acc.uuid || '').replace(/-/g, '');
+  const offline = (acc.type === 'offline' && !acc.serverUrl) ? '1' : '0';
+  const prefix = `${offline}|${accUuid}|${acc.serverUrl || ''}|${acc.username || ''}`;
+  try {
+    _avatarMemCache.forEach((_v, key) => {
+      if (key === prefix || key.startsWith(prefix + '|')) _avatarMemCache.delete(key);
+    });
+  } catch (e) {}
+}
+
 function accUpdateHeroBadge(statusType, text) {
   const badge = document.getElementById('acc-hero-badge');
   if (!badge) return;
@@ -1220,16 +1284,8 @@ async function detailRefreshSkin() {
   const acc = _currentDetailAccount;
   const accUuid = (acc.uuid || '').replace(/-/g, '');
   if (!accUuid) { showToast('无UUID', 'error'); return; }
-  const skinUrl = `/api/skin-texture?uuid=${accUuid}${acc.serverUrl ? '&serverUrl=' + encodeURIComponent(acc.serverUrl) : ''}${acc.username ? '&username=' + encodeURIComponent(acc.username) : ''}&_=${Date.now()}`;
   try {
-    let skinModel = ((_currentDetailAccount?.skinModel || '').toLowerCase() === 'slim') ? 'slim' : 'default';
-    try {
-      const probe = await fetch(skinUrl.replace(/&_=\d+/, ''), { method: 'HEAD' });
-      const headerModel = probe.headers.get('X-Skin-Model');
-      if (headerModel === 'slim' || headerModel === 'default') skinModel = headerModel;
-    } catch (e) {}
-    _currentDetailAccount._resolvedSkinModel = skinModel;
-    await _skinViewer.loadSkin(skinUrl, { model: skinModel });
+    await _reloadSkinViewer();
     _refreshAccountAvatars();
     showToast('皮肤已刷新', 'success');
   } catch (e) {
@@ -1327,7 +1383,8 @@ async function loadSkinSelector(acc) {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8);
           };
-          img.src = `/api/ms-skins/file?accountId=${encodeURIComponent(acc.id)}&skinId=${encodeURIComponent(skin.id)}&_=${Date.now()}`;
+          const msFileUrl = `/api/ms-skins/file?accountId=${encodeURIComponent(acc.id)}&skinId=${encodeURIComponent(skin.id)}&_=${Date.now()}`;
+          _fetchDataUrl(msFileUrl).then(dUrl => { img.src = dUrl; });
           // 长按或右键删除
           div.oncontextmenu = (e) => { e.preventDefault(); deleteMsSkin(skin.id, skin.name); };
           container.appendChild(div);
@@ -1372,12 +1429,14 @@ async function loadSkinSelector(acc) {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8);
       };
+      let thumbUrl;
       if (skin.id === 'custom') {
         const accUuid = (acc.uuid || '').replace(/-/g, '');
-        img.src = accUuid ? `/api/skin-head?uuid=${accUuid}&file=${encodeURIComponent(skin.file)}` : `/api/skin-head?id=steve`;
+        thumbUrl = accUuid ? `/api/skin-head?uuid=${accUuid}&file=${encodeURIComponent(skin.file)}` : `/api/skin-head?id=steve`;
       } else {
-        img.src = `/api/skin-head?id=${skin.id}`;
+        thumbUrl = `/api/skin-head?id=${skin.id}`;
       }
+      _fetchDataUrl(thumbUrl).then(dUrl => { img.src = dUrl; });
       container.appendChild(div);
     });
   } catch (e) {}
@@ -1388,11 +1447,11 @@ async function selectSkin(skinId, skinFile) {
   try {
     if (skinId === 'custom') {
       _currentDetailAccount.skinFile = skinFile;
-      const accUuid = (_currentDetailAccount.uuid || '').replace(/-/g, '');
-      const skinUrl = `/api/skin-texture?uuid=${accUuid}&_=${Date.now()}`;
-      if (_skinViewer) await _skinViewer.loadSkin(skinUrl);
+      await _reloadSkinViewer();
       loadSkinSelector(_currentDetailAccount);
+      _invalidateAvatarCache(_currentDetailAccount);
       _refreshAccountAvatars();
+      loadAccounts();
       return;
     }
     const resp = await _tauriFetch('/api/set-account-skin', {
@@ -1403,13 +1462,11 @@ async function selectSkin(skinId, skinFile) {
     const result = await resp.json();
     if (!result.success) { showToast('更换失败', 'error'); return; }
     _currentDetailAccount.skinFile = skinFile;
-    const accUuid = (_currentDetailAccount.uuid || '').replace(/-/g, '');
-    const skinUrl = `/api/skin-texture?uuid=${accUuid}&_=${Date.now()}`;
-    if (_skinViewer) {
-      await _skinViewer.loadSkin(skinUrl);
-    }
+    await _reloadSkinViewer();
     loadSkinSelector(_currentDetailAccount);
+    _invalidateAvatarCache(_currentDetailAccount);
     _refreshAccountAvatars();
+    loadAccounts();
     showToast('皮肤已更换', 'success');
   } catch (e) {
     showToast('更换失败', 'error');
@@ -1480,11 +1537,11 @@ async function handleSkinUpload(input) {
     try { result = JSON.parse(text); } catch (e) { showToast('上传失败: 服务器返回异常', 'error'); return; }
     if (result.success) {
       _currentDetailAccount.skinFile = result.fileName;
-      const accUuid = (_currentDetailAccount.uuid || '').replace(/-/g, '');
-      const skinUrl = `/api/skin-texture?uuid=${accUuid}&_=${Date.now()}`;
-      if (_skinViewer) await _skinViewer.loadSkin(skinUrl);
+      await _reloadSkinViewer();
       loadSkinSelector(_currentDetailAccount);
+      _invalidateAvatarCache(_currentDetailAccount);
       _refreshAccountAvatars();
+      loadAccounts();
       showToast('皮肤已导入', 'success');
     } else {
       showToast(result.error || '上传失败', 'error');
@@ -1513,10 +1570,10 @@ async function applyMsSkin(skinId) {
     });
     const result = await resp.json();
     if (result.success) {
-      const accUuid = (_currentDetailAccount.uuid || '').replace(/-/g, '');
-      const skinUrl = `/api/skin-texture?uuid=${accUuid}&_=${Date.now()}`;
-      if (_skinViewer) await _skinViewer.loadSkin(skinUrl);
+      await _reloadSkinViewer();
+      _invalidateAvatarCache(_currentDetailAccount);
       _refreshAccountAvatars();
+      loadAccounts();
       showToast('皮肤已应用到账户', 'success');
     } else if (result.needRelogin) {
       showToast('登录已过期，请重新登录微软账户', 'error');
