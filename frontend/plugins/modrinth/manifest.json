@@ -1,0 +1,76 @@
+{
+  "id": "modrinth",
+  "name": "Modrinth Mod 搜索",
+  "version": "1.0.0",
+  "description": "搜索 Modrinth 平台上的 Mod、资源包和数据包",
+  "enabled": true,
+  "tools": [
+    {
+      "name": "search_modrinth",
+      "displayName": "搜索 Modrinth",
+      "description": "Search mods, resource packs, and datapacks on Modrinth. Returns project name, description, downloads, version, and install command.",
+      "risk": "safe",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search keywords (e.g. 'sodium', 'shader', 'minimap')"
+          },
+          "project_type": {
+            "type": "string",
+            "description": "Project type filter: 'mod', 'resourcepack', 'datapack', or 'shader'. Default: 'mod'"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Number of results to return (1-10). Default: 5"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_modrinth_info",
+      "displayName": "获取 Mod 详情",
+      "description": "Get detailed information about a Modrinth project by its slug or ID, including available versions and dependencies.",
+      "risk": "safe",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id_or_slug": {
+            "type": "string",
+            "description": "The Modrinth project slug or ID (e.g. 'sodium', 'iris-shaders')"
+          }
+        },
+        "required": ["project_id_or_slug"]
+      }
+    },
+    {
+      "name": "get_modrinth_versions",
+      "displayName": "获取 Mod 版本",
+      "description": "Get available versions of a Modrinth project, filtered by Minecraft version and loader.",
+      "risk": "safe",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id_or_slug": {
+            "type": "string",
+            "description": "The Modrinth project slug or ID"
+          },
+          "mc_version": {
+            "type": "string",
+            "description": "Filter by Minecraft version (e.g. '1.21', '1.20.4')"
+          },
+          "loader": {
+            "type": "string",
+            "description": "Filter by mod loader: 'fabric', 'forge', 'neoforge', 'quilt', 'bukkit', etc."
+          }
+        },
+        "required": ["project_id_or_slug"]
+      }
+    }
+  ],
+  "promptExtensions": [
+    "You have access to Modrinth plugins for searching Minecraft mods. Available tools:\n- search_modrinth: Search for mods on Modrinth by keywords\n- get_modrinth_info: Get detailed info about a specific mod\n- get_modrinth_versions: Get available versions for a mod\n\nWhen users ask about finding, searching, or installing mods, use these tools to search Modrinth and provide results with download/install guidance."
+  ]
+}

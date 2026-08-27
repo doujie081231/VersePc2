@@ -1,0 +1,3392 @@
+﻿cargo : [1m[92m    Checking[0m verse-tauri v0.1.0 (E:\VersePC\verse框架替换项目\src-tauri)
+At line:15 char:5600
++ ... '; $env:RUST_MIN_STACK="33554432"; cargo check --offline 2>&1 | Tee-O ...
++                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([1m[92m    Ch...替换项目\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[1m[93mwarning[0m[1m[97m: unused import: `Listener`[0m
+  [1m[96m--> [0msrc\api\resources.rs:20:24
+   [1m[96m|[0m
+[1m[96m20[0m [1m[96m|[0m use tauri::{AppHandle, Listener};
+   [1m[96m|[0m                        [1m[93m^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: unused import: `DeviceCodeResponse`[0m
+  [1m[96m--> [0msrc\auth\mod.rs:23:40
+   [1m[96m|[0m
+[1m[96m23[0m [1m[96m|[0m use self::microsoft::{MsTokenResponse, DeviceCodeResponse};
+   [1m[96m|[0m                                        [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `RawLogFile`[0m
+  [1m[96m--> [0msrc\crash_analyzer\mod.rs:24:65
+   [1m[96m|[0m
+[1m[96m24[0m [1m[96m|[0m use self::file_collector::{collect, import_file, CollectParams, RawLogFile};
+   [1m[96m|[0m                                                                 [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `PreparedLogs`[0m
+  [1m[96m--> [0msrc\crash_analyzer\mod.rs:25:30
+   [1m[96m|[0m
+[1m[96m25[0m [1m[96m|[0m use self::prepare::{prepare, PreparedLogs};
+   [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `compute_sha1`[0m
+  [1m[96m--> [0msrc\download\mod.rs:10:40
+   [1m[96m|[0m
+[1m[96m10[0m [1m[96m|[0m pub use single::{download_with_mirror, compute_sha1, DownloadProgress, ProgressCb};
+   [1m[96m|[0m                                        [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `state::*`[0m
+  [1m[96m--> [0msrc\easytier\mod.rs:15:9
+   [1m[96m|[0m
+[1m[96m15[0m [1m[96m|[0m pub use state::*;
+   [1m[96m|[0m         [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `json`[0m
+ [1m[96m--> [0msrc\install\mod.rs:9:18
+  [1m[96m|[0m
+[1m[96m9[0m [1m[96m|[0m use serde_json::{json, Value};
+  [1m[96m|[0m                  [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::io::Read`[0m
+  [1m[96m--> [0msrc\java.rs:15:5
+   [1m[96m|[0m
+[1m[96m15[0m [1m[96m|[0m use std::io::Read;
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `json`[0m
+  [1m[96m--> [0msrc\launch\args_builder.rs:12:18
+   [1m[96m|[0m
+[1m[96m12[0m [1m[96m|[0m use serde_json::{json, Value};
+   [1m[96m|[0m                  [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `PathBuf`[0m
+ [1m[96m--> [0msrc\launch\exit_code.rs:4:23
+  [1m[96m|[0m
+[1m[96m4[0m [1m[96m|[0m use std::path::{Path, PathBuf};
+  [1m[96m|[0m                       [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused imports: `DepCheckResult` and `check_dependencies`[0m
+  [1m[96m--> [0msrc\launch\mod.rs:14:21
+   [1m[96m|[0m
+[1m[96m14[0m [1m[96m|[0m pub use dep_check::{check_dependencies, DepCheckResult};
+   [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused imports: `ExitAnalysis` and `analyze_exit_code`[0m
+  [1m[96m--> [0msrc\launch\mod.rs:15:21
+   [1m[96m|[0m
+[1m[96m15[0m [1m[96m|[0m pub use exit_code::{analyze_exit_code, ExitAnalysis};
+   [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused imports: `GameInstance`, `add_instance`, `get_all_status`, `get_logs`, `remove_in
+stance`, and `update_instance`[0m
+  [1m[96m--> [0msrc\launch\mod.rs:17:5
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m     add_instance, get_all_status, get_logs, remove_instance, stop_all, update_instance,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^[0m  [1m[93m^^^^^^^^^
+^^^^^^[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+[1m[96m18[0m [1m[96m|[0m     GameInstance,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused imports: `JavaCandidate` and `should_skip_system_scan`[0m
+  [1m[96m--> [0msrc\launch\mod.rs:20:45
+   [1m[96m|[0m
+[1m[96m20[0m [1m[96m|[0m pub use java_scan::{get_java_version_range, should_skip_system_scan, JavaCandidate};
+   [1m[96m|[0m                                             [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^
+^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused imports: `DEFAULT_LEGACY_MAX_MEMORY`, `MemoryMode`, `resolve_max_memory`, `resolv
+e_memory_mode`, `resolve_min_memory`, and `should_run_memory_optimize`[0m
+  [1m[96m--> [0msrc\launch\mod.rs:22:5
+   [1m[96m|[0m
+[1m[96m22[0m [1m[96m|[0m     resolve_max_memory, resolve_memory_mode, resolve_min_memory, should_run_memory_optim
+ize,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^^^^^^^^^[0
+m  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m23[0m [1m[96m|[0m     DEFAULT_LEGACY_MAX_MEMORY, MemoryMode,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m  [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `list_running_games`[0m
+  [1m[96m--> [0msrc\launch\mod.rs:25:49
+   [1m[96m|[0m
+[1m[96m25[0m [1m[96m|[0m pub use process_manager::{do_launch, kill_game, list_running_games};
+   [1m[96m|[0m                                                 [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `Emitter`[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:17:24
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m use tauri::{AppHandle, Emitter};
+   [1m[96m|[0m                        [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `Emitter`[0m
+  [1m[96m--> [0msrc\modpack\mrpack_native.rs:18:24
+   [1m[96m|[0m
+[1m[96m18[0m [1m[96m|[0m use tauri::{AppHandle, Emitter};
+   [1m[96m|[0m                        [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `parking_lot::Mutex as PMutex`[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:14:5
+   [1m[96m|[0m
+[1m[96m14[0m [1m[96m|[0m use parking_lot::Mutex as PMutex;
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `SharedInstanceUnavailableReason`[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:20:46
+   [1m[96m|[0m
+[1m[96m20[0m [1m[96m|[0m use super::error::{Error, ErrorKind, Result, SharedInstanceUnavailableReason};
+   [1m[96m|[0m                                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `super::super::super::*`[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:814:17
+    [1m[96m|[0m
+[1m[96m814[0m [1m[96m|[0m             use super::super::super::*;
+    [1m[96m|[0m                 [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `super::error::SharedInstanceUnavailableReason as _SharedInstanceUnavaila
+bleReason`[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:943:9
+    [1m[96m|[0m
+[1m[96m943[0m [1m[96m|[0m pub use super::error::SharedInstanceUnavailableReason as _SharedInstanceUnavailableReas
+on;
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[
+0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `Error as TheseusError`[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:21:27
+   [1m[96m|[0m
+[1m[96m21[0m [1m[96m|[0m use super::error::{Error, Error as TheseusError, ErrorKind, Result};
+   [1m[96m|[0m                           [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused imports: `ErrorKind`, `Error`, `LabrinthError`, and `Result`[0m
+  [1m[96m--> [0msrc\modpack\theseus\mod.rs:48:17
+   [1m[96m|[0m
+[1m[96m48[0m [1m[96m|[0m pub use error::{Error, ErrorKind, LabrinthError, Result};
+   [1m[96m|[0m                 [1m[93m^^^^^[0m  [1m[93m^^^^^^^^^[0m  [1m[93m^^^^^^^^^^^^^[0m  [1m[93m^^^^
+^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `state::State`[0m
+  [1m[96m--> [0msrc\modpack\theseus\mod.rs:49:9
+   [1m[96m|[0m
+[1m[96m49[0m [1m[96m|[0m pub use state::State;
+   [1m[96m|[0m         [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `Emitter`[0m
+  [1m[96m--> [0msrc\modpack\theseus_adapter.rs:21:24
+   [1m[96m|[0m
+[1m[96m21[0m [1m[96m|[0m use tauri::{AppHandle, Emitter};
+   [1m[96m|[0m                        [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `CreatePackInstance`[0m
+  [1m[96m--> [0msrc\modpack\theseus_adapter.rs:24:56
+   [1m[96m|[0m
+[1m[96m24[0m [1m[96m|[0m use super::theseus::install_from::{CreatePackLocation, CreatePackInstance};
+   [1m[96m|[0m                                                        [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `json`[0m
+  [1m[96m--> [0msrc\mods\jar.rs:17:18
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m use serde_json::{json, Value};
+   [1m[96m|[0m                  [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `json`[0m
+ [1m[96m--> [0msrc\utils.rs:4:18
+  [1m[96m|[0m
+[1m[96m4[0m [1m[96m|[0m use serde_json::{json, Value};
+  [1m[96m|[0m                  [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1636:9
+     [1m[96m|[0m
+[1m[96m1636[0m [1m[96m|[0m     let mut url = match download_url.as_ref() {
+     [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^[0m
+     [1m[96m|[0m         [1m[96m|[0m
+     [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: unreachable pattern[0m
+   [1m[96m--> [0msrc\auth\microsoft.rs:123:31
+    [1m[96m|[0m
+[1m[96m120[0m [1m[96m|[0m             "expired_token" => Err(AuthError::DeviceCodeExpired),
+    [1m[96m|[0m             [1m[96m---------------[0m [1m[96mmatches all the relevant values[0m
+[1m[96m...[0m
+[1m[96m123[0m [1m[96m|[0m             "invalid_grant" | "expired_token" => Err(AuthError::TokenExpired),
+    [1m[96m|[0m                               [1m[93m^^^^^^^^^^^^^^^[0m [1m[93mno value can reach this[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+  [1m[96m--> [0msrc\tts.rs:77:9
+   [1m[96m|[0m
+[1m[96m77[0m [1m[96m|[0m     let mut timeout = tokio::time::timeout(
+   [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^[0m
+   [1m[96m|[0m         [1m[96m|[0m
+   [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::os::windows::process::CommandExt`[0m
+  [1m[96m--> [0msrc\easytier\process.rs:73:13
+   [1m[96m|[0m
+[1m[96m73[0m [1m[96m|[0m         use std::os::windows::process::CommandExt;
+   [1m[96m|[0m             [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::os::windows::process::CommandExt`[0m
+   [1m[96m--> [0msrc\easytier\process.rs:166:13
+    [1m[96m|[0m
+[1m[96m166[0m [1m[96m|[0m         use std::os::windows::process::CommandExt;
+    [1m[96m|[0m             [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::os::windows::process::CommandExt`[0m
+  [1m[96m--> [0msrc\launch\process_manager.rs:71:13
+   [1m[96m|[0m
+[1m[96m71[0m [1m[96m|[0m         use std::os::windows::process::CommandExt;
+   [1m[96m|[0m             [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::os::windows::process::CommandExt`[0m
+   [1m[96m--> [0msrc\server_host.rs:925:13
+    [1m[96m|[0m
+[1m[96m925[0m [1m[96m|[0m         use std::os::windows::process::CommandExt;
+    [1m[96m|[0m             [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::os::windows::process::CommandExt`[0m
+    [1m[96m--> [0msrc\server_host.rs:1679:13
+     [1m[96m|[0m
+[1m[96m1679[0m [1m[96m|[0m         use std::os::windows::process::CommandExt;
+     [1m[96m|[0m             [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: value assigned to `finished` is never read[0m
+   [1m[96m--> [0msrc\download\chunked.rs:203:25
+    [1m[96m|[0m
+[1m[96m203[0m [1m[96m|[0m                         finished = true;
+    [1m[96m|[0m                         [1m[93m^^^^^^^^^^^^^^^[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mhelp[0m: maybe it is overwritten before being read?
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: value assigned to `finished` is never read[0m
+   [1m[96m--> [0msrc\download\single.rs:297:17
+    [1m[96m|[0m
+[1m[96m297[0m [1m[96m|[0m                 finished = true;
+    [1m[96m|[0m                 [1m[93m^^^^^^^^^^^^^^^[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mhelp[0m: maybe it is overwritten before being read?
+
+[1m[93mwarning[0m[1m[97m: unused variable: `params`[0m
+  [1m[96m--> [0msrc\api\lan.rs:42:5
+   [1m[96m|[0m
+[1m[96m42[0m [1m[96m|[0m     params: &Option<Value>,
+   [1m[96m|[0m     [1m[93m^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_params
+`[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: unused variable: `player_name`[0m
+  [1m[96m--> [0msrc\easytier\process.rs:48:41
+   [1m[96m|[0m
+[1m[96m48[0m [1m[96m|[0m pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, String> {
+   [1m[96m|[0m                                         [1m[93m^^^^^^^^^^^[0m [1m[93mhelp: if this is intentiona
+l, prefix it with an underscore: `_player_name`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `player_name`[0m
+   [1m[96m--> [0msrc\easytier\process.rs:128:43
+    [1m[96m|[0m
+[1m[96m128[0m [1m[96m|[0m pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, String> {
+    [1m[96m|[0m                                           [1m[93m^^^^^^^^^^^[0m [1m[93mhelp: if this is intenti
+onal, prefix it with an underscore: `_player_name`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `http_port`[0m
+   [1m[96m--> [0msrc\api\lan.rs:506:9
+    [1m[96m|[0m
+[1m[96m506[0m [1m[96m|[0m     let http_port = status
+    [1m[96m|[0m         [1m[93m^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: 
+`_http_port`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `packet_len`[0m
+   [1m[96m--> [0msrc\api\misc.rs:611:9
+    [1m[96m|[0m
+[1m[96m611[0m [1m[96m|[0m     let packet_len = read_varint(&mut stream)
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore:
+ `_packet_len`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `lv_id`[0m
+   [1m[96m--> [0msrc\modpack\mrpack_native.rs:352:20
+    [1m[96m|[0m
+[1m[96m352[0m [1m[96m|[0m                 Ok(lv_id) => {
+    [1m[96m|[0m                    [1m[93m^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an under
+score: `_lv_id`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `override_files`[0m
+   [1m[96m--> [0msrc\modpack\mrpack_native.rs:573:9
+    [1m[96m|[0m
+[1m[96m573[0m [1m[96m|[0m     let override_files = extract_overrides_with_progress(archive, version_dir, app)?;
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an undersc
+ore: `_override_files`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `mod_file_states`[0m
+   [1m[96m--> [0msrc\modpack\mrpack_native.rs:667:9
+    [1m[96m|[0m
+[1m[96m667[0m [1m[96m|[0m     let mod_file_states: Vec<ModFileState> = files_list
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an unders
+core: `_mod_file_states`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `lv_id`[0m
+   [1m[96m--> [0msrc\modpack\mrpack_native.rs:870:17
+    [1m[96m|[0m
+[1m[96m870[0m [1m[96m|[0m     if let Some(lv_id) = loader_version_id {
+    [1m[96m|[0m                 [1m[93m^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an undersco
+re: `_lv_id`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `current_platform`[0m
+   [1m[96m--> [0msrc\modpack\curseforge_shared.rs:822:9
+    [1m[96m|[0m
+[1m[96m822[0m [1m[96m|[0m     let current_platform = if cfg!(target_os = "windows") {
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an under
+score: `_current_platform`[0m
+
+[1m[93mwarning[0m[1m[97m: value assigned to `core_lib_missing` is never read[0m
+   [1m[96m--> [0msrc\modpack\curseforge_shared.rs:905:13
+    [1m[96m|[0m
+[1m[96m905[0m [1m[96m|[0m             core_lib_missing = 0;
+    [1m[96m|[0m             [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mhelp[0m: maybe it is overwritten before being read?
+
+[1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+   [1m[96m--> [0msrc\modpack\curseforge.rs:967:5
+    [1m[96m|[0m
+[1m[96m967[0m [1m[96m|[0m     app: &AppHandle,
+    [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `loader_kind`[0m
+   [1m[96m--> [0msrc\modpack\curseforge.rs:420:5
+    [1m[96m|[0m
+[1m[96m420[0m [1m[96m|[0m     loader_kind: &LoaderKind,
+    [1m[96m|[0m     [1m[93m^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_
+loader_kind`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `override_files`[0m
+   [1m[96m--> [0msrc\modpack\curseforge.rs:431:9
+    [1m[96m|[0m
+[1m[96m431[0m [1m[96m|[0m     let override_files = extract_overrides_with_progress(archive, version_dir, app)?;
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an undersc
+ore: `_override_files`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `cf_mod_files`[0m
+   [1m[96m--> [0msrc\modpack\curseforge.rs:472:9
+    [1m[96m|[0m
+[1m[96m472[0m [1m[96m|[0m     let cf_mod_files: Vec<ModFileState> = cf_files
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscor
+e: `_cf_mod_files`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `lv_id`[0m
+   [1m[96m--> [0msrc\modpack\curseforge.rs:751:17
+    [1m[96m|[0m
+[1m[96m751[0m [1m[96m|[0m     if let Some(lv_id) = loader_version_id {
+    [1m[96m|[0m                 [1m[93m^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an undersco
+re: `_lv_id`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `params`[0m
+  [1m[96m--> [0msrc\api\placeholder.rs:16:41
+   [1m[96m|[0m
+[1m[96m16[0m [1m[96m|[0m pub fn handle(method: &str, path: &str, params: &Option<Value>, _body: &Option<Value>) -
+> Option<ApiResult> {
+   [1m[96m|[0m                                         [1m[93m^^^^^^[0m [1m[93mhelp: if this is intentional, pr
+efix it with an underscore: `_params`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `memory_value`[0m
+   [1m[96m--> [0msrc\launch\args_builder.rs:214:23
+    [1m[96m|[0m
+[1m[96m214[0m [1m[96m|[0m     let (memory_mode, memory_value) = resolve_memory_settings(settings, &actual_version
+_id, &data_dir);
+    [1m[96m|[0m                       [1m[93m^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it wit
+h an underscore: `_memory_value`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `is_fabric`[0m
+   [1m[96m--> [0msrc\launch\args_builder.rs:329:9
+    [1m[96m|[0m
+[1m[96m329[0m [1m[96m|[0m     let is_fabric = main_class.contains("fabricmc") || main_class.contains("knot");
+    [1m[96m|[0m         [1m[93m^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: 
+`_is_fabric`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `jar_name`[0m
+   [1m[96m--> [0msrc\launch\dep_check.rs:819:9
+    [1m[96m|[0m
+[1m[96m819[0m [1m[96m|[0m     let jar_name = if !jar_field.is_empty() {
+    [1m[96m|[0m         [1m[93m^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `
+_jar_name`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `version_id`[0m
+    [1m[96m--> [0msrc\launch\dep_check.rs:1603:91
+     [1m[96m|[0m
+[1m[96m1603[0m [1m[96m|[0m fn push_missing_main_jar_with_fallback(result: &mut DepCheckResult, version_json: &Val
+ue, version_id: &str, versions_dir: &Path) {
+     [1m[96m|[0m                                                                                           [1m[93m
+^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_version_id`[0m
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+  [1m[96m--> [0msrc\launch\exit_code.rs:89:19
+   [1m[96m|[0m
+[1m[96m89[0m [1m[96m|[0m         if let Ok(mut entries) = std::fs::read_dir(dir) {
+   [1m[96m|[0m                   [1m[96m----[0m[1m[93m^^^^^^^[0m
+   [1m[96m|[0m                   [1m[96m|[0m
+   [1m[96m|[0m                   [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `name`[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1641:31
+     [1m[96m|[0m
+[1m[96m1641[0m [1m[96m|[0m                 Some((dl_url, name, size, sha1)) => {
+     [1m[96m|[0m                               [1m[93m^^^^[0m [1m[93mhelp: if this is intentional, prefix it wi
+th an underscore: `_name`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `size`[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1641:37
+     [1m[96m|[0m
+[1m[96m1641[0m [1m[96m|[0m                 Some((dl_url, name, size, sha1)) => {
+     [1m[96m|[0m                                     [1m[93m^^^^[0m [1m[93mhelp: if this is intentional, prefix
+ it with an underscore: `_size`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `sha1`[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1641:43
+     [1m[96m|[0m
+[1m[96m1641[0m [1m[96m|[0m                 Some((dl_url, name, size, sha1)) => {
+     [1m[96m|[0m                                           [1m[93m^^^^[0m [1m[93mhelp: if this is intentional, 
+prefix it with an underscore: `_sha1`[0m
+
+[1m[93mwarning[0m[1m[97m: variable `downloaded` is assigned to, but never used[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1664:9
+     [1m[96m|[0m
+[1m[96m1664[0m [1m[96m|[0m     let mut downloaded = false;
+     [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: consider using `_downloaded` instead
+
+[1m[93mwarning[0m[1m[97m: value assigned to `downloaded` is never read[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1750:29
+     [1m[96m|[0m
+[1m[96m1750[0m [1m[96m|[0m [1m[96m...[0m                   downloaded = true;
+     [1m[96m|[0m                       [1m[93m^^^^^^^^^^^^^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mhelp[0m: maybe it is overwritten before being read?
+
+[1m[93mwarning[0m[1m[97m: variable `downloaded` is assigned to, but never used[0m
+    [1m[96m--> [0msrc\modpack\mrpack_native.rs:2181:9
+     [1m[96m|[0m
+[1m[96m2181[0m [1m[96m|[0m     let mut downloaded = false;
+     [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: consider using `_downloaded` instead
+
+[1m[93mwarning[0m[1m[97m: value assigned to `downloaded` is never read[0m
+    [1m[96m--> [0msrc\modpack\mrpack_native.rs:2251:29
+     [1m[96m|[0m
+[1m[96m2251[0m [1m[96m|[0m [1m[96m...[0m                   downloaded = true;
+     [1m[96m|[0m                       [1m[93m^^^^^^^^^^^^^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mhelp[0m: maybe it is overwritten before being read?
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1008:13
+     [1m[96m|[0m
+[1m[96m1008[0m [1m[96m|[0m             mut reader: R,
+     [1m[96m|[0m             [1m[96m----[0m[1m[93m^^^^^^[0m
+     [1m[96m|[0m             [1m[96m|[0m
+     [1m[96m|[0m             [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `state`[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:214:5
+    [1m[96m|[0m
+[1m[96m214[0m [1m[96m|[0m     state: &State,
+    [1m[96m|[0m     [1m[93m^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_state`
+[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+    [1m[96m--> [0msrc\server_host.rs:1265:31
+     [1m[96m|[0m
+[1m[96m1265[0m [1m[96m|[0m pub async fn server_host_list(app: AppHandle) -> Value {
+     [1m[96m|[0m                               [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it wit
+h an underscore: `_app`[0m
+
+[1m[93mwarning[0m[1m[97m: constant `MODRINTH_API_MIRROR` is never used[0m
+  [1m[96m--> [0msrc\api\modpacks.rs:19:7
+   [1m[96m|[0m
+[1m[96m19[0m [1m[96m|[0m const MODRINTH_API_MIRROR: &str = "https://bmclapi2.bangbang93.com/modrinth/v2";
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: function `parse_rate_limit_retry_after` is never used[0m
+  [1m[96m--> [0msrc\auth\error.rs:98:8
+   [1m[96m|[0m
+[1m[96m98[0m [1m[96m|[0m pub fn parse_rate_limit_retry_after(retry_after_header: &str) -> u64 {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `expires_in` is never read[0m
+  [1m[96m--> [0msrc\auth\minecraft.rs:22:9
+   [1m[96m|[0m
+[1m[96m19[0m [1m[96m|[0m pub struct McTokenResponse {
+   [1m[96m|[0m            [1m[96m---------------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m22[0m [1m[96m|[0m     pub expires_in: Option<u64>,
+   [1m[96m|[0m         [1m[93m^^^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `McTokenResponse` has derived impls for the traits `Clone` and `Debug`, but these 
+are intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: field `id` is never read[0m
+  [1m[96m--> [0msrc\auth\minecraft.rs:36:9
+   [1m[96m|[0m
+[1m[96m35[0m [1m[96m|[0m pub struct McSkin {
+   [1m[96m|[0m            [1m[96m------[0m [1m[96mfield in this struct[0m
+[1m[96m36[0m [1m[96m|[0m     pub id: String,
+   [1m[96m|[0m         [1m[93m^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `McSkin` has derived impls for the traits `Clone` and `Debug`, but these are inten
+tionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: field `expires_in` is never read[0m
+  [1m[96m--> [0msrc\auth\microsoft.rs:43:9
+   [1m[96m|[0m
+[1m[96m40[0m [1m[96m|[0m pub struct MsTokenResponse {
+   [1m[96m|[0m            [1m[96m---------------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m43[0m [1m[96m|[0m     pub expires_in: Option<u64>,
+   [1m[96m|[0m         [1m[93m^^^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `MsTokenResponse` has derived impls for the traits `Clone` and `Debug`, but these 
+are intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: function `token_response_to_json` is never used[0m
+   [1m[96m--> [0msrc\auth\microsoft.rs:209:8
+    [1m[96m|[0m
+[1m[96m209[0m [1m[96m|[0m pub fn token_response_to_json(resp: &MsTokenResponse) -> serde_json::Value {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `redirect` is never read[0m
+  [1m[96m--> [0msrc\auth\xbox.rs:48:9
+   [1m[96m|[0m
+[1m[96m37[0m [1m[96m|[0m pub struct XstsResponse {
+   [1m[96m|[0m            [1m[96m------------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m48[0m [1m[96m|[0m     pub redirect: Option<String>,
+   [1m[96m|[0m         [1m[93m^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `XstsResponse` has derived impls for the traits `Clone` and `Debug`, but these are
+ intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: struct `AvatarResult` is never constructed[0m
+   [1m[96m--> [0msrc\avatar.rs:119:12
+    [1m[96m|[0m
+[1m[96m119[0m [1m[96m|[0m pub struct AvatarResult {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `target_instance` is never read[0m
+  [1m[96m--> [0msrc\crash_analyzer\mod.rs:31:9
+   [1m[96m|[0m
+[1m[96m29[0m [1m[96m|[0m pub struct CrashAnalyzer {
+   [1m[96m|[0m            [1m[96m-------------[0m [1m[96mfield in this struct[0m
+[1m[96m30[0m [1m[96m|[0m     pub minecraft_dir: PathBuf,
+[1m[96m31[0m [1m[96m|[0m     pub target_instance: Option<String>,
+   [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `analyze_crash` is never used[0m
+   [1m[96m--> [0msrc\crash_analyzer\mod.rs:193:8
+    [1m[96m|[0m
+[1m[96m193[0m [1m[96m|[0m pub fn analyze_crash(
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: multiple variants are never constructed[0m
+  [1m[96m--> [0msrc\crash_analyzer\constants.rs:29:5
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m pub enum CrashReason {
+   [1m[96m|[0m          [1m[96m-----------[0m [1m[96mvariants in this enum[0m
+[1m[96m...[0m
+[1m[96m29[0m [1m[96m|[0m     ModMissingOrIncompatible,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m32[0m [1m[96m|[0m     ModMixinError,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m44[0m [1m[96m|[0m     FabricCrash,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^[0m
+[1m[96m45[0m [1m[96m|[0m     FabricModCrash,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^[0m
+[1m[96m46[0m [1m[96m|[0m     ForgeCrash,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m49[0m [1m[96m|[0m     OpenJ9Crash,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m52[0m [1m[96m|[0m     InvalidPath,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^[0m
+[1m[96m53[0m [1m[96m|[0m     ModCyclicIssue,
+[1m[96m54[0m [1m[96m|[0m     SecurityException,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^[0m
+[1m[96m55[0m [1m[96m|[0m     NativeLinkError,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `CrashReason` has derived impls for the traits `Debug` and `Clone`, but these are 
+intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: function `raw_log_file_to_json` is never used[0m
+   [1m[96m--> [0msrc\crash_analyzer\file_collector.rs:167:8
+    [1m[96m|[0m
+[1m[96m167[0m [1m[96m|[0m pub fn raw_log_file_to_json(file: &RawLogFile) -> serde_json::Value {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `regex_seek_all` is never used[0m
+  [1m[96m--> [0msrc\crash_analyzer\utils.rs:41:8
+   [1m[96m|[0m
+[1m[96m41[0m [1m[96m|[0m pub fn regex_seek_all(pattern: &str, text: &str) -> Vec<String> {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `is_cancelled` is never used[0m
+   [1m[96m--> [0msrc\download\resources_session.rs:233:8
+    [1m[96m|[0m
+[1m[96m233[0m [1m[96m|[0m pub fn is_cancelled(cancel_flag: &Arc<AtomicBool>) -> bool {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `cached_at` is never read[0m
+  [1m[96m--> [0msrc\java.rs:36:5
+   [1m[96m|[0m
+[1m[96m34[0m [1m[96m|[0m struct JavaCache {
+   [1m[96m|[0m        [1m[96m---------[0m [1m[96mfield in this struct[0m
+[1m[96m35[0m [1m[96m|[0m     java_list: Vec<Value>,
+[1m[96m36[0m [1m[96m|[0m     cached_at: u64,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `JavaCache` has a derived impl for the trait `Clone`, but this is intentionally ig
+nored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: function `java_detect` is never used[0m
+    [1m[96m--> [0msrc\java.rs:1009:14
+     [1m[96m|[0m
+[1m[96m1009[0m [1m[96m|[0m pub async fn java_detect() -> Value {
+     [1m[96m|[0m              [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `code` is never read[0m
+  [1m[96m--> [0msrc\launch\exit_code.rs:10:9
+   [1m[96m|[0m
+[1m[96m 9[0m [1m[96m|[0m pub struct ExitAnalysis {
+   [1m[96m|[0m            [1m[96m------------[0m [1m[96mfield in this struct[0m
+[1m[96m10[0m [1m[96m|[0m     pub code: i32,
+   [1m[96m|[0m         [1m[93m^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `ExitAnalysis` has derived impls for the traits `Debug` and `Clone`, but these are
+ intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: method `to_json` is never used[0m
+  [1m[96m--> [0msrc\launch\exit_code.rs:18:12
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m impl ExitAnalysis {
+   [1m[96m|[0m [1m[96m-----------------[0m [1m[96mmethod in this implementation[0m
+[1m[96m18[0m [1m[96m|[0m     pub fn to_json(&self) -> Value {
+   [1m[96m|[0m            [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: fields `java_path` and `main_class` are never read[0m
+  [1m[96m--> [0msrc\launch\game_session.rs:22:9
+   [1m[96m|[0m
+[1m[96m11[0m [1m[96m|[0m pub struct GameInstance {
+   [1m[96m|[0m            [1m[96m------------[0m [1m[96mfields in this struct[0m
+[1m[96m...[0m
+[1m[96m22[0m [1m[96m|[0m     pub java_path: String,
+   [1m[96m|[0m         [1m[93m^^^^^^^^^[0m
+[1m[96m23[0m [1m[96m|[0m     pub main_class: String,
+   [1m[96m|[0m         [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `JavaCandidate` is never constructed[0m
+ [1m[96m--> [0msrc\launch\java_scan.rs:6:12
+  [1m[96m|[0m
+[1m[96m6[0m [1m[96m|[0m pub struct JavaCandidate {
+  [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `should_skip_system_scan` is never used[0m
+  [1m[96m--> [0msrc\launch\java_scan.rs:14:8
+   [1m[96m|[0m
+[1m[96m14[0m [1m[96m|[0m pub fn should_skip_system_scan(
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `should_run_memory_optimize` is never used[0m
+   [1m[96m--> [0msrc\launch\memory.rs:117:8
+    [1m[96m|[0m
+[1m[96m117[0m [1m[96m|[0m pub fn should_run_memory_optimize(
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `list_running_games` is never used[0m
+   [1m[96m--> [0msrc\launch\process_manager.rs:410:8
+    [1m[96m|[0m
+[1m[96m410[0m [1m[96m|[0m pub fn list_running_games() -> Vec<Value> {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `find_java_for_install` is never used[0m
+   [1m[96m--> [0msrc\modloaders\shared.rs:285:8
+    [1m[96m|[0m
+[1m[96m285[0m [1m[96m|[0m pub fn find_java_for_install(min_major: u32) -> Option<std::path::PathBuf> {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `inspect_java_major` is never used[0m
+   [1m[96m--> [0msrc\modloaders\shared.rs:337:4
+    [1m[96m|[0m
+[1m[96m337[0m [1m[96m|[0m fn inspect_java_major(java_path: &Path) -> Option<u32> {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `CF_API_OFFICIAL` is never used[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:28:7
+   [1m[96m|[0m
+[1m[96m28[0m [1m[96m|[0m const CF_API_OFFICIAL: &str = "https://api.curseforge.com/v1";
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `overrides` is never read[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:51:5
+   [1m[96m|[0m
+[1m[96m44[0m [1m[96m|[0m struct CfManifest {
+   [1m[96m|[0m        [1m[96m----------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m51[0m [1m[96m|[0m     overrides: Option<String>,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `primary` is never read[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:66:5
+   [1m[96m|[0m
+[1m[96m63[0m [1m[96m|[0m struct CfModLoader {
+   [1m[96m|[0m        [1m[96m-----------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m66[0m [1m[96m|[0m     primary: Option<bool>,
+   [1m[96m|[0m     [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `required` is never read[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:77:5
+   [1m[96m|[0m
+[1m[96m70[0m [1m[96m|[0m struct CfFile {
+   [1m[96m|[0m        [1m[96m------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m77[0m [1m[96m|[0m     required: Option<bool>,
+   [1m[96m|[0m     [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: fields `version` and `author` are never read[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:82:5
+   [1m[96m|[0m
+[1m[96m81[0m [1m[96m|[0m struct CfManifestMeta {
+   [1m[96m|[0m        [1m[96m--------------[0m [1m[96mfields in this struct[0m
+[1m[96m82[0m [1m[96m|[0m     version: Option<String>,
+   [1m[96m|[0m     [1m[93m^^^^^^^[0m
+[1m[96m83[0m [1m[96m|[0m     name: Option<String>,
+[1m[96m84[0m [1m[96m|[0m     author: Option<String>,
+   [1m[96m|[0m     [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `mod_id` is never read[0m
+  [1m[96m--> [0msrc\modpack\curseforge.rs:93:5
+   [1m[96m|[0m
+[1m[96m90[0m [1m[96m|[0m struct CfFileResponse {
+   [1m[96m|[0m        [1m[96m--------------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m93[0m [1m[96m|[0m     mod_id: Option<i64>,
+   [1m[96m|[0m     [1m[93m^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `CfFileResponse` has a derived impl for the trait `Clone`, but this is intentional
+ly ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: fields `project_id`, `file_id`, `download_url`, `file_length`, and `sha1` are never read
+[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1439:5
+     [1m[96m|[0m
+[1m[96m1437[0m [1m[96m|[0m struct DownloadResult {
+     [1m[96m|[0m        [1m[96m--------------[0m [1m[96mfields in this struct[0m
+[1m[96m1438[0m [1m[96m|[0m     success: bool,
+[1m[96m1439[0m [1m[96m|[0m     project_id: i64,
+     [1m[96m|[0m     [1m[93m^^^^^^^^^^[0m
+[1m[96m1440[0m [1m[96m|[0m     file_id: i64,
+     [1m[96m|[0m     [1m[93m^^^^^^^[0m
+[1m[96m1441[0m [1m[96m|[0m     file_name: String,
+[1m[96m1442[0m [1m[96m|[0m     download_url: Option<String>,
+     [1m[96m|[0m     [1m[93m^^^^^^^^^^^^[0m
+[1m[96m1443[0m [1m[96m|[0m     file_length: i64,
+     [1m[96m|[0m     [1m[93m^^^^^^^^^^^[0m
+[1m[96m1444[0m [1m[96m|[0m     sha1: String,
+     [1m[96m|[0m     [1m[93m^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: `DownloadResult` has derived impls for the traits `Clone` and `Debug`, but these
+ are intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: variants `Downloading`, `Completed`, and `Failed` are never constructed[0m
+    [1m[96m--> [0msrc\modpack\curseforge.rs:1453:5
+     [1m[96m|[0m
+[1m[96m1451[0m [1m[96m|[0m enum ModStatus {
+     [1m[96m|[0m      [1m[96m---------[0m [1m[96mvariants in this enum[0m
+[1m[96m1452[0m [1m[96m|[0m     Pending,
+[1m[96m1453[0m [1m[96m|[0m     Downloading,
+     [1m[96m|[0m     [1m[93m^^^^^^^^^^^[0m
+[1m[96m1454[0m [1m[96m|[0m     Completed,
+     [1m[96m|[0m     [1m[93m^^^^^^^^^[0m
+[1m[96m1455[0m [1m[96m|[0m     Failed,
+     [1m[96m|[0m     [1m[93m^^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: `ModStatus` has derived impls for the traits `Clone` and `Debug`, but these are 
+intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: function `compute_mod_timeout` is never used[0m
+   [1m[96m--> [0msrc\modpack\curseforge_shared.rs:223:8
+    [1m[96m|[0m
+[1m[96m223[0m [1m[96m|[0m pub fn compute_mod_timeout(size_bytes: i64) -> u64 {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `repaired` is never read[0m
+   [1m[96m--> [0msrc\modpack\curseforge_shared.rs:392:9
+    [1m[96m|[0m
+[1m[96m391[0m [1m[96m|[0m pub struct RepairResult {
+    [1m[96m|[0m            [1m[96m------------[0m [1m[96mfield in this struct[0m
+[1m[96m392[0m [1m[96m|[0m     pub repaired: usize,
+    [1m[96m|[0m         [1m[93m^^^^^^^^[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `RepairResult` has a derived impl for the trait `Debug`, but this is intentionall
+y ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: fields `upgraded`, `new_version`, and `error` are never read[0m
+    [1m[96m--> [0msrc\modpack\curseforge_shared.rs:1035:9
+     [1m[96m|[0m
+[1m[96m1034[0m [1m[96m|[0m pub struct EnsureLoaderCompatResult {
+     [1m[96m|[0m            [1m[96m------------------------[0m [1m[96mfields in this struct[0m
+[1m[96m1035[0m [1m[96m|[0m     pub upgraded: bool,
+     [1m[96m|[0m         [1m[93m^^^^^^^^[0m
+[1m[96m1036[0m [1m[96m|[0m     pub new_version: Option<String>,
+     [1m[96m|[0m         [1m[93m^^^^^^^^^^^[0m
+[1m[96m1037[0m [1m[96m|[0m     pub error: Option<String>,
+     [1m[96m|[0m         [1m[93m^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: `EnsureLoaderCompatResult` has a derived impl for the trait `Debug`, but this is
+ intentionally ignored during dead code analysis
+
+[1m[93mwarning[0m[1m[97m: field `summary` is never read[0m
+  [1m[96m--> [0msrc\modpack\mrpack_native.rs:45:5
+   [1m[96m|[0m
+[1m[96m35[0m [1m[96m|[0m struct MrpackManifest {
+   [1m[96m|[0m        [1m[96m--------------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m45[0m [1m[96m|[0m     summary: Option<String>,
+   [1m[96m|[0m     [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `LoaderKind` is never used[0m
+  [1m[96m--> [0msrc\modpack\mrpack_native.rs:98:6
+   [1m[96m|[0m
+[1m[96m98[0m [1m[96m|[0m enum LoaderKind {
+   [1m[96m|[0m      [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ModLoader` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\data.rs:16:10
+   [1m[96m|[0m
+[1m[96m16[0m [1m[96m|[0m pub enum ModLoader {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `as_str`, `from_str`, and `from_string` are never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\data.rs:26:12
+   [1m[96m|[0m
+[1m[96m25[0m [1m[96m|[0m impl ModLoader {
+   [1m[96m|[0m [1m[96m--------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m26[0m [1m[96m|[0m     pub fn as_str(self) -> &'static str {
+   [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m36[0m [1m[96m|[0m     pub fn from_str(s: &str) -> Option<Self> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m48[0m [1m[96m|[0m     pub fn from_string(s: &str) -> Self {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ProjectType` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\data.rs:62:10
+   [1m[96m|[0m
+[1m[96m62[0m [1m[96m|[0m pub enum ProjectType {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated functions `get_from_parent_folder` and `from_name` are never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\data.rs:74:12
+   [1m[96m|[0m
+[1m[96m72[0m [1m[96m|[0m impl ProjectType {
+   [1m[96m|[0m [1m[96m----------------[0m [1m[96massociated functions in this implementation[0m
+[1m[96m73[0m [1m[96m|[0m     /// 根据父文件夹推断项目类型（theseus 兼容方法）
+[1m[96m74[0m [1m[96m|[0m     pub fn get_from_parent_folder(relative_path: &str) -> Option<Self> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m88[0m [1m[96m|[0m     pub fn from_name(name: &str) -> Option<Self> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `SideType` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\data.rs:104:10
+    [1m[96m|[0m
+[1m[96m104[0m [1m[96m|[0m pub enum SideType {
+    [1m[96m|[0m          [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated function `from_str` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\data.rs:114:12
+    [1m[96m|[0m
+[1m[96m113[0m [1m[96m|[0m impl SideType {
+    [1m[96m|[0m [1m[96m-------------[0m [1m[96massociated function in this implementation[0m
+[1m[96m114[0m [1m[96m|[0m     pub fn from_str(s: &str) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `EnvType` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\data.rs:127:10
+    [1m[96m|[0m
+[1m[96m127[0m [1m[96m|[0m pub enum EnvType {
+    [1m[96m|[0m          [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `as_str` and `from_str` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\data.rs:133:12
+    [1m[96m|[0m
+[1m[96m132[0m [1m[96m|[0m impl EnvType {
+    [1m[96m|[0m [1m[96m------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m133[0m [1m[96m|[0m     pub fn as_str(self) -> &'static str {
+    [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m140[0m [1m[96m|[0m     pub fn from_str(s: &str) -> Option<Self> {
+    [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: type alias `Result` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\error.rs:13:10
+   [1m[96m|[0m
+[1m[96m13[0m [1m[96m|[0m pub type Result<T> = std::result::Result<T, Error>;
+   [1m[96m|[0m          [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `SharedInstanceUnavailableReason` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\error.rs:18:10
+   [1m[96m|[0m
+[1m[96m18[0m [1m[96m|[0m pub enum SharedInstanceUnavailableReason {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `LabrinthError` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\error.rs:30:12
+   [1m[96m|[0m
+[1m[96m30[0m [1m[96m|[0m pub struct LabrinthError {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ErrorKind` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\error.rs:52:10
+   [1m[96m|[0m
+[1m[96m52[0m [1m[96m|[0m pub enum ErrorKind {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated function `as_input_error` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\error.rs:130:12
+    [1m[96m|[0m
+[1m[96m129[0m [1m[96m|[0m impl ErrorKind {
+    [1m[96m|[0m [1m[96m--------------[0m [1m[96massociated function in this implementation[0m
+[1m[96m130[0m [1m[96m|[0m     pub fn as_input_error(s: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Error` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\error.rs:140:12
+    [1m[96m|[0m
+[1m[96m140[0m [1m[96m|[0m pub struct Error {
+    [1m[96m|[0m            [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `from`, `with_context`, and `kind` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\error.rs:146:12
+    [1m[96m|[0m
+[1m[96m145[0m [1m[96m|[0m impl Error {
+    [1m[96m|[0m [1m[96m----------[0m [1m[96massociated items in this implementation[0m
+[1m[96m146[0m [1m[96m|[0m     pub fn from(kind: ErrorKind) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^[0m
+[1m[96m...[0m
+[1m[96m153[0m [1m[96m|[0m     pub fn with_context(mut self, ctx: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m159[0m [1m[96m|[0m     pub fn kind(&self) -> &ErrorKind {
+    [1m[96m|[0m            [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_app_handle` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:32:14
+   [1m[96m|[0m
+[1m[96m32[0m [1m[96m|[0m pub async fn get_app_handle() -> Result<AppHandle> {
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `LoadingBarId` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:44:12
+   [1m[96m|[0m
+[1m[96m44[0m [1m[96m|[0m pub struct LoadingBarId(pub uuid::Uuid);
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated function `new` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:47:12
+   [1m[96m|[0m
+[1m[96m46[0m [1m[96m|[0m impl LoadingBarId {
+   [1m[96m|[0m [1m[96m-----------------[0m [1m[96massociated function in this implementation[0m
+[1m[96m47[0m [1m[96m|[0m     pub fn new() -> Self {
+   [1m[96m|[0m            [1m[93m^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstancePayloadType` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:60:10
+   [1m[96m|[0m
+[1m[96m60[0m [1m[96m|[0m pub enum InstancePayloadType {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `EventState` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:70:12
+   [1m[96m|[0m
+[1m[96m70[0m [1m[96m|[0m pub struct EventState {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated function `get` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:76:12
+   [1m[96m|[0m
+[1m[96m74[0m [1m[96m|[0m impl EventState {
+   [1m[96m|[0m [1m[96m---------------[0m [1m[96massociated function in this implementation[0m
+[1m[96m75[0m [1m[96m|[0m     /// 获取全局 EventState
+[1m[96m76[0m [1m[96m|[0m     pub fn get() -> Result<Self> {
+   [1m[96m|[0m            [1m[93m^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `EventError` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\event.rs:89:12
+   [1m[96m|[0m
+[1m[96m89[0m [1m[96m|[0m pub struct EventError(pub String);
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_loading` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:107:14
+    [1m[96m|[0m
+[1m[96m107[0m [1m[96m|[0m pub async fn emit_loading(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:130:14
+    [1m[96m|[0m
+[1m[96m130[0m [1m[96m|[0m pub async fn emit_instance(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_install_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:148:14
+    [1m[96m|[0m
+[1m[96m148[0m [1m[96m|[0m pub async fn emit_install_job(snapshot: &serde_json::Value) -> Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `loading_try_for_each_concurrent` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:165:14
+    [1m[96m|[0m
+[1m[96m165[0m [1m[96m|[0m pub async fn loading_try_for_each_concurrent<S, F, Fut, T>(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `payload_type_name` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:206:4
+    [1m[96m|[0m
+[1m[96m206[0m [1m[96m|[0m fn payload_type_name(t: InstancePayloadType) -> &'static str {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:222:18
+    [1m[96m|[0m
+[1m[96m222[0m [1m[96m|[0m     pub async fn emit_instance(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_loading` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:230:18
+    [1m[96m|[0m
+[1m[96m230[0m [1m[96m|[0m     pub async fn emit_loading(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `loading_try_for_each_concurrent` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\event.rs:240:18
+    [1m[96m|[0m
+[1m[96m240[0m [1m[96m|[0m     pub async fn loading_try_for_each_concurrent<S, F, Fut, T>(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `DOWNLOAD_META_HEADER` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:32:11
+   [1m[96m|[0m
+[1m[96m32[0m [1m[96m|[0m pub const DOWNLOAD_META_HEADER: &str = "modrinth-download-meta";
+   [1m[96m|[0m           [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `FetchSemaphore` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:36:12
+   [1m[96m|[0m
+[1m[96m36[0m [1m[96m|[0m pub struct FetchSemaphore(pub tokio::sync::Semaphore);
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `IoSemaphore` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:40:12
+   [1m[96m|[0m
+[1m[96m40[0m [1m[96m|[0m pub struct IoSemaphore(pub tokio::sync::Semaphore);
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `DownloadReason` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:45:10
+   [1m[96m|[0m
+[1m[96m45[0m [1m[96m|[0m pub enum DownloadReason {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `DownloadMeta` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:54:12
+   [1m[96m|[0m
+[1m[96m54[0m [1m[96m|[0m pub struct DownloadMeta {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: method `to_header_value` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:62:12
+   [1m[96m|[0m
+[1m[96m61[0m [1m[96m|[0m impl DownloadMeta {
+   [1m[96m|[0m [1m[96m-----------------[0m [1m[96mmethod in this implementation[0m
+[1m[96m62[0m [1m[96m|[0m     pub fn to_header_value(&self) -> String {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: type alias `FetchProgressFn` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:68:10
+   [1m[96m|[0m
+[1m[96m68[0m [1m[96m|[0m pub type FetchProgressFn<'a> = dyn FnMut(u64, u64) -> std::pin::Pin<Box<dyn std::future:
+:Future<Output = Result<()>> + Send + 'a>>
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: static `INSECURE_REQWEST_CLIENT` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:73:12
+   [1m[96m|[0m
+[1m[96m73[0m [1m[96m|[0m pub static INSECURE_REQWEST_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: static `REQWEST_CLIENT` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:77:12
+   [1m[96m|[0m
+[1m[96m77[0m [1m[96m|[0m pub static REQWEST_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `reqwest_client_builder` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:84:4
+   [1m[96m|[0m
+[1m[96m84[0m [1m[96m|[0m fn reqwest_client_builder() -> reqwest::ClientBuilder {
+   [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `FETCH_ATTEMPTS` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:92:7
+   [1m[96m|[0m
+[1m[96m92[0m [1m[96m|[0m const FETCH_ATTEMPTS: usize = 2;
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\fetch.rs:95:14
+   [1m[96m|[0m
+[1m[96m95[0m [1m[96m|[0m pub async fn fetch(
+   [1m[96m|[0m              [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_with_client` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:120:14
+    [1m[96m|[0m
+[1m[96m120[0m [1m[96m|[0m pub async fn fetch_with_client(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_with_client_progress` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:137:14
+    [1m[96m|[0m
+[1m[96m137[0m [1m[96m|[0m pub async fn fetch_with_client_progress(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_advanced` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:155:14
+    [1m[96m|[0m
+[1m[96m155[0m [1m[96m|[0m pub async fn fetch_advanced(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_advanced_with_client` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:174:14
+    [1m[96m|[0m
+[1m[96m174[0m [1m[96m|[0m pub async fn fetch_advanced_with_client(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_advanced_with_client_and_progress` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:196:14
+    [1m[96m|[0m
+[1m[96m196[0m [1m[96m|[0m pub async fn fetch_advanced_with_client_and_progress(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_advanced_with_progress` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:221:14
+    [1m[96m|[0m
+[1m[96m221[0m [1m[96m|[0m pub async fn fetch_advanced_with_progress(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_mirrors_with_progress` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:326:14
+    [1m[96m|[0m
+[1m[96m326[0m [1m[96m|[0m pub async fn fetch_mirrors_with_progress(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:369:14
+    [1m[96m|[0m
+[1m[96m369[0m [1m[96m|[0m pub async fn write(path: &Path, bytes: &[u8]) -> Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `copy` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:374:14
+    [1m[96m|[0m
+[1m[96m374[0m [1m[96m|[0m pub async fn copy(src: &Path, dest: &Path) -> Result<u64> {
+    [1m[96m|[0m              [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `sha1_file_async` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:381:14
+    [1m[96m|[0m
+[1m[96m381[0m [1m[96m|[0m pub async fn sha1_file_async(path: &Path) -> Result<(Vec<u8>, String)> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_cached_icon` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:405:14
+    [1m[96m|[0m
+[1m[96m405[0m [1m[96m|[0m pub async fn write_cached_icon(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_request_config` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:418:8
+    [1m[96m|[0m
+[1m[96m418[0m [1m[96m|[0m pub fn get_request_config() -> &'static str {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create_loading_bar` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:423:14
+    [1m[96m|[0m
+[1m[96m423[0m [1m[96m|[0m pub async fn create_loading_bar(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `fetch_with_loading_bar` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:432:14
+    [1m[96m|[0m
+[1m[96m432[0m [1m[96m|[0m pub async fn fetch_with_loading_bar(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `future_to_send` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:446:8
+    [1m[96m|[0m
+[1m[96m446[0m [1m[96m|[0m pub fn future_to_send<F: std::future::Future + Send + 'static>(f: F) -> std::pin::Pin<B
+ox<dyn std::future::Future<Output = F::Outpu[1m[96m...[0m
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read_to_bytes` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\fetch.rs:451:14
+    [1m[96m|[0m
+[1m[96m451[0m [1m[96m|[0m pub async fn read_to_bytes(path: &Path) -> Result<Bytes> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create_dir_all` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:12:14
+   [1m[96m|[0m
+[1m[96m12[0m [1m[96m|[0m pub async fn create_dir_all(path: impl AsRef<Path>) -> super::error::Result<()> {
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:19:14
+   [1m[96m|[0m
+[1m[96m19[0m [1m[96m|[0m pub async fn write(path: impl AsRef<Path>, data: &[u8]) -> super::error::Result<()> {
+   [1m[96m|[0m              [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:35:14
+   [1m[96m|[0m
+[1m[96m35[0m [1m[96m|[0m pub async fn read(path: impl AsRef<Path>) -> super::error::Result<Vec<u8>> {
+   [1m[96m|[0m              [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read_to_string` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:42:14
+   [1m[96m|[0m
+[1m[96m42[0m [1m[96m|[0m pub async fn read_to_string(path: impl AsRef<Path>) -> super::error::Result<String> {
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `copy` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:49:14
+   [1m[96m|[0m
+[1m[96m49[0m [1m[96m|[0m pub async fn copy(
+   [1m[96m|[0m              [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_file` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:64:14
+   [1m[96m|[0m
+[1m[96m64[0m [1m[96m|[0m pub async fn remove_file(path: impl AsRef<Path>) -> super::error::Result<()> {
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_dir_all` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:71:14
+   [1m[96m|[0m
+[1m[96m71[0m [1m[96m|[0m pub async fn remove_dir_all(path: impl AsRef<Path>) -> super::error::Result<()> {
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `exists` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:78:14
+   [1m[96m|[0m
+[1m[96m78[0m [1m[96m|[0m pub async fn exists(path: impl AsRef<Path>) -> bool {
+   [1m[96m|[0m              [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `metadata` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:85:14
+   [1m[96m|[0m
+[1m[96m85[0m [1m[96m|[0m pub async fn metadata(path: impl AsRef<Path>) -> super::error::Result<std::fs::Metadata>
+ {
+   [1m[96m|[0m              [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: trait `IOErrorExt` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\io.rs:92:11
+   [1m[96m|[0m
+[1m[96m92[0m [1m[96m|[0m pub trait IOErrorExt {
+   [1m[96m|[0m           [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `with_path` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\io.rs:109:8
+    [1m[96m|[0m
+[1m[96m109[0m [1m[96m|[0m pub fn with_path(e: std::io::Error, path: impl AsRef<Path>) -> super::error::Error {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `with_path_err` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\io.rs:114:8
+    [1m[96m|[0m
+[1m[96m114[0m [1m[96m|[0m pub fn with_path_err(e: std::io::Error, path: impl AsRef<Path>) -> super::error::Error 
+{
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SafeRelativeUtf8UnixPathBuf` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\path_util.rs:16:12
+   [1m[96m|[0m
+[1m[96m16[0m [1m[96m|[0m pub struct SafeRelativeUtf8UnixPathBuf(String);
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: multiple associated items are never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\path_util.rs:20:12
+   [1m[96m|[0m
+[1m[96m18[0m [1m[96m|[0m impl SafeRelativeUtf8UnixPathBuf {
+   [1m[96m|[0m [1m[96m--------------------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m19[0m [1m[96m|[0m     /// 从字符串创建，过滤危险字符
+[1m[96m20[0m [1m[96m|[0m     pub fn new(path: impl Into<String>) -> Self {
+   [1m[96m|[0m            [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m26[0m [1m[96m|[0m     pub fn as_str(&self) -> &str {
+   [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m30[0m [1m[96m|[0m     pub fn to_path_buf(&self) -> PathBuf {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m34[0m [1m[96m|[0m     pub fn into_string(self) -> String {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m39[0m [1m[96m|[0m     pub fn file_name(&self) -> Option<&str> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m44[0m [1m[96m|[0m     pub fn parent(&self) -> Option<&str> {
+   [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m49[0m [1m[96m|[0m     pub fn starts_with(&self, prefix: &str) -> bool {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m54[0m [1m[96m|[0m     pub fn join(&self, sub: &str) -> Self {
+   [1m[96m|[0m            [1m[93m^^^^[0m
+[1m[96m...[0m
+[1m[96m67[0m [1m[96m|[0m     pub fn strip_prefix(&self, prefix: &str) -> std::result::Result<Self, StripPrefixErr
+or> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m81[0m [1m[96m|[0m     pub fn components(&self) -> std::vec::IntoIter<&str> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `StripPrefixError` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\path_util.rs:91:12
+   [1m[96m|[0m
+[1m[96m91[0m [1m[96m|[0m pub struct StripPrefixError;
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `sanitize_path` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\path_util.rs:132:4
+    [1m[96m|[0m
+[1m[96m132[0m [1m[96m|[0m fn sanitize_path(raw: &str) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `State` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:24:12
+   [1m[96m|[0m
+[1m[96m24[0m [1m[96m|[0m pub struct State {
+   [1m[96m|[0m            [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Pool` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:38:12
+   [1m[96m|[0m
+[1m[96m38[0m [1m[96m|[0m pub struct Pool;
+   [1m[96m|[0m            [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Transaction` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:44:12
+   [1m[96m|[0m
+[1m[96m44[0m [1m[96m|[0m pub struct Transaction;
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: methods `commit` and `rollback` are never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:47:18
+   [1m[96m|[0m
+[1m[96m46[0m [1m[96m|[0m impl Transaction {
+   [1m[96m|[0m [1m[96m----------------[0m [1m[96mmethods in this implementation[0m
+[1m[96m47[0m [1m[96m|[0m     pub async fn commit(self) -> Result<()> {
+   [1m[96m|[0m                  [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m51[0m [1m[96m|[0m     pub async fn rollback(self) -> Result<()> {
+   [1m[96m|[0m                  [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: method `begin` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:57:18
+   [1m[96m|[0m
+[1m[96m56[0m [1m[96m|[0m impl Pool {
+   [1m[96m|[0m [1m[96m---------[0m [1m[96mmethod in this implementation[0m
+[1m[96m57[0m [1m[96m|[0m     pub async fn begin(&self) -> Result<Transaction> {
+   [1m[96m|[0m                  [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Directories` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:64:12
+   [1m[96m|[0m
+[1m[96m64[0m [1m[96m|[0m pub struct Directories;
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: methods `caches_dir`, `instances_dir`, `metadata_dir`, and `launcher_logs_dir` are never
+ used[0m
+  [1m[96m--> [0msrc\modpack\theseus\state.rs:67:12
+   [1m[96m|[0m
+[1m[96m66[0m [1m[96m|[0m impl Directories {
+   [1m[96m|[0m [1m[96m----------------[0m [1m[96mmethods in this implementation[0m
+[1m[96m67[0m [1m[96m|[0m     pub fn caches_dir(&self) -> PathBuf {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m71[0m [1m[96m|[0m     pub fn instances_dir(&self) -> PathBuf {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m75[0m [1m[96m|[0m     pub fn metadata_dir(&self) -> PathBuf {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m79[0m [1m[96m|[0m     pub fn launcher_logs_dir(&self) -> Option<PathBuf> {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: multiple associated items are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:85:18
+    [1m[96m|[0m
+[1m[96m 84[0m [1m[96m|[0m impl State {
+    [1m[96m|[0m [1m[96m----------[0m [1m[96massociated items in this implementation[0m
+[1m[96m 85[0m [1m[96m|[0m     pub async fn get() -> Result<&'static State> {
+    [1m[96m|[0m                  [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m 98[0m [1m[96m|[0m     fn new() -> Self {
+    [1m[96m|[0m        [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m112[0m [1m[96m|[0m     pub fn data_dir(&self) -> PathBuf {
+    [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m116[0m [1m[96m|[0m     pub fn versions_dir(&self) -> PathBuf {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m121[0m [1m[96m|[0m     pub fn instances_dir(&self) -> PathBuf {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m125[0m [1m[96m|[0m     pub async fn lock_instance_content(&self, _instance_id: &str) -> () {}
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m126[0m [1m[96m|[0m
+[1m[96m127[0m [1m[96m|[0m     pub async fn edit_instance(&self, _instance_id: &str, _edit: EditInstance) -> Resul
+t<()> {
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m131[0m [1m[96m|[0m     pub async fn update_instance_install_stage(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m139[0m [1m[96m|[0m     pub async fn upsert_instance_link(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m147[0m [1m[96m|[0m     pub async fn set_shared_instance_attachment(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m155[0m [1m[96m|[0m     pub async fn replace_instance_groups(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m163[0m [1m[96m|[0m     pub async fn upsert_instance_launch_overrides(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CachedFile` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:173:12
+    [1m[96m|[0m
+[1m[96m173[0m [1m[96m|[0m pub struct CachedFile {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated function `get_file_many` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:182:18
+    [1m[96m|[0m
+[1m[96m181[0m [1m[96m|[0m impl CachedFile {
+    [1m[96m|[0m [1m[96m---------------[0m [1m[96massociated function in this implementation[0m
+[1m[96m182[0m [1m[96m|[0m     pub async fn get_file_many(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CachedEntry` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:199:12
+    [1m[96m|[0m
+[1m[96m199[0m [1m[96m|[0m pub struct CachedEntry;
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated functions `get_file_many`, `get_version`, `get_version_many`, `get_project`, 
+and `cache_modpack_files` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:202:18
+    [1m[96m|[0m
+[1m[96m201[0m [1m[96m|[0m impl CachedEntry {
+    [1m[96m|[0m [1m[96m----------------[0m [1m[96massociated functions in this implementation[0m
+[1m[96m202[0m [1m[96m|[0m     pub async fn get_file_many(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m211[0m [1m[96m|[0m     pub async fn get_version(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m220[0m [1m[96m|[0m     pub async fn get_version_many(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m229[0m [1m[96m|[0m     pub async fn get_project(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m238[0m [1m[96m|[0m     pub async fn cache_modpack_files(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Version` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:250:12
+    [1m[96m|[0m
+[1m[96m250[0m [1m[96m|[0m pub struct Version {
+    [1m[96m|[0m            [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `VersionFile` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:260:12
+    [1m[96m|[0m
+[1m[96m260[0m [1m[96m|[0m pub struct VersionFile {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Project` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:268:12
+    [1m[96m|[0m
+[1m[96m268[0m [1m[96m|[0m pub struct Project {
+    [1m[96m|[0m            [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstanceLink` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:276:10
+    [1m[96m|[0m
+[1m[96m276[0m [1m[96m|[0m pub enum InstanceLink {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `Instance` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:325:12
+    [1m[96m|[0m
+[1m[96m325[0m [1m[96m|[0m pub struct Instance {
+    [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `AppliedContentSet` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:338:12
+    [1m[96m|[0m
+[1m[96m338[0m [1m[96m|[0m pub struct AppliedContentSet {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstanceMetadata` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:351:12
+    [1m[96m|[0m
+[1m[96m351[0m [1m[96m|[0m pub struct InstanceMetadata {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceAttachment` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:369:12
+    [1m[96m|[0m
+[1m[96m369[0m [1m[96m|[0m pub struct SharedInstanceAttachment {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceAttachmentInput` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:390:12
+    [1m[96m|[0m
+[1m[96m390[0m [1m[96m|[0m pub struct SharedInstanceAttachmentInput {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `SharedInstanceRole` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:411:10
+    [1m[96m|[0m
+[1m[96m411[0m [1m[96m|[0m pub enum SharedInstanceRole {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ContentSetSyncStatus` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:420:10
+    [1m[96m|[0m
+[1m[96m420[0m [1m[96m|[0m pub enum ContentSetSyncStatus {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `ContentSetRemoteRef` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:432:12
+    [1m[96m|[0m
+[1m[96m432[0m [1m[96m|[0m pub struct ContentSetRemoteRef {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ContentSetRemoteRefType` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:441:10
+    [1m[96m|[0m
+[1m[96m441[0m [1m[96m|[0m pub enum ContentSetRemoteRefType {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ContentSetSyncProvider` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:448:10
+    [1m[96m|[0m
+[1m[96m448[0m [1m[96m|[0m pub enum ContentSetSyncProvider {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `ContentSetSyncState` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:455:12
+    [1m[96m|[0m
+[1m[96m455[0m [1m[96m|[0m pub struct ContentSetSyncState {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstanceInstallStage` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:470:10
+    [1m[96m|[0m
+[1m[96m470[0m [1m[96m|[0m pub enum InstanceInstallStage {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ContentSourceKind` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:485:10
+    [1m[96m|[0m
+[1m[96m485[0m [1m[96m|[0m pub enum ContentSourceKind {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: method `is_shared_instance_managed` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:496:12
+    [1m[96m|[0m
+[1m[96m495[0m [1m[96m|[0m impl ContentSourceKind {
+    [1m[96m|[0m [1m[96m----------------------[0m [1m[96mmethod in this implementation[0m
+[1m[96m496[0m [1m[96m|[0m     pub fn is_shared_instance_managed(&self) -> bool {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `EditInstance` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:503:12
+    [1m[96m|[0m
+[1m[96m503[0m [1m[96m|[0m pub struct EditInstance {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `AppliedContentSetPatch` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:516:12
+    [1m[96m|[0m
+[1m[96m516[0m [1m[96m|[0m pub struct AppliedContentSetPatch {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `CacheBehaviour` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:526:10
+    [1m[96m|[0m
+[1m[96m526[0m [1m[96m|[0m pub enum CacheBehaviour {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `ModrinthCredentials` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:537:12
+    [1m[96m|[0m
+[1m[96m537[0m [1m[96m|[0m pub struct ModrinthCredentials {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated function `get_all` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:545:18
+    [1m[96m|[0m
+[1m[96m544[0m [1m[96m|[0m impl ModrinthCredentials {
+    [1m[96m|[0m [1m[96m------------------------[0m [1m[96massociated function in this implementation[0m
+[1m[96m545[0m [1m[96m|[0m     pub async fn get_all(_pool: &Pool) -> Result<HashMap<String, ModrinthCredentials>> 
+{
+    [1m[96m|[0m                  [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `ContentEntry` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:552:12
+    [1m[96m|[0m
+[1m[96m552[0m [1m[96m|[0m pub struct ContentEntry {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstanceFile` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:565:12
+    [1m[96m|[0m
+[1m[96m565[0m [1m[96m|[0m pub struct InstanceFile {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `cache_file_hash` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:575:14
+    [1m[96m|[0m
+[1m[96m575[0m [1m[96m|[0m pub async fn cache_file_hash(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `cache_file_hash_metadata` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:603:14
+    [1m[96m|[0m
+[1m[96m603[0m [1m[96m|[0m pub async fn cache_file_hash_metadata(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `file_modified_at_ns` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:629:8
+    [1m[96m|[0m
+[1m[96m629[0m [1m[96m|[0m pub fn file_modified_at_ns(metadata: &std::fs::Metadata) -> Result<u64> {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:643:14
+    [1m[96m|[0m
+[1m[96m643[0m [1m[96m|[0m pub async fn get_instance(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:651:14
+    [1m[96m|[0m
+[1m[96m651[0m [1m[96m|[0m pub async fn remove_instance(_instance_id: &str, _state: &State) -> Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `attach_shared_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:656:14
+    [1m[96m|[0m
+[1m[96m656[0m [1m[96m|[0m pub async fn attach_shared_instance(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `edit_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:665:14
+    [1m[96m|[0m
+[1m[96m665[0m [1m[96m|[0m pub async fn edit_instance(_instance_id: &str, _edit: EditInstance) -> Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `edit_icon` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:670:14
+    [1m[96m|[0m
+[1m[96m670[0m [1m[96m|[0m pub async fn edit_icon(_instance_id: &str, _icon: Option<&std::path::Path>) -> Result<(
+)> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:675:14
+    [1m[96m|[0m
+[1m[96m675[0m [1m[96m|[0m pub async fn get(_instance_id: &str) -> Result<Option<InstanceMetadata>> {
+    [1m[96m|[0m              [1m[93m^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_full_path` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:680:14
+    [1m[96m|[0m
+[1m[96m680[0m [1m[96m|[0m pub async fn get_full_path(_instance_id: &str) -> Result<PathBuf> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:685:14
+    [1m[96m|[0m
+[1m[96m685[0m [1m[96m|[0m pub async fn create(
+    [1m[96m|[0m              [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_instance_metadata` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:725:22
+    [1m[96m|[0m
+[1m[96m725[0m [1m[96m|[0m         pub async fn get_instance_metadata(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_instance_launch_context` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:732:22
+    [1m[96m|[0m
+[1m[96m732[0m [1m[96m|[0m         pub async fn get_instance_launch_context(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `set_instance_install_stage` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:739:22
+    [1m[96m|[0m
+[1m[96m739[0m [1m[96m|[0m         pub async fn set_instance_install_stage(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `list_project_files` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:747:22
+    [1m[96m|[0m
+[1m[96m747[0m [1m[96m|[0m         pub async fn list_project_files(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_project` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:754:22
+    [1m[96m|[0m
+[1m[96m754[0m [1m[96m|[0m         pub async fn remove_project(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `add_project_from_version` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:762:22
+    [1m[96m|[0m
+[1m[96m762[0m [1m[96m|[0m         pub async fn add_project_from_version(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `toggle_disable_project` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:773:22
+    [1m[96m|[0m
+[1m[96m773[0m [1m[96m|[0m         pub async fn toggle_disable_project(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `add_project_bytes` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:782:22
+    [1m[96m|[0m
+[1m[96m782[0m [1m[96m|[0m         pub async fn add_project_bytes(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `record_project_file` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:796:22
+    [1m[96m|[0m
+[1m[96m796[0m [1m[96m|[0m         pub async fn record_project_file(
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_content_entries` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:820:30
+    [1m[96m|[0m
+[1m[96m820[0m [1m[96m|[0m                 pub async fn get_content_entries(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_instance_files` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:827:30
+    [1m[96m|[0m
+[1m[96m827[0m [1m[96m|[0m                 pub async fn get_instance_files(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `restore_instance_content_snapshot` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:834:30
+    [1m[96m|[0m
+[1m[96m834[0m [1m[96m|[0m                 pub async fn restore_instance_content_snapshot(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_content_entries_for_file` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:843:30
+    [1m[96m|[0m
+[1m[96m843[0m [1m[96m|[0m                 pub async fn remove_content_entries_for_file(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_instance_file_by_relative_path` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:851:30
+    [1m[96m|[0m
+[1m[96m851[0m [1m[96m|[0m                 pub async fn remove_instance_file_by_relative_path(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_content_set` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:859:30
+    [1m[96m|[0m
+[1m[96m859[0m [1m[96m|[0m                 pub async fn update_content_set(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `delete_content_set_remote_ref` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:866:30
+    [1m[96m|[0m
+[1m[96m866[0m [1m[96m|[0m                 pub async fn delete_content_set_remote_ref(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `delete_content_set_sync_state` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:874:30
+    [1m[96m|[0m
+[1m[96m874[0m [1m[96m|[0m                 pub async fn delete_content_set_sync_state(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `upsert_content_set_remote_ref` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:881:30
+    [1m[96m|[0m
+[1m[96m881[0m [1m[96m|[0m                 pub async fn upsert_content_set_remote_ref(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `upsert_content_set_sync_state` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:888:30
+    [1m[96m|[0m
+[1m[96m888[0m [1m[96m|[0m                 pub async fn upsert_content_set_sync_state(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:900:30
+    [1m[96m|[0m
+[1m[96m900[0m [1m[96m|[0m                 pub async fn update_instance(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `upsert_instance_link` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:907:30
+    [1m[96m|[0m
+[1m[96m907[0m [1m[96m|[0m                 pub async fn upsert_instance_link(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `set_shared_instance_attachment` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:915:30
+    [1m[96m|[0m
+[1m[96m915[0m [1m[96m|[0m                 pub async fn set_shared_instance_attachment(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `replace_instance_groups` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:923:30
+    [1m[96m|[0m
+[1m[96m923[0m [1m[96m|[0m                 pub async fn replace_instance_groups(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `upsert_instance_launch_overrides` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:931:30
+    [1m[96m|[0m
+[1m[96m931[0m [1m[96m|[0m                 pub async fn upsert_instance_launch_overrides(
+    [1m[96m|[0m                              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `CONFIG_BUNDLE_FILE_TYPE` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:960:19
+    [1m[96m|[0m
+[1m[96m960[0m [1m[96m|[0m         pub const CONFIG_BUNDLE_FILE_TYPE: &str = "config-bundle";
+    [1m[96m|[0m                   [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `CONFIG_DIRECTORY` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:963:19
+    [1m[96m|[0m
+[1m[96m963[0m [1m[96m|[0m         pub const CONFIG_DIRECTORY: &str = "config";
+    [1m[96m|[0m                   [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `CONFIG_FILE_EXTENSIONS` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:966:19
+    [1m[96m|[0m
+[1m[96m966[0m [1m[96m|[0m         pub const CONFIG_FILE_EXTENSIONS: &[&str] = &["txt", "json", "toml", "propertie
+s", "cfg", "ini"];
+    [1m[96m|[0m                   [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `CONFIG_SYNC_ENABLED` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:969:19
+    [1m[96m|[0m
+[1m[96m969[0m [1m[96m|[0m         pub const CONFIG_SYNC_ENABLED: bool = true;
+    [1m[96m|[0m                   [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `MAX_CONFIG_BUNDLE_ENTRIES` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:972:19
+    [1m[96m|[0m
+[1m[96m972[0m [1m[96m|[0m         pub const MAX_CONFIG_BUNDLE_ENTRIES: usize = 1024;
+    [1m[96m|[0m                   [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `edit` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:975:22
+    [1m[96m|[0m
+[1m[96m975[0m [1m[96m|[0m         pub async fn edit(_instance_id: &str, _edit: EditInstance) -> Result<()> {
+    [1m[96m|[0m                      [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:980:22
+    [1m[96m|[0m
+[1m[96m980[0m [1m[96m|[0m         pub async fn get(instance_id: &str) -> Result<Option<InstanceMetadata>> {
+    [1m[96m|[0m                      [1m[93m^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_full_path` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:985:22
+    [1m[96m|[0m
+[1m[96m985[0m [1m[96m|[0m         pub async fn get_full_path(instance_id: &str) -> Result<std::path::PathBuf> {
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `edit_icon` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:990:22
+    [1m[96m|[0m
+[1m[96m990[0m [1m[96m|[0m         pub async fn edit_icon(_instance_id: &str, _icon: Option<&Path>) -> Result<()> 
+{
+    [1m[96m|[0m                      [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\state.rs:995:22
+    [1m[96m|[0m
+[1m[96m995[0m [1m[96m|[0m         pub async fn create(
+    [1m[96m|[0m                      [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read_bounded_config_bundle_entry` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1007:16
+     [1m[96m|[0m
+[1m[96m1007[0m [1m[96m|[0m         pub fn read_bounded_config_bundle_entry<R: std::io::Read>(
+     [1m[96m|[0m                [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `ImportLauncherType` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1038:22
+     [1m[96m|[0m
+[1m[96m1038[0m [1m[96m|[0m             pub enum ImportLauncherType {
+     [1m[96m|[0m                      [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `import_instance_with_reporter` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1056:26
+     [1m[96m|[0m
+[1m[96m1056[0m [1m[96m|[0m             pub async fn import_instance_with_reporter(
+     [1m[96m|[0m                          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `copy_dotminecraft_with_reporter` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1067:26
+     [1m[96m|[0m
+[1m[96m1067[0m [1m[96m|[0m             pub async fn copy_dotminecraft_with_reporter(
+     [1m[96m|[0m                          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `LoaderVersion` is never constructed[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1089:16
+     [1m[96m|[0m
+[1m[96m1089[0m [1m[96m|[0m     pub struct LoaderVersion {
+     [1m[96m|[0m                [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_loader_version_from_profile` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1094:18
+     [1m[96m|[0m
+[1m[96m1094[0m [1m[96m|[0m     pub async fn get_loader_version_from_profile(
+     [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_minecraft_with_reporter` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1103:18
+     [1m[96m|[0m
+[1m[96m1103[0m [1m[96m|[0m     pub async fn install_minecraft_with_reporter(
+     [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_minecraft_for_instance_id_with_reporter` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1112:18
+     [1m[96m|[0m
+[1m[96m1112[0m [1m[96m|[0m     pub async fn install_minecraft_for_instance_id_with_reporter(
+     [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_instance` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\state.rs:1129:18
+     [1m[96m|[0m
+[1m[96m1129[0m [1m[96m|[0m     pub async fn emit_instance(
+     [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `INSTALL_SUPPORT_LOG_TAIL_BYTES` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:15:7
+   [1m[96m|[0m
+[1m[96m15[0m [1m[96m|[0m const INSTALL_SUPPORT_LOG_TAIL_BYTES: u64 = 128 * 1024;
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `build_job_support_details` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:17:14
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m pub async fn build_job_support_details(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `result_summary` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:54:4
+   [1m[96m|[0m
+[1m[96m54[0m [1m[96m|[0m fn result_summary(
+   [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_environment_details` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:97:4
+   [1m[96m|[0m
+[1m[96m97[0m [1m[96m|[0m fn write_environment_details(details: &mut String) {
+   [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `latest_interruption` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:116:4
+    [1m[96m|[0m
+[1m[96m116[0m [1m[96m|[0m fn latest_interruption(
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_timeline` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:127:4
+    [1m[96m|[0m
+[1m[96m127[0m [1m[96m|[0m fn write_timeline(details: &mut String, events: &[InstallJobEvent]) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `timeline_event_description` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:149:4
+    [1m[96m|[0m
+[1m[96m149[0m [1m[96m|[0m fn timeline_event_description(event: &InstallJobEvent) -> Option<String> {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_content_summary` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:206:4
+    [1m[96m|[0m
+[1m[96m206[0m [1m[96m|[0m fn write_content_summary(details: &mut String, events: &[InstallJobEvent]) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_errors` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:284:4
+    [1m[96m|[0m
+[1m[96m284[0m [1m[96m|[0m fn write_errors(details: &mut String, snapshot: &InstallJobSnapshot) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_api_error_details` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:310:4
+    [1m[96m|[0m
+[1m[96m310[0m [1m[96m|[0m fn write_api_error_details(
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_error_context` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:332:4
+    [1m[96m|[0m
+[1m[96m332[0m [1m[96m|[0m fn write_error_context(
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_raw_snapshot` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:389:4
+    [1m[96m|[0m
+[1m[96m389[0m [1m[96m|[0m fn write_raw_snapshot(details: &mut String, snapshot: &InstallJobSnapshot) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `write_latest_log` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:402:10
+    [1m[96m|[0m
+[1m[96m402[0m [1m[96m|[0m async fn write_latest_log(details: &mut String, state: &State) {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `phase_label` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:419:4
+    [1m[96m|[0m
+[1m[96m419[0m [1m[96m|[0m fn phase_label(phase: InstallPhaseId) -> &'static str {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `phase_details_suffix` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:437:4
+    [1m[96m|[0m
+[1m[96m437[0m [1m[96m|[0m fn phase_details_suffix(details: &InstallPhaseDetails) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `cleanup_summary` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:476:4
+    [1m[96m|[0m
+[1m[96m476[0m [1m[96m|[0m fn cleanup_summary(cleanup: &InstallCleanup) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `progress_summary` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:492:4
+    [1m[96m|[0m
+[1m[96m492[0m [1m[96m|[0m fn progress_summary(progress: &InstallProgress) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `format_bytes` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:505:4
+    [1m[96m|[0m
+[1m[96m505[0m [1m[96m|[0m fn format_bytes(bytes: u64) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `json_string` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:524:4
+    [1m[96m|[0m
+[1m[96m524[0m [1m[96m|[0m fn json_string<T: serde::Serialize>(value: &T) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `latest_launcher_log_tail` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:530:10
+    [1m[96m|[0m
+[1m[96m530[0m [1m[96m|[0m async fn latest_launcher_log_tail(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read_file_tail` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:572:4
+    [1m[96m|[0m
+[1m[96m572[0m [1m[96m|[0m fn read_file_tail(path: &Path, max_bytes: u64) -> super::error::Result<String> {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `censor_support_text` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:589:10
+    [1m[96m|[0m
+[1m[96m589[0m [1m[96m|[0m async fn censor_support_text(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `minecraft_tokens` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:614:10
+    [1m[96m|[0m
+[1m[96m614[0m [1m[96m|[0m async fn minecraft_tokens(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `replace_nonempty` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:623:4
+    [1m[96m|[0m
+[1m[96m623[0m [1m[96m|[0m fn replace_nonempty(text: &mut String, value: &str, replacement: &str) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `censor_ip_addresses` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\diagnostics.rs:629:4
+    [1m[96m|[0m
+[1m[96m629[0m [1m[96m|[0m fn censor_ip_addresses(text: String) -> String {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `PROGRESS_PERSIST_INTERVAL` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\events.rs:12:7
+   [1m[96m|[0m
+[1m[96m12[0m [1m[96m|[0m const PROGRESS_PERSIST_INTERVAL: Duration = Duration::from_millis(750);
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `CONTENT_PROGRESS_PERSIST_STEPS` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\events.rs:13:7
+   [1m[96m|[0m
+[1m[96m13[0m [1m[96m|[0m const CONTENT_PROGRESS_PERSIST_STEPS: u64 = 25;
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallProgressReporter` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\events.rs:16:12
+   [1m[96m|[0m
+[1m[96m16[0m [1m[96m|[0m pub struct InstallProgressReporter {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallProgressReporterState` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\events.rs:22:8
+   [1m[96m|[0m
+[1m[96m22[0m [1m[96m|[0m struct InstallProgressReporterState {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: multiple associated items are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\events.rs:29:12
+    [1m[96m|[0m
+[1m[96m 28[0m [1m[96m|[0m impl InstallProgressReporter {
+    [1m[96m|[0m [1m[96m----------------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m 29[0m [1m[96m|[0m     pub fn new(job_id: Uuid, state: InstallJobState) -> Self {
+    [1m[96m|[0m            [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m 40[0m [1m[96m|[0m     pub async fn update(
+    [1m[96m|[0m                  [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m 50[0m [1m[96m|[0m     pub async fn set_context(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m 57[0m [1m[96m|[0m     pub async fn set_transient_context(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m 64[0m [1m[96m|[0m     pub async fn clear_context(&self) -> Result<()> {
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m 68[0m [1m[96m|[0m     async fn update_context(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m 91[0m [1m[96m|[0m     pub async fn persist(&self) -> Result<InstallJobSnapshot> {
+    [1m[96m|[0m                  [1m[93m^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m103[0m [1m[96m|[0m     pub async fn persist_failure_context(&self, context: InstallErrorContext) {
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m111[0m [1m[96m|[0m     pub async fn preserve_failure_context<T>(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m125[0m [1m[96m|[0m     pub async fn update_with_events(
+    [1m[96m|[0m                  [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: methods `should_persist` and `mark_persisted` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\events.rs:157:8
+    [1m[96m|[0m
+[1m[96m156[0m [1m[96m|[0m impl InstallProgressReporterState {
+    [1m[96m|[0m [1m[96m---------------------------------[0m [1m[96mmethods in this implementation[0m
+[1m[96m157[0m [1m[96m|[0m     fn should_persist(&self, phase_started: bool) -> bool {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m187[0m [1m[96m|[0m     fn mark_persisted(&mut self) {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `emit_install_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\events.rs:199:14
+    [1m[96m|[0m
+[1m[96m199[0m [1m[96m|[0m pub async fn emit_install_job(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `PackFormat` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_from.rs:27:12
+   [1m[96m|[0m
+[1m[96m27[0m [1m[96m|[0m pub struct PackFormat {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `PackFile` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_from.rs:39:12
+   [1m[96m|[0m
+[1m[96m39[0m [1m[96m|[0m pub struct PackFile {
+   [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `PackFileHash` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_from.rs:49:10
+   [1m[96m|[0m
+[1m[96m49[0m [1m[96m|[0m pub enum PackFileHash {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `EnvType` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_from.rs:67:10
+   [1m[96m|[0m
+[1m[96m67[0m [1m[96m|[0m pub enum EnvType {
+   [1m[96m|[0m          [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `PackDependency` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_from.rs:73:10
+   [1m[96m|[0m
+[1m[96m73[0m [1m[96m|[0m pub enum PackDependency {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `CreatePackLocation` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_from.rs:93:10
+   [1m[96m|[0m
+[1m[96m93[0m [1m[96m|[0m pub enum CreatePackLocation {
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CreatePackInstance` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:109:12
+    [1m[96m|[0m
+[1m[96m109[0m [1m[96m|[0m pub struct CreatePackInstance {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `CreatePackFile` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:143:10
+    [1m[96m|[0m
+[1m[96m143[0m [1m[96m|[0m pub enum CreatePackFile {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CreatePack` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:150:12
+    [1m[96m|[0m
+[1m[96m150[0m [1m[96m|[0m pub struct CreatePack {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `MAX_LOCAL_FILE_HASH_LOOKUP_SIZE` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:155:7
+    [1m[96m|[0m
+[1m[96m155[0m [1m[96m|[0m const MAX_LOCAL_FILE_HASH_LOOKUP_SIZE: u64 = 1024 * 1024 * 1024;
+    [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CreatePackDescription` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:158:12
+    [1m[96m|[0m
+[1m[96m158[0m [1m[96m|[0m pub struct CreatePackDescription {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_instance_from_pack` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:167:14
+    [1m[96m|[0m
+[1m[96m167[0m [1m[96m|[0m pub async fn get_instance_from_pack(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `generate_pack_from_version_id_with_reporter` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:237:21
+    [1m[96m|[0m
+[1m[96m237[0m [1m[96m|[0m pub(crate) async fn generate_pack_from_version_id_with_reporter(
+    [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `generate_pack_from_file` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:465:14
+    [1m[96m|[0m
+[1m[96m465[0m [1m[96m|[0m pub async fn generate_pack_from_file(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `set_instance_information` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_from.rs:487:14
+    [1m[96m|[0m
+[1m[96m487[0m [1m[96m|[0m pub async fn set_instance_information(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: type alias `ExtractProgressFn` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:42:6
+   [1m[96m|[0m
+[1m[96m42[0m [1m[96m|[0m type ExtractProgressFn<'a> = dyn FnMut(u64) -> Pin<Box<dyn Future<Output = Result<()>> +
+ Send + 'a>>
+   [1m[96m|[0m      [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `MODPACK_CONTENT_DOWNLOAD_CONCURRENCY` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:45:7
+   [1m[96m|[0m
+[1m[96m45[0m [1m[96m|[0m const MODPACK_CONTENT_DOWNLOAD_CONCURRENCY: usize = 4;
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `ModpackContentInstallContext` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:48:8
+   [1m[96m|[0m
+[1m[96m48[0m [1m[96m|[0m struct ModpackContentInstallContext {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: methods `mark_downloaded`, `remove_active_download`, and `update_active_download` are ne
+ver used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:66:14
+    [1m[96m|[0m
+[1m[96m 65[0m [1m[96m|[0m impl ModpackContentInstallContext {
+    [1m[96m|[0m [1m[96m---------------------------------[0m [1m[96mmethods in this implementation[0m
+[1m[96m 66[0m [1m[96m|[0m     async fn mark_downloaded(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m 97[0m [1m[96m|[0m     async fn remove_active_download(&self, path: &str) {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m102[0m [1m[96m|[0m     async fn update_active_download(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `MrpackZipReader` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:113:6
+    [1m[96m|[0m
+[1m[96m113[0m [1m[96m|[0m enum MrpackZipReader {
+    [1m[96m|[0m      [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `new`, `file`, `read_entry_to_string`, `hash_entry`, and `extract_entry
+` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:120:14
+    [1m[96m|[0m
+[1m[96m119[0m [1m[96m|[0m impl MrpackZipReader {
+    [1m[96m|[0m [1m[96m--------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m120[0m [1m[96m|[0m     async fn new(file: &CreatePackFile) -> Result<Self> {
+    [1m[96m|[0m              [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m141[0m [1m[96m|[0m     fn file(&self) -> &async_zip::ZipFile {
+    [1m[96m|[0m        [1m[93m^^^^[0m
+[1m[96m...[0m
+[1m[96m148[0m [1m[96m|[0m     async fn read_entry_to_string(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m167[0m [1m[96m|[0m     async fn hash_entry(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m181[0m [1m[96m|[0m     async fn extract_entry(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `hash_zip_entry` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:211:10
+    [1m[96m|[0m
+[1m[96m211[0m [1m[96m|[0m async fn hash_zip_entry<R>(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_external_files_from_mrpack` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:241:21
+    [1m[96m|[0m
+[1m[96m241[0m [1m[96m|[0m pub(crate) async fn get_external_files_from_mrpack(
+    [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `extract_zip_entry` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:331:10
+    [1m[96m|[0m
+[1m[96m331[0m [1m[96m|[0m async fn extract_zip_entry<R>(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_zipped_mrpack_files_with_reporter` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:399:21
+    [1m[96m|[0m
+[1m[96m399[0m [1m[96m|[0m pub(crate) async fn install_zipped_mrpack_files_with_reporter(
+    [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `pack_source_path` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:1081:4
+     [1m[96m|[0m
+[1m[96m1081[0m [1m[96m|[0m fn pack_source_path(file: &CreatePackFile) -> String {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `modpack_source_kind` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:1088:4
+     [1m[96m|[0m
+[1m[96m1088[0m [1m[96m|[0m fn modpack_source_kind(version_id: Option<&str>) -> ContentSourceKind {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_all_related_files` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\install_mrpack.rs:1098:14
+     [1m[96m|[0m
+[1m[96m1098[0m [1m[96m|[0m pub async fn remove_all_related_files(
+     [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: type alias `InstallModpackPreview` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\model.rs:12:10
+   [1m[96m|[0m
+[1m[96m12[0m [1m[96m|[0m pub type InstallModpackPreview = CreatePackInstance;
+   [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallJobState` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\model.rs:15:12
+   [1m[96m|[0m
+[1m[96m15[0m [1m[96m|[0m pub struct InstallJobState {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `new`, `record_event`, `set_context`, and `set_progress` are never used
+[0m
+  [1m[96m--> [0msrc\modpack\theseus\model.rs:35:12
+   [1m[96m|[0m
+[1m[96m34[0m [1m[96m|[0m impl InstallJobState {
+   [1m[96m|[0m [1m[96m--------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m35[0m [1m[96m|[0m     pub fn new(request: InstallRequest) -> Self {
+   [1m[96m|[0m            [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m64[0m [1m[96m|[0m     pub fn record_event(&mut self, kind: InstallJobEventKind) {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m71[0m [1m[96m|[0m     pub fn set_context(&mut self, context: Option<InstallErrorContext>) {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m75[0m [1m[96m|[0m     pub fn set_progress(
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallJobEvent` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\model.rs:98:12
+   [1m[96m|[0m
+[1m[96m98[0m [1m[96m|[0m pub struct InstallJobEvent {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallInterruptReason` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:105:10
+    [1m[96m|[0m
+[1m[96m105[0m [1m[96m|[0m pub enum InstallInterruptReason {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallJobEventKind` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:112:10
+    [1m[96m|[0m
+[1m[96m112[0m [1m[96m|[0m pub enum InstallJobEventKind {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallRequest` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:159:10
+    [1m[96m|[0m
+[1m[96m159[0m [1m[96m|[0m pub enum InstallRequest {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallPostInstallEdit` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:201:12
+    [1m[96m|[0m
+[1m[96m201[0m [1m[96m|[0m pub struct InstallPostInstallEdit {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceInstallData` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:209:12
+    [1m[96m|[0m
+[1m[96m209[0m [1m[96m|[0m pub struct SharedInstanceInstallData {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceExternalFileData` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:232:12
+    [1m[96m|[0m
+[1m[96m232[0m [1m[96m|[0m pub struct SharedInstanceExternalFileData {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceInstallModpack` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:240:12
+    [1m[96m|[0m
+[1m[96m240[0m [1m[96m|[0m pub struct SharedInstanceInstallModpack {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: methods `kind`, `target`, and `cleanup` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:249:12
+    [1m[96m|[0m
+[1m[96m248[0m [1m[96m|[0m impl InstallRequest {
+    [1m[96m|[0m [1m[96m-------------------[0m [1m[96mmethods in this implementation[0m
+[1m[96m249[0m [1m[96m|[0m     pub fn kind(&self) -> InstallJobKind {
+    [1m[96m|[0m            [1m[93m^^^^[0m
+[1m[96m...[0m
+[1m[96m272[0m [1m[96m|[0m     pub fn target(&self) -> InstallTarget {
+    [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m285[0m [1m[96m|[0m     pub fn cleanup(&self) -> InstallCleanup {
+    [1m[96m|[0m            [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallJobKind` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:301:10
+    [1m[96m|[0m
+[1m[96m301[0m [1m[96m|[0m pub enum InstallJobKind {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `as_str` and `from_stored_str` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:313:12
+    [1m[96m|[0m
+[1m[96m312[0m [1m[96m|[0m impl InstallJobKind {
+    [1m[96m|[0m [1m[96m-------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m313[0m [1m[96m|[0m     pub fn as_str(self) -> &'static str {
+    [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m328[0m [1m[96m|[0m     pub fn from_stored_str(value: &str) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallJobStatus` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:346:10
+    [1m[96m|[0m
+[1m[96m346[0m [1m[96m|[0m pub enum InstallJobStatus {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `as_str`, `from_stored_str`, and `is_finished` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:356:12
+    [1m[96m|[0m
+[1m[96m355[0m [1m[96m|[0m impl InstallJobStatus {
+    [1m[96m|[0m [1m[96m---------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m356[0m [1m[96m|[0m     pub fn as_str(self) -> &'static str {
+    [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m367[0m [1m[96m|[0m     pub fn from_stored_str(value: &str) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m378[0m [1m[96m|[0m     pub fn is_finished(self) -> bool {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallTarget` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:388:10
+    [1m[96m|[0m
+[1m[96m388[0m [1m[96m|[0m pub enum InstallTarget {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallCleanup` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:395:10
+    [1m[96m|[0m
+[1m[96m395[0m [1m[96m|[0m pub enum InstallCleanup {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallProgressState` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:401:12
+    [1m[96m|[0m
+[1m[96m401[0m [1m[96m|[0m pub struct InstallProgressState {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallPhaseId` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:409:10
+    [1m[96m|[0m
+[1m[96m409[0m [1m[96m|[0m pub enum InstallPhaseId {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallProgress` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:426:12
+    [1m[96m|[0m
+[1m[96m426[0m [1m[96m|[0m pub struct InstallProgress {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallProgressSecondary` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:434:12
+    [1m[96m|[0m
+[1m[96m434[0m [1m[96m|[0m pub struct InstallProgressSecondary {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallJavaStep` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:441:10
+    [1m[96m|[0m
+[1m[96m441[0m [1m[96m|[0m pub enum InstallJavaStep {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: enum `InstallPhaseDetails` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:451:10
+    [1m[96m|[0m
+[1m[96m451[0m [1m[96m|[0m pub enum InstallPhaseDetails {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallJobPaths` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:476:12
+    [1m[96m|[0m
+[1m[96m476[0m [1m[96m|[0m pub struct InstallJobPaths {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallErrorContext` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:486:12
+    [1m[96m|[0m
+[1m[96m486[0m [1m[96m|[0m pub struct InstallErrorContext {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: multiple associated items are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:520:12
+    [1m[96m|[0m
+[1m[96m518[0m [1m[96m|[0m impl InstallErrorContext {
+    [1m[96m|[0m [1m[96m------------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m519[0m [1m[96m|[0m     /// 创建新的错误上下文（对应 bon::Builder 的 start_fn = new）
+[1m[96m520[0m [1m[96m|[0m     pub fn new(operation: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m527[0m [1m[96m|[0m     pub fn source_path(mut self, path: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m532[0m [1m[96m|[0m     pub fn target_path(mut self, path: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m537[0m [1m[96m|[0m     pub fn file_path(mut self, path: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m542[0m [1m[96m|[0m     pub fn entry_path(mut self, path: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m547[0m [1m[96m|[0m     pub fn urls(mut self, urls: Vec<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^[0m
+[1m[96m...[0m
+[1m[96m552[0m [1m[96m|[0m     pub fn expected_hash(mut self, hash: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m557[0m [1m[96m|[0m     pub fn expected_size(mut self, size: u64) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m562[0m [1m[96m|[0m     pub fn project_id(mut self, id: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m567[0m [1m[96m|[0m     pub fn version_id(mut self, id: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m573[0m [1m[96m|[0m     pub fn maybe_expected_hash(mut self, hash: Option<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m579[0m [1m[96m|[0m     pub fn maybe_project_id(mut self, id: Option<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m585[0m [1m[96m|[0m     pub fn maybe_version_id(mut self, id: Option<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m590[0m [1m[96m|[0m     pub fn minecraft_version(mut self, ver: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m595[0m [1m[96m|[0m     pub fn loader(mut self, loader: impl Into<String>) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^^[0m
+[1m[96m...[0m
+[1m[96m601[0m [1m[96m|[0m     pub fn build(self) -> Self {
+    [1m[96m|[0m            [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallJobDisplay` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:607:12
+    [1m[96m|[0m
+[1m[96m607[0m [1m[96m|[0m pub struct InstallJobDisplay {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallRollbackState` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:613:12
+    [1m[96m|[0m
+[1m[96m613[0m [1m[96m|[0m pub struct InstallRollbackState {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallErrorView` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:619:12
+    [1m[96m|[0m
+[1m[96m619[0m [1m[96m|[0m pub struct InstallErrorView {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallApiErrorDetails` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:633:12
+    [1m[96m|[0m
+[1m[96m633[0m [1m[96m|[0m pub struct InstallApiErrorDetails {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated functions `from_error` and `from_message` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:646:12
+    [1m[96m|[0m
+[1m[96m645[0m [1m[96m|[0m impl InstallErrorView {
+    [1m[96m|[0m [1m[96m---------------------[0m [1m[96massociated functions in this implementation[0m
+[1m[96m646[0m [1m[96m|[0m     pub fn from_error(
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m673[0m [1m[96m|[0m     pub fn from_message(
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallJobSnapshot` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\model.rs:690:12
+    [1m[96m|[0m
+[1m[96m690[0m [1m[96m|[0m pub struct InstallJobSnapshot {
+    [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `SHARED_INSTANCE_ROLLBACK_FILE` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\recovery.rs:23:7
+   [1m[96m|[0m
+[1m[96m23[0m [1m[96m|[0m const SHARED_INSTANCE_ROLLBACK_FILE: &str = "rollback.json";
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `SHARED_INSTANCE_ROLLBACK_INSTANCE_DIR` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\recovery.rs:24:7
+   [1m[96m|[0m
+[1m[96m24[0m [1m[96m|[0m const SHARED_INSTANCE_ROLLBACK_INSTANCE_DIR: &str = "instance";
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceUpdateRollback` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\recovery.rs:27:8
+   [1m[96m|[0m
+[1m[96m27[0m [1m[96m|[0m struct SharedInstanceUpdateRollback {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `prepare_shared_instance_update_backup` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\recovery.rs:32:21
+   [1m[96m|[0m
+[1m[96m32[0m [1m[96m|[0m pub(super) async fn prepare_shared_instance_update_backup(
+   [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `clear_staging_dir` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\recovery.rs:86:21
+   [1m[96m|[0m
+[1m[96m86[0m [1m[96m|[0m pub(super) async fn clear_staging_dir(job_state: &InstallJobState) {
+   [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `restore_shared_instance_update` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:105:10
+    [1m[96m|[0m
+[1m[96m105[0m [1m[96m|[0m async fn restore_shared_instance_update(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `restore_instance_metadata` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:139:10
+    [1m[96m|[0m
+[1m[96m139[0m [1m[96m|[0m async fn restore_instance_metadata(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `copy_directory` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:211:10
+    [1m[96m|[0m
+[1m[96m211[0m [1m[96m|[0m async fn copy_directory(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `copy_symlink` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:240:10
+    [1m[96m|[0m
+[1m[96m240[0m [1m[96m|[0m async fn copy_symlink(source: &Path, target: &Path) -> super::error::Result<()> {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `recover_interrupted_jobs` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:262:14
+    [1m[96m|[0m
+[1m[96m262[0m [1m[96m|[0m pub async fn recover_interrupted_jobs(state: &State) -> super::error::Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `recover_interrupted_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:277:10
+    [1m[96m|[0m
+[1m[96m277[0m [1m[96m|[0m async fn recover_interrupted_job(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `clear_deleted_new_instance_id` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:344:4
+    [1m[96m|[0m
+[1m[96m344[0m [1m[96m|[0m fn clear_deleted_new_instance_id(job_state: &mut InstallJobState) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `display_from_request` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:352:4
+    [1m[96m|[0m
+[1m[96m352[0m [1m[96m|[0m fn display_from_request(state: &InstallJobState) -> Option<InstallJobDisplay> {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `apply_cleanup` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\recovery.rs:400:14
+    [1m[96m|[0m
+[1m[96m400[0m [1m[96m|[0m pub async fn apply_cleanup(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:32:14
+   [1m[96m|[0m
+[1m[96m32[0m [1m[96m|[0m pub async fn create_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create_modpack_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:51:14
+   [1m[96m|[0m
+[1m[96m51[0m [1m[96m|[0m pub async fn create_modpack_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `create_shared_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:62:14
+   [1m[96m|[0m
+[1m[96m62[0m [1m[96m|[0m pub async fn create_shared_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_shared_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:68:14
+   [1m[96m|[0m
+[1m[96m68[0m [1m[96m|[0m pub async fn update_shared_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `import_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:75:14
+   [1m[96m|[0m
+[1m[96m75[0m [1m[96m|[0m pub async fn import_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `duplicate_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:88:14
+   [1m[96m|[0m
+[1m[96m88[0m [1m[96m|[0m pub async fn duplicate_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_existing_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\runner.rs:94:14
+   [1m[96m|[0m
+[1m[96m94[0m [1m[96m|[0m pub async fn install_existing_instance(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_pack_to_existing_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:101:14
+    [1m[96m|[0m
+[1m[96m101[0m [1m[96m|[0m pub async fn install_pack_to_existing_instance(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `list_jobs` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:114:14
+    [1m[96m|[0m
+[1m[96m114[0m [1m[96m|[0m pub async fn list_jobs(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:125:14
+    [1m[96m|[0m
+[1m[96m125[0m [1m[96m|[0m pub async fn get_job(job_id: Uuid) -> super::error::Result<InstallJobSnapshot> {
+    [1m[96m|[0m              [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `job_support_details` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:130:14
+    [1m[96m|[0m
+[1m[96m130[0m [1m[96m|[0m pub async fn job_support_details(job_id: Uuid) -> super::error::Result<String> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `retry_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:136:14
+    [1m[96m|[0m
+[1m[96m136[0m [1m[96m|[0m pub async fn retry_job(job_id: Uuid) -> super::error::Result<InstallJobSnapshot> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `cancel_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:223:14
+    [1m[96m|[0m
+[1m[96m223[0m [1m[96m|[0m pub async fn cancel_job(job_id: Uuid) -> super::error::Result<InstallJobSnapshot> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `dismiss_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:298:14
+    [1m[96m|[0m
+[1m[96m298[0m [1m[96m|[0m pub async fn dismiss_job(job_id: Uuid) -> super::error::Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `start` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:303:10
+    [1m[96m|[0m
+[1m[96m303[0m [1m[96m|[0m async fn start(request: InstallRequest) -> super::error::Result<InstallJobSnapshot> {
+    [1m[96m|[0m          [1m[93m^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `prepare_initial_instance` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:359:10
+    [1m[96m|[0m
+[1m[96m359[0m [1m[96m|[0m async fn prepare_initial_instance(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `spawn_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:533:4
+    [1m[96m|[0m
+[1m[96m533[0m [1m[96m|[0m fn spawn_job(job_id: Uuid) {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `run_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:548:10
+    [1m[96m|[0m
+[1m[96m548[0m [1m[96m|[0m async fn run_job(job_id: Uuid) -> super::error::Result<()> {
+    [1m[96m|[0m          [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `terminalize_stranded_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:636:10
+    [1m[96m|[0m
+[1m[96m636[0m [1m[96m|[0m async fn terminalize_stranded_job(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `terminalize_failed_job` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:657:10
+    [1m[96m|[0m
+[1m[96m657[0m [1m[96m|[0m async fn terminalize_failed_job(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `run_request` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\runner.rs:719:10
+    [1m[96m|[0m
+[1m[96m719[0m [1m[96m|[0m async fn run_request(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `apply_post_install_edit` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1006:10
+     [1m[96m|[0m
+[1m[96m1006[0m [1m[96m|[0m async fn apply_post_install_edit(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `disabled_project_ids` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1033:10
+     [1m[96m|[0m
+[1m[96m1033[0m [1m[96m|[0m async fn disabled_project_ids(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_existing_pack_content` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1047:10
+     [1m[96m|[0m
+[1m[96m1047[0m [1m[96m|[0m async fn remove_existing_pack_content(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_existing_imported_pack_content` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1113:10
+     [1m[96m|[0m
+[1m[96m1113[0m [1m[96m|[0m async fn remove_existing_imported_pack_content(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `restore_disabled_projects` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1174:10
+     [1m[96m|[0m
+[1m[96m1174[0m [1m[96m|[0m async fn restore_disabled_projects(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_pack` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1207:21
+     [1m[96m|[0m
+[1m[96m1207[0m [1m[96m|[0m pub(super) async fn install_pack(
+     [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `prepare_existing_rollback` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1272:10
+     [1m[96m|[0m
+[1m[96m1272[0m [1m[96m|[0m async fn prepare_existing_rollback(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `lock_existing_instance_if_needed` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1311:10
+     [1m[96m|[0m
+[1m[96m1311[0m [1m[96m|[0m async fn lock_existing_instance_if_needed(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `lock_existing_instance` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1324:10
+     [1m[96m|[0m
+[1m[96m1324[0m [1m[96m|[0m async fn lock_existing_instance(
+     [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_progress` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1339:21
+     [1m[96m|[0m
+[1m[96m1339[0m [1m[96m|[0m pub(super) async fn update_progress(
+     [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_content_progress` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1352:21
+     [1m[96m|[0m
+[1m[96m1352[0m [1m[96m|[0m pub(super) async fn update_content_progress(
+     [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `set_instance_id` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1371:4
+     [1m[96m|[0m
+[1m[96m1371[0m [1m[96m|[0m fn set_instance_id(job_state: &mut InstallJobState, instance_id: String) {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `clear_deleted_new_instance_id` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1394:4
+     [1m[96m|[0m
+[1m[96m1394[0m [1m[96m|[0m fn clear_deleted_new_instance_id(job_state: &mut InstallJobState) {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `set_display` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1402:4
+     [1m[96m|[0m
+[1m[96m1402[0m [1m[96m|[0m fn set_display(
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_error_view` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1410:4
+     [1m[96m|[0m
+[1m[96m1410[0m [1m[96m|[0m fn install_error_view(
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_error_code` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1427:4
+     [1m[96m|[0m
+[1m[96m1427[0m [1m[96m|[0m fn install_error_code(
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `current_instance_id` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1502:4
+     [1m[96m|[0m
+[1m[96m1502[0m [1m[96m|[0m fn current_instance_id(job_state: &InstallJobState) -> Option<String> {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `modpack_details` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\runner.rs:1511:15
+     [1m[96m|[0m
+[1m[96m1511[0m [1m[96m|[0m pub(super) fn modpack_details(
+     [1m[96m|[0m               [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `MAX_SHARED_INSTANCE_EXTERNAL_FILE_SIZE` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:28:7
+   [1m[96m|[0m
+[1m[96m28[0m [1m[96m|[0m const MAX_SHARED_INSTANCE_EXTERNAL_FILE_SIZE: u64 = 500 * 1024 * 1024;
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `MAX_SHARED_INSTANCE_INITIAL_BUFFER_SIZE` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:29:7
+   [1m[96m|[0m
+[1m[96m29[0m [1m[96m|[0m const MAX_SHARED_INSTANCE_INITIAL_BUFFER_SIZE: u64 = 8 * 1024 * 1024;
+   [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `attach_pending_shared_instance` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:31:21
+   [1m[96m|[0m
+[1m[96m31[0m [1m[96m|[0m pub(super) async fn attach_pending_shared_instance(
+   [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `finalize_shared_instance_attachment` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:54:21
+   [1m[96m|[0m
+[1m[96m54[0m [1m[96m|[0m pub(super) async fn finalize_shared_instance_attachment(
+   [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CurrentSharedInstanceProject` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:78:8
+   [1m[96m|[0m
+[1m[96m78[0m [1m[96m|[0m struct CurrentSharedInstanceProject {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CurrentSharedInstanceExternalFile` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:85:8
+   [1m[96m|[0m
+[1m[96m85[0m [1m[96m|[0m struct CurrentSharedInstanceExternalFile {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: type alias `SharedInstanceExternalFileKey` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:89:6
+   [1m[96m|[0m
+[1m[96m89[0m [1m[96m|[0m type SharedInstanceExternalFileKey = (ProjectType, String);
+   [1m[96m|[0m      [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `CurrentSharedInstanceContent` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:92:8
+   [1m[96m|[0m
+[1m[96m92[0m [1m[96m|[0m struct CurrentSharedInstanceContent {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `DesiredSharedInstanceProject` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:101:8
+    [1m[96m|[0m
+[1m[96m101[0m [1m[96m|[0m struct DesiredSharedInstanceProject {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `DesiredSharedInstanceExternalFile` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:107:8
+    [1m[96m|[0m
+[1m[96m107[0m [1m[96m|[0m struct DesiredSharedInstanceExternalFile {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `DesiredSharedInstanceContent` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:113:8
+    [1m[96m|[0m
+[1m[96m113[0m [1m[96m|[0m struct DesiredSharedInstanceContent {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceProjectUpdate` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:122:8
+    [1m[96m|[0m
+[1m[96m122[0m [1m[96m|[0m struct SharedInstanceProjectUpdate {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `SharedInstanceApplyPlan` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:128:8
+    [1m[96m|[0m
+[1m[96m128[0m [1m[96m|[0m struct SharedInstanceApplyPlan {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `build` and `content_change_count` are never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:140:14
+    [1m[96m|[0m
+[1m[96m139[0m [1m[96m|[0m impl SharedInstanceApplyPlan {
+    [1m[96m|[0m [1m[96m----------------------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m140[0m [1m[96m|[0m     async fn build(
+    [1m[96m|[0m              [1m[93m^^^^^[0m
+[1m[96m...[0m
+[1m[96m201[0m [1m[96m|[0m     fn content_change_count(&self) -> u64 {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `apply_shared_instance_update` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:210:21
+    [1m[96m|[0m
+[1m[96m210[0m [1m[96m|[0m pub(super) async fn apply_shared_instance_update(
+    [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `shared_instance_update_requires_full_apply` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:383:4
+    [1m[96m|[0m
+[1m[96m383[0m [1m[96m|[0m fn shared_instance_update_requires_full_apply(
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `current_shared_instance_content` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:411:10
+    [1m[96m|[0m
+[1m[96m411[0m [1m[96m|[0m async fn current_shared_instance_content(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `desired_shared_instance_content` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:479:10
+    [1m[96m|[0m
+[1m[96m479[0m [1m[96m|[0m async fn desired_shared_instance_content(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `shared_instance_versions_by_id` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:528:10
+    [1m[96m|[0m
+[1m[96m528[0m [1m[96m|[0m async fn shared_instance_versions_by_id(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `apply_shared_instance_content` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:563:21
+    [1m[96m|[0m
+[1m[96m563[0m [1m[96m|[0m pub(super) async fn apply_shared_instance_content(
+    [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `remove_existing_shared_instance_content` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:703:21
+    [1m[96m|[0m
+[1m[96m703[0m [1m[96m|[0m pub(super) async fn remove_existing_shared_instance_content(
+    [1m[96m|[0m                     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `shared_instance_pack_location` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:767:15
+    [1m[96m|[0m
+[1m[96m767[0m [1m[96m|[0m pub(super) fn shared_instance_pack_location(
+    [1m[96m|[0m               [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `shared_instance_link` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:778:15
+    [1m[96m|[0m
+[1m[96m778[0m [1m[96m|[0m pub(super) fn shared_instance_link(
+    [1m[96m|[0m               [1m[93m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_shared_instance_external_file` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:787:10
+    [1m[96m|[0m
+[1m[96m787[0m [1m[96m|[0m async fn install_shared_instance_external_file(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `validate_shared_instance_external_file_name` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:900:4
+    [1m[96m|[0m
+[1m[96m900[0m [1m[96m|[0m fn validate_shared_instance_external_file_name(
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `install_shared_instance_config_bundle` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:923:10
+    [1m[96m|[0m
+[1m[96m923[0m [1m[96m|[0m async fn install_shared_instance_config_bundle(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read_config_bundle` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:957:4
+    [1m[96m|[0m
+[1m[96m957[0m [1m[96m|[0m fn read_config_bundle(bytes: &[u8]) -> super::error::Result<Vec<(PathBuf, Vec<u8>)>> {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `is_supported_config_file` is never used[0m
+    [1m[96m--> [0msrc\modpack\theseus\shared_instance.rs:1008:4
+     [1m[96m|[0m
+[1m[96m1008[0m [1m[96m|[0m fn is_supported_config_file(path: &std::path::Path) -> bool {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `InstallJobRecord` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\store.rs:27:12
+   [1m[96m|[0m
+[1m[96m27[0m [1m[96m|[0m pub struct InstallJobRecord {
+   [1m[96m|[0m            [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: method `snapshot` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus\store.rs:42:12
+   [1m[96m|[0m
+[1m[96m41[0m [1m[96m|[0m impl InstallJobRecord {
+   [1m[96m|[0m [1m[96m---------------------[0m [1m[96mmethod in this implementation[0m
+[1m[96m42[0m [1m[96m|[0m     pub fn snapshot(&self) -> InstallJobSnapshot {
+   [1m[96m|[0m            [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `JobStore` is never constructed[0m
+  [1m[96m--> [0msrc\modpack\theseus\store.rs:63:8
+   [1m[96m|[0m
+[1m[96m63[0m [1m[96m|[0m struct JobStore {
+   [1m[96m|[0m        [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: associated items `new`, `json_path`, `load_from_disk`, and `save_to_disk` are never used
+[0m
+  [1m[96m--> [0msrc\modpack\theseus\store.rs:69:8
+   [1m[96m|[0m
+[1m[96m68[0m [1m[96m|[0m impl JobStore {
+   [1m[96m|[0m [1m[96m-------------[0m [1m[96massociated items in this implementation[0m
+[1m[96m69[0m [1m[96m|[0m     fn new(data_dir: PathBuf) -> Self {
+   [1m[96m|[0m        [1m[93m^^^[0m
+[1m[96m...[0m
+[1m[96m78[0m [1m[96m|[0m     fn json_path(&self) -> PathBuf {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m82[0m [1m[96m|[0m     fn load_from_disk(&mut self) {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^[0m
+[1m[96m...[0m
+[1m[96m90[0m [1m[96m|[0m     fn save_to_disk(&self) -> Result<()> {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: static `JOB_STORE` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:104:8
+    [1m[96m|[0m
+[1m[96m104[0m [1m[96m|[0m static JOB_STORE: OnceLock<Mutex<JobStore>> = OnceLock::new();
+    [1m[96m|[0m        [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_store` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:106:10
+    [1m[96m|[0m
+[1m[96m106[0m [1m[96m|[0m async fn get_store() -> Result<&'static Mutex<JobStore>> {
+    [1m[96m|[0m          [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `insert` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:122:14
+    [1m[96m|[0m
+[1m[96m122[0m [1m[96m|[0m pub async fn insert(
+    [1m[96m|[0m              [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:153:14
+    [1m[96m|[0m
+[1m[96m153[0m [1m[96m|[0m pub async fn get(
+    [1m[96m|[0m              [1m[93m^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `list` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:163:14
+    [1m[96m|[0m
+[1m[96m163[0m [1m[96m|[0m pub async fn list(
+    [1m[96m|[0m              [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `list_interrupted_candidates` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:193:14
+    [1m[96m|[0m
+[1m[96m193[0m [1m[96m|[0m pub async fn list_interrupted_candidates(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_state` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:214:14
+    [1m[96m|[0m
+[1m[96m214[0m [1m[96m|[0m pub async fn update_state(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_status` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:248:14
+    [1m[96m|[0m
+[1m[96m248[0m [1m[96m|[0m pub async fn update_status(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `update_status_if` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:287:14
+    [1m[96m|[0m
+[1m[96m287[0m [1m[96m|[0m pub async fn update_status_if(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `finish_active` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:326:14
+    [1m[96m|[0m
+[1m[96m326[0m [1m[96m|[0m pub async fn finish_active(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `complete_success` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:361:14
+    [1m[96m|[0m
+[1m[96m361[0m [1m[96m|[0m pub async fn complete_success(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `dismiss` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:399:14
+    [1m[96m|[0m
+[1m[96m399[0m [1m[96m|[0m pub async fn dismiss(id: Uuid, _app_state: &State) -> Result<()> {
+    [1m[96m|[0m              [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_required` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:413:14
+    [1m[96m|[0m
+[1m[96m413[0m [1m[96m|[0m pub async fn get_required(
+    [1m[96m|[0m              [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `instance_id` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus\store.rs:427:4
+    [1m[96m|[0m
+[1m[96m427[0m [1m[96m|[0m fn instance_id(state: &InstallJobState) -> Option<String> {
+    [1m[96m|[0m    [1m[93m^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `import_mrpack` is never used[0m
+  [1m[96m--> [0msrc\modpack\theseus_adapter.rs:31:14
+   [1m[96m|[0m
+[1m[96m31[0m [1m[96m|[0m pub async fn import_mrpack(
+   [1m[96m|[0m              [1m[93m^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: struct `JobResult` is never constructed[0m
+   [1m[96m--> [0msrc\modpack\theseus_adapter.rs:208:8
+    [1m[96m|[0m
+[1m[96m208[0m [1m[96m|[0m struct JobResult {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `wait_for_job_completion` is never used[0m
+   [1m[96m--> [0msrc\modpack\theseus_adapter.rs:216:10
+    [1m[96m|[0m
+[1m[96m216[0m [1m[96m|[0m async fn wait_for_job_completion(
+    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `set_detected_lan_port` is never used[0m
+  [1m[96m--> [0msrc\network\mod.rs:71:8
+   [1m[96m|[0m
+[1m[96m71[0m [1m[96m|[0m pub fn set_detected_lan_port(port: u16) {
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `current_server_idx` is never read[0m
+  [1m[96m--> [0msrc\redstone_online.rs:43:5
+   [1m[96m|[0m
+[1m[96m40[0m [1m[96m|[0m struct RedstoneState {
+   [1m[96m|[0m        [1m[96m-------------[0m [1m[96mfield in this struct[0m
+[1m[96m...[0m
+[1m[96m43[0m [1m[96m|[0m     current_server_idx: usize,
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: fields `dir`, `name`, and `port` are never read[0m
+  [1m[96m--> [0msrc\server_host.rs:50:5
+   [1m[96m|[0m
+[1m[96m46[0m [1m[96m|[0m struct RunningServer {
+   [1m[96m|[0m        [1m[96m-------------[0m [1m[96mfields in this struct[0m
+[1m[96m...[0m
+[1m[96m50[0m [1m[96m|[0m     dir: PathBuf,
+   [1m[96m|[0m     [1m[93m^^^[0m
+[1m[96m51[0m [1m[96m|[0m     name: String,
+   [1m[96m|[0m     [1m[93m^^^^[0m
+[1m[96m52[0m [1m[96m|[0m     port: u16,
+   [1m[96m|[0m     [1m[93m^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_u64` is never used[0m
+   [1m[96m--> [0msrc\utils.rs:115:8
+    [1m[96m|[0m
+[1m[96m115[0m [1m[96m|[0m pub fn get_u64(v: &Value, key: &str) -> Option<u64> {
+    [1m[96m|[0m        [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `get_bool` is never used[0m
+   [1m[96m--> [0msrc\utils.rs:120:8
+    [1m[96m|[0m
+[1m[96m120[0m [1m[96m|[0m pub fn get_bool(v: &Value, key: &str) -> bool {
+    [1m[96m|[0m        [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m: `verse-tauri` (lib) generated 474 warnings (run `cargo fix --lib -p verse-tauri` to apply 58 sugg
+estions)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 58.90s

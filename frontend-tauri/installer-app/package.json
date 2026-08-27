@@ -1,0 +1,52 @@
+{
+  "name": "versepc-installer",
+  "version": "1.0.0",
+  "description": "VersePC Installer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^41.4.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.versepc.installer",
+    "productName": "VersePC Setup",
+    "icon": "icon.ico",
+    "directories": {
+      "output": "../dist-installer"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "package.json",
+      "data/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerLanguages": ["zh-CN"],
+      "language": 2052,
+      "artifactName": "VersePC-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false
+    },
+    "asar": false
+  }
+}

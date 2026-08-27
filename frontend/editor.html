@@ -1,0 +1,792 @@
+<!-- editor.html - VersePC 代码编辑器界面 -->
+<!--
+  VersePC - Minecraft Launcher
+  Copyright (c) 2026 豆杰. All Rights Reserved.
+
+  AI TRAINING PROHIBITED: This code is protected by copyright law.
+  Unauthorized use for AI model training, machine learning datasets,
+  or any form of artificial intelligence training is strictly prohibited.
+
+  This software is proprietary and confidential.
+  Any unauthorized reproduction or distribution is prohibited.
+-->
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; font-src 'self' data:; img-src 'self' data:;">
+  <title>VersePC Editor</title>
+  <style>
+[data-theme="dark"] {
+    --ed-bg: #0a0a0a;
+    --ed-bg-secondary: #141414;
+    --ed-bg-tertiary: #1c1c1c;
+    --ed-bg-tab: #1a1a1a;
+    --ed-bg-tab-active: #0a0a0a;
+    --ed-bg-hover: #242424;
+    --ed-text: #e0e0e0;
+    --ed-text-secondary: #a0a0a0;
+    --ed-text-muted: #666666;
+    --ed-border: rgba(255, 255, 255, 0.1);
+    --ed-accent: #ffffff;
+    --ed-accent-fg: #0a0a0a;
+    --ed-statusbar-bg: #141414;
+    --ed-statusbar-accent: #ffffff;
+    --ed-statusbar-text: #a0a0a0;
+    --ed-statusbar-btn-hover: rgba(255, 255, 255, 0.1);
+    --ed-diff-accept: #16a34a;
+    --ed-diff-accept-hover: #15803d;
+    --ed-diff-reject: #3a2020;
+    --ed-diff-reject-text: #d4a0a0;
+    --ed-diff-reject-hover: #4a2828;
+    --ed-diff-apply: #2563eb;
+    --ed-diff-apply-hover: #1d4ed8;
+    --ed-diff-label: #4ec9b0;
+    --ed-scrollbar: rgba(255, 255, 255, 0.15);
+    --ed-scrollbar-hover: rgba(255, 255, 255, 0.25);
+    --ed-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    --ed-overlay: rgba(0, 0, 0, 0.5);
+    --ed-quickopen-selected: #094771;
+    --ed-kbd-bg: #242424;
+    --ed-kbd-border: rgba(255, 255, 255, 0.15);
+    --ed-icon-fill: #a0a0a0;
+    --ed-icon-stroke: #a0a0a0;
+}
+[data-theme="light"] {
+    --ed-bg: #ffffff;
+    --ed-bg-secondary: #f5f5f7;
+    --ed-bg-tertiary: #eeeef0;
+    --ed-bg-tab: #eaeaed;
+    --ed-bg-tab-active: #ffffff;
+    --ed-bg-hover: #e0e0e4;
+    --ed-text: #1a1a1a;
+    --ed-text-secondary: #555555;
+    --ed-text-muted: #999999;
+    --ed-border: rgba(0, 0, 0, 0.1);
+    --ed-accent: #1a1a1a;
+    --ed-accent-fg: #ffffff;
+    --ed-statusbar-bg: #f0f0f2;
+    --ed-statusbar-accent: #1a1a1a;
+    --ed-statusbar-text: #555555;
+    --ed-statusbar-btn-hover: rgba(0, 0, 0, 0.06);
+    --ed-diff-accept: #16a34a;
+    --ed-diff-accept-hover: #15803d;
+    --ed-diff-reject: #fef2f2;
+    --ed-diff-reject-text: #991b1b;
+    --ed-diff-reject-hover: #fee2e2;
+    --ed-diff-apply: #2563eb;
+    --ed-diff-apply-hover: #1d4ed8;
+    --ed-diff-label: #0d9488;
+    --ed-scrollbar: rgba(0, 0, 0, 0.15);
+    --ed-scrollbar-hover: rgba(0, 0, 0, 0.25);
+    --ed-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    --ed-overlay: rgba(0, 0, 0, 0.3);
+    --ed-quickopen-selected: #e0e7ff;
+    --ed-kbd-bg: #f0f0f2;
+    --ed-kbd-border: rgba(0, 0, 0, 0.15);
+    --ed-icon-fill: #555555;
+    --ed-icon-stroke: #555555;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--ed-bg); color: var(--ed-text); overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+.tabs-bar { height: 35px; background: var(--ed-bg-secondary); display: flex; align-items: center; padding: 0 8px; gap: 4px; overflow-x: auto; flex-shrink: 0; border-bottom: 1px solid var(--ed-border); }
+.tab-action-btn { background: none; border: none; color: var(--ed-text-muted); cursor: pointer; padding: 4px 6px; font-size: 13px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.tab-action-btn:hover { background: var(--ed-bg-hover); color: var(--ed-text); }
+.tab-action-btn svg { width: 14px; height: 14px; }
+.tab { height: 30px; padding: 0 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ed-text-muted); background: var(--ed-bg-tab); cursor: pointer; border-radius: 6px 6px 0 0; min-width: 80px; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+.tab.active { background: var(--ed-bg-tab-active); color: var(--ed-text); }
+.tab .tab-close { opacity: 0; border: none; background: none; color: var(--ed-text-muted); cursor: pointer; font-size: 14px; padding: 0 2px; border-radius: 3px; line-height: 1; }
+.tab:hover .tab-close { opacity: 1; }
+.tab .tab-close:hover { background: var(--ed-bg-hover); color: var(--ed-text); }
+.tab .modified-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ed-text-secondary); display: none; }
+.tab.modified .modified-dot { display: block; }
+.editor-container { flex: 1; overflow: hidden; min-height: 0; }
+.statusbar { height: 22px; background: var(--ed-statusbar-bg); display: flex; align-items: center; padding: 0 10px; font-size: 11px; color: var(--ed-statusbar-text); gap: 16px; flex-shrink: 0; }
+.statusbar-item { display: flex; align-items: center; gap: 4px; }
+.welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--ed-text-muted); gap: 12px; }
+.welcome h2 { font-size: 20px; font-weight: 300; color: var(--ed-text-secondary); }
+.welcome p { font-size: 13px; }
+.welcome kbd { background: var(--ed-kbd-bg); padding: 2px 8px; border-radius: 3px; font-size: 12px; border: 1px solid var(--ed-kbd-border); color: var(--ed-text-secondary); }
+.diff-toolbar { height: 40px; background: var(--ed-bg-secondary); display: none; align-items: center; padding: 0 12px; gap: 8px; border-bottom: 1px solid var(--ed-border); flex-shrink: 0; }
+.diff-toolbar.visible { display: flex; }
+.diff-toolbar-label { font-size: 12px; color: var(--ed-text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-toolbar-label span { color: var(--ed-diff-label); }
+.diff-btn { padding: 5px 14px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500; }
+.diff-btn-accept { background: var(--ed-diff-accept); color: #fff; }
+.diff-btn-accept:hover { background: var(--ed-diff-accept-hover); }
+.diff-btn-reject { background: var(--ed-diff-reject); color: var(--ed-diff-reject-text); }
+.diff-btn-reject:hover { background: var(--ed-diff-reject-hover); }
+.diff-btn-apply { background: var(--ed-diff-apply); color: #fff; }
+.diff-btn-apply:hover { background: var(--ed-diff-apply-hover); }
+.terminal-panel { height: 0; background: var(--ed-bg); border-top: 1px solid var(--ed-border); display: flex; flex-direction: column; overflow: hidden; transition: height 0.2s ease; }
+.terminal-panel.open { height: 220px; }
+.terminal-header { height: 30px; background: var(--ed-bg-secondary); display: flex; align-items: center; padding: 0 12px; gap: 8px; flex-shrink: 0; border-bottom: 1px solid var(--ed-border); }
+.terminal-header-title { font-size: 11px; color: var(--ed-text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.terminal-header-btn { background: none; border: none; color: var(--ed-text-muted); cursor: pointer; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.terminal-header-btn:hover { background: var(--ed-bg-hover); color: var(--ed-text); }
+.terminal-header-btn.active { color: var(--ed-statusbar-accent); }
+.terminal-header-btn svg { width: 14px; height: 14px; }
+.terminal-drag-handle { height: 4px; cursor: row-resize; background: transparent; flex-shrink: 0; }
+.terminal-drag-handle:hover { background: var(--ed-statusbar-accent); }
+.terminal-body { flex: 1; overflow: hidden; }
+.terminal-hint { padding: 12px; color: var(--ed-text-muted); font-size: 12px; text-align: center; }
+.quickopen-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--ed-overlay); z-index: 200; justify-content: center; padding-top: 80px; }
+.quickopen-overlay.visible { display: flex; }
+.quickopen-box { width: 520px; max-height: 400px; background: var(--ed-bg-secondary); border: 1px solid var(--ed-border); border-radius: 8px; box-shadow: var(--ed-shadow); display: flex; flex-direction: column; overflow: hidden; }
+.quickopen-input { width: 100%; padding: 10px 14px; background: var(--ed-bg-tertiary); border: none; border-bottom: 1px solid var(--ed-border); color: var(--ed-text); font-size: 14px; outline: none; font-family: inherit; }
+.quickopen-input::placeholder { color: var(--ed-text-muted); }
+.quickopen-list { flex: 1; overflow-y: auto; max-height: 340px; }
+.quickopen-item { padding: 6px 14px; font-size: 13px; color: var(--ed-text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.quickopen-item:hover, .quickopen-item.selected { background: var(--ed-quickopen-selected); color: var(--ed-text); }
+.quickopen-item .qo-icon { font-size: 12px; opacity: 0.7; display: flex; align-items: center; }
+.quickopen-item .qo-icon svg { width: 13px; height: 13px; }
+.quickopen-item .qo-path { font-size: 11px; color: var(--ed-text-muted); margin-left: auto; }
+.quickopen-empty { padding: 16px; text-align: center; color: var(--ed-text-muted); font-size: 12px; }
+.statusbar-btn { cursor: pointer; padding: 0 8px; border-radius: 3px; transition: background 0.15s; }
+.statusbar-btn:hover { background: var(--ed-statusbar-btn-hover); }
+  </style>
+</head>
+<body>
+  <!-- 顶部标签栏 -->
+  <div class="tabs-bar">
+    <button class="tab-action-btn" onclick="openFile()" title="打开文件 Ctrl+O"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+    <button class="tab-action-btn" onclick="saveCurrentFile()" title="保存 Ctrl+S"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+    <div id="tabsBar" style="display:flex;align-items:flex-end;gap:1px;overflow-x:auto;flex:1"></div>
+  </div>
+  <!-- 差异对比工具栏 -->
+  <div class="diff-toolbar" id="diffToolbar">
+    <span class="diff-toolbar-label" id="diffLabel">AI 修改: <span id="diffFileName">-</span></span>
+    <button class="diff-btn diff-btn-reject" onclick="rejectDiff()">拒绝</button>
+    <button class="diff-btn diff-btn-apply" onclick="applyDiff()">应用到编辑器</button>
+    <button class="diff-btn diff-btn-accept" onclick="acceptDiff()">接受并保存</button>
+  </div>
+  <!-- 编辑器主区域 -->
+  <div class="editor-container" id="editorContainer">
+    <div class="welcome" id="welcomeScreen">
+      <h2>VersePC Editor</h2>
+      <p>拖拽文件到此处，或点击 <kbd>打开</kbd> 加载文件</p>
+      <p style="margin-top:8px; font-size:12px; color:var(--ed-text-muted)">Ctrl+S 保存 / Ctrl+P 快速打开 / Ctrl+Z 撤销</p>
+    </div>
+  </div>
+
+  <!-- 终端面板 -->
+  <div class="terminal-drag-handle" id="terminalDragHandle"></div>
+  <div class="terminal-panel" id="terminalPanel">
+    <div class="terminal-header">
+      <span class="terminal-header-title">终端</span>
+      <button class="terminal-header-btn" id="btnTerminalToggle" onclick="toggleTerminal()" title="Ctrl+`"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></button>
+      <button class="terminal-header-btn" onclick="createTerminal()" title="新建终端"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button class="terminal-header-btn" onclick="clearTerminal()" title="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>
+    <div class="terminal-body" id="terminalBody">
+      <div class="terminal-hint" id="terminalHint">点击终端图标或按 Ctrl+` 打开终端</div>
+    </div>
+  </div>
+
+  <!-- 快速打开面板 -->
+  <div class="quickopen-overlay" id="quickopenOverlay">
+    <div class="quickopen-box">
+      <input class="quickopen-input" id="quickopenInput" placeholder="搜索文件名..." />
+      <div class="quickopen-list" id="quickopenList"></div>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div class="statusbar">
+    <span class="statusbar-item" id="statusLang">Plain Text</span>
+    <span class="statusbar-item" id="statusPos">Ln 1, Col 1</span>
+    <span style="flex:1"></span>
+    <span class="statusbar-item statusbar-btn" id="btnTerminalStatus" onclick="toggleTerminal()" title="切换终端 (Ctrl+`)">终端</span>
+    <span class="statusbar-item" id="statusEncoding">UTF-8</span>
+    <span class="statusbar-item" id="statusEOL">LF</span>
+  </div>
+
+  <!-- 第三方依赖 -->
+  <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+  <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="node_modules/monaco-editor/dev/vs/loader.js"></script>
+  <script>
+const ipcRenderer = window.editorAPI;
+const path = { extname: (f) => { const i = f.lastIndexOf('.'); return i >= 0 ? f.slice(i) : ''; }, join: (...args) => args.join('/'), basename: (f) => f.split('/').pop() };
+
+let editor = null;
+const openFiles = new Map();
+let activeFile = null;
+
+const LANG_MAP = {
+    '.js': 'javascript', '.ts': 'typescript', '.jsx': 'javascript', '.tsx': 'typescript',
+    '.json': 'json', '.jsonc': 'json', '.html': 'html', '.htm': 'html',
+    '.css': 'css', '.scss': 'scss', '.less': 'less',
+    '.py': 'python', '.java': 'java', '.c': 'c', '.cpp': 'cpp', '.h': 'c',
+    '.cs': 'csharp', '.go': 'go', '.rs': 'rust', '.rb': 'ruby',
+    '.php': 'php', '.xml': 'xml', '.yaml': 'yaml', '.yml': 'yaml',
+    '.md': 'markdown', '.sql': 'sql', '.sh': 'shell', '.bat': 'bat',
+    '.ps1': 'powershell', '.toml': 'ini', '.ini': 'ini', '.cfg': 'ini',
+    '.properties': 'properties', '.gradle': 'groovy', '.kt': 'kotlin',
+    '.lua': 'lua', '.dart': 'dart', '.swift': 'swift',
+    '.vue': 'html', '.svelte': 'html'
+};
+
+function getLang(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    return LANG_MAP[ext] || 'plaintext';
+}
+
+require.config({ paths: { vs: 'node_modules/monaco-editor/dev/vs' } });
+require(['vs/editor/editor.main'], function () {
+    monaco.editor.defineTheme('versepc-dark', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [
+            { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+            { token: 'keyword', foreground: '569CD6' },
+            { token: 'string', foreground: 'CE9178' },
+            { token: 'number', foreground: 'B5CEA8' },
+            { token: 'type', foreground: '4EC9B0' }
+        ],
+        colors: {
+            'editor.background': '#0a0a0a',
+            'editor.foreground': '#e0e0e0',
+            'editorLineNumber.foreground': '#555555',
+            'editorCursor.foreground': '#e0e0e0',
+            'editor.selectionBackground': '#264f78',
+            'editor.lineHighlightBackground': '#141414',
+            'editorIndentGuide.background': '#2a2a2a',
+            'editorWidget.background': '#141414',
+            'editorSuggestWidget.background': '#141414',
+            'sideBar.background': '#141414',
+            'statusBar.background': '#141414',
+            'editorGutter.background': '#0a0a0a',
+            'minimap.background': '#0a0a0a',
+            'editorBracketMatch.background': '#264f7840',
+            'editorBracketMatch.border': '#264f78'
+        }
+    });
+
+    monaco.editor.defineTheme('versepc-light', {
+        base: 'vs',
+        inherit: true,
+        rules: [
+            { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+            { token: 'keyword', foreground: '0451a5' },
+            { token: 'string', foreground: 'a31515' },
+            { token: 'number', foreground: '098658' },
+            { token: 'type', foreground: '267f99' }
+        ],
+        colors: {
+            'editor.background': '#ffffff',
+            'editor.foreground': '#1a1a1a',
+            'editorLineNumber.foreground': '#aaaaaa',
+            'editorCursor.foreground': '#1a1a1a',
+            'editor.selectionBackground': '#add6ff',
+            'editor.lineHighlightBackground': '#f5f5f7',
+            'editorIndentGuide.background': '#e0e0e0',
+            'editorWidget.background': '#f5f5f7',
+            'editorSuggestWidget.background': '#f5f5f7',
+            'sideBar.background': '#f5f5f7',
+            'statusBar.background': '#f0f0f2',
+            'editorGutter.background': '#ffffff',
+            'minimap.background': '#f5f5f7',
+            'editorBracketMatch.background': '#add6ff60',
+            'editorBracketMatch.border': '#add6ff'
+        }
+    });
+
+    function getCurrentTheme() {
+        try {
+            const parentTheme = window.parent.document.documentElement.getAttribute('data-theme');
+            return parentTheme === 'light' ? 'versepc-light' : 'versepc-dark';
+        } catch (e) {
+            return 'versepc-dark';
+        }
+    }
+
+    editor = monaco.editor.create(document.getElementById('editorContainer'), {
+        value: '',
+        language: 'plaintext',
+        theme: getCurrentTheme(),
+        automaticLayout: true,
+        fontSize: 14,
+        fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
+        fontLigatures: true,
+        minimap: { enabled: true, maxColumn: 80 },
+        scrollBeyondLastLine: false,
+        renderWhitespace: 'selection',
+        bracketPairColorization: { enabled: true },
+        guides: { bracketPairs: true },
+        smoothScrolling: true,
+        cursorBlinking: 'smooth',
+        cursorSmoothCaretAnimation: 'on',
+        wordWrap: 'off',
+        tabSize: 4,
+        insertSpaces: true,
+        renderLineHighlight: 'all',
+        occurrencesHighlight: 'singleFile',
+        folding: true,
+        foldingStrategy: 'indentation',
+        showFoldingControls: 'mouseover',
+        contextmenu: true,
+        mouseWheelZoom: true,
+        glyphMargin: true
+    });
+
+    editor.onDidChangeCursorPosition((e) => {
+        document.getElementById('statusPos').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+    });
+
+    editor.onDidChangeModelContent(() => {
+        if (activeFile && openFiles.has(activeFile)) {
+            const data = openFiles.get(activeFile);
+            data.modified = true;
+            updateTabUI();
+        }
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        saveCurrentFile();
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
+        openFile();
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyO, () => {
+        openFile();
+    });
+
+    const container = document.getElementById('editorContainer');
+    container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    container.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const filePath = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+        if (filePath) loadFile(filePath.replace('file:///', '').replace(/\//g, '\\'));
+    });
+
+    function syncTheme() {
+        try {
+            const parentTheme = window.parent.document.documentElement.getAttribute('data-theme');
+            if (parentTheme) {
+                document.documentElement.setAttribute('data-theme', parentTheme);
+                if (editor) monaco.editor.setTheme(parentTheme === 'light' ? 'versepc-light' : 'versepc-dark');
+            }
+        } catch (e) {}
+    }
+    syncTheme();
+    window._syncEditorTheme = syncTheme;
+});
+
+async function openFile() {
+    const filePath = await ipcRenderer.openFileDialog();
+    if (filePath) loadFile(filePath);
+}
+
+async function loadFile(filePath) {
+    if (!filePath) return;
+    if (openFiles.has(filePath)) {
+        switchToFile(filePath);
+        return;
+    }
+    const result = await ipcRenderer.readFile(filePath);
+    if (result.error) {
+        alert('无法读取文件: ' + result.error);
+        return;
+    }
+    const lang = getLang(filePath);
+    const model = monaco.editor.createModel(result.content, lang);
+    openFiles.set(filePath, { model, lang, filePath, modified: false, content: result.content });
+    switchToFile(filePath);
+    document.getElementById('welcomeScreen')?.remove();
+}
+
+function switchToFile(filePath) {
+    const data = openFiles.get(filePath);
+    if (!data || !editor) return;
+    editor.setModel(data.model);
+    activeFile = filePath;
+    document.getElementById('statusLang').textContent = data.lang;
+    updateTabUI();
+}
+
+function closeFile(filePath) {
+    const data = openFiles.get(filePath);
+    if (!data) return;
+    if (data.modified && !confirm(`"${path.basename(filePath)}" 已修改，确定关闭？`)) return;
+    data.model.dispose();
+    openFiles.delete(filePath);
+    if (activeFile === filePath) {
+        const remaining = Array.from(openFiles.keys());
+        if (remaining.length > 0) switchToFile(remaining[remaining.length - 1]);
+        else {
+            activeFile = null;
+            editor.setModel(null);
+            const welcome = document.createElement('div');
+            welcome.className = 'welcome';
+            welcome.id = 'welcomeScreen';
+            welcome.innerHTML = '<h2>VersePC Editor</h2><p>拖拽文件到此处，或点击 <kbd>打开</kbd> 加载文件</p>';
+            document.getElementById('editorContainer').appendChild(welcome);
+        }
+    }
+    updateTabUI();
+}
+
+async function saveCurrentFile() {
+    if (!activeFile) return;
+    const data = openFiles.get(activeFile);
+    if (!data) return;
+    const content = data.model.getValue();
+    const result = await ipcRenderer.writeFile(activeFile, content);
+    if (result.error) {
+        alert('保存失败: ' + result.error);
+        return;
+    }
+    data.modified = false;
+    data.content = content;
+    updateTabUI();
+}
+
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function updateTabUI() {
+    const bar = document.getElementById('tabsBar');
+    bar.innerHTML = '';
+    for (const [filePath, data] of openFiles) {
+        const tab = document.createElement('div');
+        tab.className = 'tab' + (filePath === activeFile ? ' active' : '') + (data.modified ? ' modified' : '');
+        const name = path.basename(filePath);
+        tab.innerHTML = `<span class="modified-dot"></span><span style="overflow:hidden;text-overflow:ellipsis">${name}</span><button class="tab-close" title="关闭">×</button>`;
+        tab.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-close')) { closeFile(filePath); return; }
+            switchToFile(filePath);
+        });
+        bar.appendChild(tab);
+    }
+}
+
+if (ipcRenderer && ipcRenderer.onOpenFile) {
+    ipcRenderer.onOpenFile((filePath) => {
+        loadFile(filePath);
+    });
+}
+
+let diffEditor = null;
+let diffOriginalModel = null;
+let diffModifiedModel = null;
+let diffPendingPath = null;
+
+function showDiff(filePath, original, modified) {
+    if (!editor) return;
+    document.getElementById('welcomeScreen')?.remove();
+    const lang = getLang(filePath);
+    diffPendingPath = filePath;
+    if (diffOriginalModel) diffOriginalModel.dispose();
+    if (diffModifiedModel) diffModifiedModel.dispose();
+    diffOriginalModel = monaco.editor.createModel(original, lang);
+    diffModifiedModel = monaco.editor.createModel(modified, lang);
+    const currentModel = editor.getModel();
+    editor.setModel(null);
+    if (diffEditor) { diffEditor.dispose(); diffEditor = null; }
+    diffEditor = monaco.editor.createDiffEditor(document.getElementById('editorContainer'), {
+        automaticLayout: true,
+        theme: getCurrentTheme(),
+        readOnly: true,
+        renderSideBySide: true,
+        fontSize: 14,
+        fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false
+    });
+    diffEditor.setModel({ original: diffOriginalModel, modified: diffModifiedModel });
+    document.getElementById('diffFileName').textContent = path.basename(filePath);
+    document.getElementById('diffToolbar').classList.add('visible');
+}
+
+function closeDiff() {
+    if (diffEditor) { diffEditor.dispose(); diffEditor = null; }
+    if (diffOriginalModel) { diffOriginalModel.dispose(); diffOriginalModel = null; }
+    if (diffModifiedModel) { diffModifiedModel.dispose(); diffModifiedModel = null; }
+    diffPendingPath = null;
+    document.getElementById('diffToolbar').classList.remove('visible');
+    if (activeFile && openFiles.has(activeFile)) {
+        editor.setModel(openFiles.get(activeFile).model);
+    }
+}
+
+async function acceptDiff() {
+    if (!diffPendingPath || !diffModifiedModel) return;
+    const newContent = diffModifiedModel.getValue();
+    const result = await ipcRenderer.writeFile(diffPendingPath, newContent);
+    if (result.error) { alert('保存失败: ' + result.error); return; }
+    if (openFiles.has(diffPendingPath)) {
+        openFiles.get(diffPendingPath).model.setValue(newContent);
+        openFiles.get(diffPendingPath).modified = false;
+        openFiles.get(diffPendingPath).content = newContent;
+    } else {
+        const lang = getLang(diffPendingPath);
+        const model = monaco.editor.createModel(newContent, lang);
+        openFiles.set(diffPendingPath, { model, lang, filePath: diffPendingPath, modified: false, content: newContent });
+    }
+    closeDiff();
+    switchToFile(diffPendingPath);
+}
+
+function applyDiff() {
+    if (!diffPendingPath || !diffModifiedModel) return;
+    const newContent = diffModifiedModel.getValue();
+    if (openFiles.has(diffPendingPath)) {
+        openFiles.get(diffPendingPath).model.setValue(newContent);
+        openFiles.get(diffPendingPath).modified = true;
+    } else {
+        const lang = getLang(diffPendingPath);
+        const model = monaco.editor.createModel(newContent, lang);
+        openFiles.set(diffPendingPath, { model, lang, filePath: diffPendingPath, modified: true, content: newContent });
+    }
+    closeDiff();
+    switchToFile(diffPendingPath);
+}
+
+function rejectDiff() { closeDiff(); }
+
+window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'editor:show-diff') {
+        showDiff(event.data.filePath, event.data.original, event.data.modified);
+    }
+    if (event.data && event.data.type === 'editor:refresh-explorer') {
+        refreshFileExplorer(event.data.dirPath);
+    }
+    if (event.data && event.data.type === 'editor:open-file') {
+        loadFile(event.data.filePath);
+    }
+    if (event.data && event.data.type === 'editor:set-theme') {
+        document.documentElement.setAttribute('data-theme', event.data.theme);
+        if (editor) monaco.editor.setTheme(event.data.theme === 'light' ? 'versepc-light' : 'versepc-dark');
+        if (xtermInstance) xtermInstance.options.theme = getTerminalTheme();
+    }
+});
+
+let xtermInstance = null;
+let fitAddon = null;
+let terminalSessionId = null;
+let _terminalOpen = false;
+
+function toggleTerminal() {
+    const panel = document.getElementById('terminalPanel');
+    const btn = document.getElementById('btnTerminalToggle');
+    const statusBtn = document.getElementById('btnTerminalStatus');
+    _terminalOpen = !_terminalOpen;
+    panel.classList.toggle('open', _terminalOpen);
+    if (btn) btn.classList.toggle('active', _terminalOpen);
+    if (statusBtn) statusBtn.classList.toggle('active', _terminalOpen);
+    if (_terminalOpen && !xtermInstance) initTerminal();
+    if (fitAddon) setTimeout(() => fitAddon.fit(), 50);
+}
+
+function getTerminalTheme() {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if (isLight) {
+        return { background: '#ffffff', foreground: '#1a1a1a', cursor: '#1a1a1a', selectionBackground: '#add6ff', black: '#000', red: '#cd3131', green: '#00bc00', yellow: '#949800', blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#555', brightBlack: '#666', brightRed: '#f14c4c', brightGreen: '#23d18b', brightYellow: '#f5f543', brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#a5a5a5' };
+    }
+    return { background: '#0a0a0a', foreground: '#e0e0e0', cursor: '#e0e0e0', selectionBackground: '#264f78', black: '#000', red: '#cd3131', green: '#00bc00', yellow: '#949800', blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#555', brightBlack: '#666', brightRed: '#f14c4c', brightGreen: '#23d18b', brightYellow: '#f5f543', brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#a5a5a5' };
+}
+
+function initTerminal() {
+    if (xtermInstance) return;
+    const body = document.getElementById('terminalBody');
+    const hint = document.getElementById('terminalHint');
+    if (hint) hint.style.display = 'none';
+    xtermInstance = new Terminal({
+        theme: getTerminalTheme(),
+        fontSize: 13,
+        fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+        cursorBlink: true,
+        scrollback: 5000
+    });
+    fitAddon = new FitAddon.FitAddon();
+    xtermInstance.loadAddon(fitAddon);
+    xtermInstance.open(body);
+    fitAddon.fit();
+    terminalSessionId = 'term-' + Date.now();
+    if (ipcRenderer && ipcRenderer.createTerminal) {
+        ipcRenderer.createTerminal(terminalSessionId, xtermInstance.cols, xtermInstance.rows);
+    }
+    xtermInstance.onData((data) => {
+        if (ipcRenderer && ipcRenderer.writeTerminal) ipcRenderer.writeTerminal(terminalSessionId, data);
+    });
+    if (ipcRenderer && ipcRenderer.onTerminalData) {
+        ipcRenderer.onTerminalData((id, data) => {
+            if (id === terminalSessionId && xtermInstance) xtermInstance.write(data);
+        });
+    }
+    if (ipcRenderer && ipcRenderer.onTerminalExit) {
+        ipcRenderer.onTerminalExit((id, code) => {
+            if (id === terminalSessionId && xtermInstance) {
+                xtermInstance.write(`\r\n\x1b[33m[进程已退出，代码 ${code}]\x1b[0m\r\n`);
+            }
+        });
+    }
+    xtermInstance.focus();
+    window.addEventListener('resize', () => { if (fitAddon) fitAddon.fit(); });
+}
+
+function clearTerminal() {
+    if (xtermInstance) xtermInstance.clear();
+}
+
+function createTerminal() {
+    if (terminalSessionId) {
+        if (ipcRenderer && ipcRenderer.killTerminal) ipcRenderer.killTerminal(terminalSessionId);
+    }
+    if (xtermInstance) { xtermInstance.dispose(); xtermInstance = null; fitAddon = null; }
+    terminalSessionId = null;
+    initTerminal();
+}
+
+(function initTerminalDrag() {
+    const handle = document.getElementById('terminalDragHandle');
+    const panel = document.getElementById('terminalPanel');
+    if (!handle || !panel) return;
+    let dragging = false, startY = 0, startHeight = 0;
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dragging = true;
+        startY = e.clientY;
+        startHeight = panel.offsetHeight;
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const newHeight = Math.max(100, Math.min(startHeight + (startY - e.clientY), window.innerHeight * 0.6));
+        panel.style.height = newHeight + 'px';
+        panel.style.transition = 'none';
+        if (fitAddon) fitAddon.fit();
+    });
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        panel.style.transition = '';
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+})();
+
+let _quickOpenFiles = [];
+let _quickOpenSelected = 0;
+let _quickOpenVisible = false;
+
+function showQuickOpen() {
+    const overlay = document.getElementById('quickopenOverlay');
+    const input = document.getElementById('quickopenInput');
+    overlay.classList.add('visible');
+    _quickOpenVisible = true;
+    input.value = '';
+    _quickOpenSelected = 0;
+    scanProjectFiles().then(files => {
+        _quickOpenFiles = files;
+        renderQuickOpenList('');
+    });
+    input.focus();
+    input.addEventListener('input', () => { _quickOpenSelected = 0; renderQuickOpenList(input.value); });
+    input.addEventListener('keydown', quickOpenKeydown);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) hideQuickOpen(); });
+}
+
+function hideQuickOpen() {
+    const overlay = document.getElementById('quickopenOverlay');
+    overlay.classList.remove('visible');
+    _quickOpenVisible = false;
+}
+
+function quickOpenKeydown(e) {
+    const items = document.querySelectorAll('.quickopen-item');
+    if (e.key === 'Escape') { hideQuickOpen(); e.preventDefault(); return; }
+    if (e.key === 'ArrowDown') { _quickOpenSelected = Math.min(_quickOpenSelected + 1, items.length - 1); updateQuickOpenSelection(items); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { _quickOpenSelected = Math.max(_quickOpenSelected - 1, 0); updateQuickOpenSelection(items); e.preventDefault(); }
+    if (e.key === 'Enter' && items[_quickOpenSelected]) {
+        const fp = items[_quickOpenSelected].getAttribute('data-path');
+        if (fp) loadFile(fp);
+        hideQuickOpen();
+        e.preventDefault();
+    }
+}
+
+function updateQuickOpenSelection(items) {
+    items.forEach((el, i) => el.classList.toggle('selected', i === _quickOpenSelected));
+    if (items[_quickOpenSelected]) items[_quickOpenSelected].scrollIntoView({ block: 'nearest' });
+}
+
+function renderQuickOpenList(query) {
+    const list = document.getElementById('quickopenList');
+    const q = query.toLowerCase();
+    const filtered = q ? _quickOpenFiles.filter(f => f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)) : _quickOpenFiles;
+    if (!filtered.length) { list.innerHTML = '<div class="quickopen-empty">未找到匹配的文件</div>'; return; }
+    list.innerHTML = filtered.slice(0, 50).map((f, i) => {
+        const icon = getFileIcon(f.name);
+        return `<div class="quickopen-item${i === 0 ? ' selected' : ''}" data-path="${escapeHtml(f.path)}"><span class="qo-icon">${icon}</span><span>${escapeHtml(f.name)}</span><span class="qo-path">${escapeHtml(f.rel)}</span></div>`;
+    }).join('');
+    _quickOpenSelected = 0;
+    list.querySelectorAll('.quickopen-item').forEach(el => {
+        el.addEventListener('click', () => { loadFile(el.getAttribute('data-path')); hideQuickOpen(); });
+    });
+}
+
+function getFileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const colors = { js: '#f0db4f', ts: '#3178c6', json: '#5b5b5b', html: '#e34c26', css: '#264de4', py: '#3572A5', java: '#b07219', md: '#555', yml: '#cb171e', yaml: '#cb171e', toml: '#9c4221', ini: '#6c7086', sh: '#4eaa25', bat: '#4eaa25', txt: '#888', log: '#888' };
+    const c = colors[ext] || 'var(--ed-icon-fill)';
+    return '<svg viewBox="0 0 16 16" width="13" height="13"><path d="M4 1h6l4 4v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 1v4h4" fill="none" stroke="currentColor" stroke-width="1.2"/><text x="8" y="12" text-anchor="middle" font-size="4.5" font-weight="600" fill="' + c + '">' + ext.toUpperCase().slice(0, 3) + '</text></svg>';
+}
+
+async function scanProjectFiles() {
+    try {
+        const result = await ipcRenderer.scanDir('.');
+        return result || [];
+    } catch (e) { return []; }
+}
+
+async function refreshFileExplorer(dirPath) {
+    const list = document.getElementById('fileexplorer-list');
+    if (!list) return;
+    try {
+        const files = await ipcRenderer.scanDir(dirPath || '.');
+        if (!files || !files.length) { list.innerHTML = '<div class="editor-fileexplorer-empty">空目录</div>'; return; }
+        list.innerHTML = files.map(f => {
+            const icon = f.isDir ? '<svg viewBox="0 0 16 16" width="13" height="13"><path d="M1.5 2h4.3l1.2 2H14.5a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="var(--ed-icon-fill)" opacity="0.7"/></svg>' : getFileIcon(f.name);
+            return `<div class="editor-fileexplorer-item" data-path="${f.path}" data-isdir="${f.isDir}"><span class="icon">${icon}</span><span>${f.name}</span></div>`;
+        }).join('');
+        list.querySelectorAll('.editor-fileexplorer-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const p = el.getAttribute('data-path');
+                const isDir = el.getAttribute('data-isdir') === 'true';
+                if (isDir) refreshFileExplorer(p);
+                else loadFile(p);
+            });
+        });
+    } catch (e) {
+        list.innerHTML = '<div class="editor-fileexplorer-empty">无法读取目录</div>';
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        if (_quickOpenVisible) hideQuickOpen();
+        else showQuickOpen();
+    }
+    if (e.key === 'Escape' && _quickOpenVisible) {
+        hideQuickOpen();
+        e.preventDefault();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+        e.preventDefault();
+        toggleTerminal();
+    }
+});
+  </script>
+</body>
+</html>

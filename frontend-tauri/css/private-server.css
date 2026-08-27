@@ -1,0 +1,449 @@
+/**
+ * private-server.css - 私人服务器页面专属样式
+ */
+
+/* 空状态 */
+.ps-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+    gap: 16px;
+}
+
+.ps-empty p {
+    font-size: 15px;
+}
+
+/* 页面容器 - 占满整个内容区宽度 */
+.ps-page-container {
+    width: 100%;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* 服务器列表 - 横向一行行排列，类似模组列表 */
+.ps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 服务器卡片 - 横向布局 */
+.ps-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    background: var(--bg-card-glass);
+    backdrop-filter: blur(4px) saturate(1.2);
+    -webkit-backdrop-filter: blur(4px) saturate(1.2);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    transition: border-color 150ms ease, background-color 150ms ease;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 70px;
+}
+
+.ps-card:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+/* 卡片图标 */
+.ps-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    object-fit: cover;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+/* 卡片信息区 */
+.ps-card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ps-card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ps-card-address {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.2s ease;
+}
+
+.ps-card-address:hover {
+    color: var(--accent);
+}
+
+.ps-card-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ps-card-version {
+    font-size: 11px;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+/* 状态指示 */
+.ps-card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.ps-card-status:hover {
+    background: var(--bg-hover);
+}
+
+.ps-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.ps-status-dot.online {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.ps-status-dot.offline {
+    background: var(--red);
+}
+
+.ps-status-text {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.ps-status-text.online {
+    color: var(--green);
+}
+
+.ps-status-text.offline {
+    color: var(--red);
+}
+
+/* 操作按钮 */
+.ps-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.ps-card-actions .btn {
+    flex: none;
+}
+
+.ps-card-actions .btn-danger {
+    color: var(--red);
+}
+
+.ps-card-actions .btn-danger:hover {
+    color: var(--red);
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.3);
+}
+
+/* 工具栏：分类标签 + 搜索框 */
+.ps-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.ps-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ps-refresh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card-glass);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.2s var(--ease-out-expo), color 0.2s var(--ease-out-expo), background-color 0.2s var(--ease-out-expo);
+    flex-shrink: 0;
+}
+
+.ps-refresh-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.ps-refresh-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.ps-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+    padding: 2px;
+}
+
+.ps-tab {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: color var(--transition), background-color var(--transition);
+}
+
+.ps-tab:hover {
+    color: var(--text-secondary);
+}
+
+.ps-tab.active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+.ps-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 240px;
+    flex: 0 1 320px;
+}
+
+.ps-search-icon {
+    position: absolute;
+    left: 10px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.ps-search-input {
+    width: 100%;
+    padding: 8px 12px 8px 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition);
+}
+
+.ps-search-input:focus {
+    border-color: var(--accent);
+}
+
+.ps-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* 翻页器 */
+.ps-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 12px;
+}
+
+.ps-page-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-card-glass);
+    color: var(--text-secondary);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 13px;
+    transition: border-color 0.2s var(--ease-out-expo), color 0.2s var(--ease-out-expo), background-color 0.2s var(--ease-out-expo);
+}
+
+.ps-page-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.ps-page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.ps-page-info {
+    font-size: 13px;
+    color: var(--text-muted);
+    min-width: 60px;
+    text-align: center;
+}
+
+/* 入驻引导横幅 */
+.ps-join-banner {
+    margin-top: 24px;
+    padding: 16px 20px;
+    background: var(--bg-card-glass);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.ps-join-banner a {
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.ps-join-banner a:hover {
+    opacity: 0.7;
+    text-decoration: underline;
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+    .ps-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ps-search {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .ps-card {
+        flex-wrap: wrap;
+        padding: 12px;
+    }
+
+    .ps-card-status {
+        margin-left: auto;
+    }
+
+    .ps-card-actions {
+        width: 100%;
+        justify-content: flex-end;
+        margin-top: 4px;
+    }
+}
+
+/* ===== 顶级标签：我的服务器 / 联机大厅 ===== */
+.ps-top-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+    padding: 3px;
+    margin-bottom: 16px;
+    width: fit-content;
+}
+
+.ps-top-tab {
+    padding: 7px 18px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color var(--transition), background-color var(--transition);
+}
+
+.ps-top-tab:hover {
+    color: var(--text-secondary);
+}
+
+.ps-top-tab.active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+/* ===== 联机大厅房间卡片角标 ===== */
+.lobby-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: 6px;
+    vertical-align: 2px;
+    line-height: 1.6;
+}
+
+.lobby-badge.online {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--green, #10b981);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.lobby-badge.offline {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* 联机大厅卡片地址可点击 */
+.lobby-card .ps-card-address[data-addr] {
+    cursor: pointer;
+}
+
+.lobby-card .ps-card-address[data-addr]:hover {
+    color: var(--accent);
+}

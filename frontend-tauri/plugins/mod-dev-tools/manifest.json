@@ -1,0 +1,135 @@
+{
+    "name": "mod-dev-tools",
+    "version": "1.0.0",
+    "description": "Minecraft模组开发工具 - 支持Fabric/Forge/NeoForge模组创建、数据包生成、编译安装",
+    "author": "VersePC",
+    "enabled": true,
+    "tools": [
+        {
+            "name": "check_dev_environment",
+            "description": "检查模组开发环境状态（JDK、Gradle、MDK模板）。在使用其他开发工具前应先调用此工具。",
+            "risk": "safe",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "install_dev_tools",
+            "description": "安装缺失的开发工具（JDK 21、Gradle）。自动从镜像源下载。",
+            "risk": "moderate",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "components": {
+                        "type": "array",
+                        "items": { "type": "string", "enum": ["jdk", "gradle", "template"] },
+                        "description": "要安装的组件列表，如 [\"jdk\", \"gradle\"]"
+                    },
+                    "loader": { "type": "string", "description": "加载器类型(fabric/forge/neoforge)，下载模板时需要" },
+                    "mcVersion": { "type": "string", "description": "Minecraft版本号，下载模板时需要" }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "init_mod_project",
+            "description": "初始化一个新的Minecraft模组项目。基于MDK模板创建项目结构，替换占位符。",
+            "risk": "safe",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "modName": { "type": "string", "description": "模组显示名称，如 \"My Awesome Mod\"" },
+                    "modId": { "type": "string", "description": "模组ID（小写+下划线），如 \"my_awesome_mod\"" },
+                    "loader": { "type": "string", "enum": ["fabric", "forge", "neoforge"], "description": "模组加载器" },
+                    "mcVersion": { "type": "string", "description": "目标Minecraft版本，如 \"1.21.4\"" },
+                    "packageName": { "type": "string", "description": "Java包名，如 \"com.example.myawesomemod\"" },
+                    "outputPath": { "type": "string", "description": "项目输出路径（可选，默认 ~/.versepc/mod-projects/{modId}）" }
+                },
+                "required": ["modName", "modId", "loader", "mcVersion"]
+            }
+        },
+        {
+            "name": "build_mod",
+            "description": "使用Gradle编译模组项目，生成.jar文件。",
+            "risk": "moderate",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "projectPath": { "type": "string", "description": "模组项目路径" }
+                },
+                "required": ["projectPath"]
+            }
+        },
+        {
+            "name": "create_datapack",
+            "description": "创建Minecraft数据包（配方、战利品表、标签、进度等）。简单需求优先用数据包而非完整模组。",
+            "risk": "safe",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mcVersion": { "type": "string", "description": "目标Minecraft版本" },
+                    "namespace": { "type": "string", "description": "命名空间ID，如 \"mymod\"" },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string", "enum": ["recipe", "loot_table", "tag", "advancement"] },
+                                "name": { "type": "string" },
+                                "data": { "type": "object" }
+                            },
+                            "required": ["type", "name", "data"]
+                        },
+                        "description": "数据包内容列表"
+                    },
+                    "outputPath": { "type": "string", "description": "输出路径（可选）" }
+                },
+                "required": ["mcVersion", "namespace", "items"]
+            }
+        },
+        {
+            "name": "create_resourcepack",
+            "description": "创建Minecraft资源包（模型、纹理、语言文件等）。",
+            "risk": "safe",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mcVersion": { "type": "string", "description": "目标Minecraft版本" },
+                    "namespace": { "type": "string", "description": "命名空间ID" },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string", "enum": ["model", "blockstate", "lang", "texture"] },
+                                "name": { "type": "string" },
+                                "data": { "type": "object" },
+                                "base64": { "type": "string" }
+                            },
+                            "required": ["type", "name"]
+                        },
+                        "description": "资源包内容列表"
+                    },
+                    "outputPath": { "type": "string", "description": "输出路径（可选）" }
+                },
+                "required": ["mcVersion", "namespace", "items"]
+            }
+        },
+        {
+            "name": "mod_compile_and_install",
+            "description": "一键编译模组并安装到指定游戏版本的mods文件夹。",
+            "risk": "moderate",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "projectPath": { "type": "string", "description": "模组项目路径" },
+                    "targetVersionId": { "type": "string", "description": "目标已安装版本ID" }
+                },
+                "required": ["projectPath", "targetVersionId"]
+            }
+        }
+    ],
+    "systemPromptExtension": "## 模组开发工具 (仅开发者模式)\n- check_dev_environment: 检查开发环境，在使用其他开发工具前应先调用\n- install_dev_tools: 安装缺失的JDK/Gradle/模板\n- init_mod_project: 初始化新模组项目\n- build_mod: 编译模组项目\n- create_datapack: 创建数据包（简单需求优先用数据包）\n- create_resourcepack: 创建资源包\n- mod_compile_and_install: 一键编译安装\n\n### 生成模组流程:\n1. 判断需求复杂度（数据包 vs 完整模组）\n2. 数据包: 直接 create_datapack → 写入版本文件夹\n3. 完整模组: check_dev_environment → init_mod_project → AI编写代码 → build_mod → 安装\n4. 模组开发参考: https://fabricmc.net/wiki/ 或 https://docs.neoforged.net/"
+}

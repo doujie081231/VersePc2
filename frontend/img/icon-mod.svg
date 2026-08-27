@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="80" height="80" rx="16" fill="url(#g)"/>
+  <g transform="translate(16,16)" fill="white">
+    <!-- Puzzle piece -->
+    <path d="M8,24 L8,8 L24,8 L24,14 C24,14 28,10 32,14 C36,18 32,22 32,22 L38,22 L38,38 L22,38 L22,32 C22,32 18,36 14,32 C10,28 14,24 14,24 Z" fill="white" opacity="0.95"/>
+  </g>
+</svg>

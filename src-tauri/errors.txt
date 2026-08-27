@@ -1,0 +1,1 @@
+﻿[1m[91merror[0m: could not compile `verse-tauri` (lib) due to 101 previous errors; 43 warnings emitted
