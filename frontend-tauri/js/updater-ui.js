@@ -33,8 +33,7 @@
             }
         } catch (e) {}
 
-        // 启动时自动检查更新：检测到新版本时，后端会推送 update-available，
-        // 由 onStatusChanged 触发"发现新版本"卡片；已是最新则静默不打扰。
+        // 启动时自动检查更新：三平台均支持自更新，统一检查。
         try {
             if (api.updater.checkForUpdates) {
                 await api.updater.checkForUpdates();
@@ -151,7 +150,7 @@
                 downloadBtn.style.display = '';
                 installBtn.style.display = 'none';
                 showReleaseNotes(data.releaseNotes);
-                showUpdatePopup(data);
+                // 自动更新：发现新版本后由后端自动下载，不再弹出"发现新版本"弹窗卡片。
                 addUpdateDots();
                 break;
 
