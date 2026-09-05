@@ -82,8 +82,34 @@ const PagePlugins = {
         this.loading = false;
       }
     },
+    // 插件声明的权限中文描述（用于安装前确认卡片）
+    pluginPermissionDesc(p) {
+      const list = [];
+      const perms = (p && p.permissions) || {};
+      if (perms.network === true) list.push('访问网络：可请求外部服务、下载数据');
+      if (Array.isArray(perms.native) && perms.native.indexOf('exec') >= 0) {
+        list.push('执行外部程序：可启动/停止本地进程（如 frpc.exe），用于进程托管');
+      }
+      return list;
+    },
+    needsPermissionConfirm(p) {
+      return this.pluginPermissionDesc(p).length > 0;
+    },
     async install(p) {
       if (this.busy) return;
+      // 安装前权限确认：插件声明了网络/执行外部程序等高危权限时，必须用户点「信任并安装」才继续
+      const perms = this.pluginPermissionDesc(p);
+      if (perms.length) {
+        const ok = await window.showConfirmDialog(
+          '权限确认',
+          '插件「' + (p.name || p.id) + '」声明了以下权限：<br>' +
+            perms.map(s => '&#8226; ' + s).join('<br>') +
+            '<br><br>请确认您信任该插件后再继续安装。',
+          '信任并安装',
+          '取消'
+        );
+        if (!ok) return;
+      }
       this.busy = p.id;
       try {
         const res = await window.bridge.invoke('plugin_download_install', {
