@@ -19,9 +19,10 @@ mod modloaders;
 mod modpack;
 mod mods;
 mod network;
+mod plugin_exec;
+mod plugins;
 mod private_server;
 mod promote;
-mod plugins;
 mod redstone_online;
 mod resource;
 pub mod server_host;
@@ -935,6 +936,10 @@ pub fn run() {
             plugins::plugin_uninstall,
             plugins::plugin_market_index,
             plugins::plugin_download_install,
+            // 插件「安全执行外部进程」（可信插件声明 native:exec 时可用）
+            plugin_exec::plugin_process_exec,
+            plugin_exec::plugin_process_stop,
+            plugin_exec::plugin_process_status,
             // 红石联机内网穿透
             redstone_online::redstone_servers,
             redstone_online::redstone_scan_port,

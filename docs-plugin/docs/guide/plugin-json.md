@@ -23,6 +23,32 @@
 | `author` | string | 作者名 |
 | `main` | string | 插件主脚本相对路径（可选）。启动器加载插件时执行，可对整个前端做自定义，后文详解 |
 | `icon` | string | 图标 URL（可选），市场卡片展示；留空时前端用默认分类图标 |
+| `permissions` | object | 声明插件需要的高危权限，详见下文「权限声明」 |
+
+## 权限声明（permissions）
+
+插件运行在启动器的**沙箱**里，默认只能：读写自身 KV 配置、剪贴板、选择文件对话框、打开外部链接、读取**插件自身目录**内的文件。除此之外的高危能力（网络、执行外部进程）**必须先在 `permissions` 里声明**，否则安装时不会弹出授权、运行时会直接被拦截。
+
+| 子字段 | 类型 | 取值 | 说明 |
+| --- | --- | --- | --- |
+| `network` | boolean | `true` | 放行插件发起外部网络请求（`fetch` / `apiProxy` / XHR / WebSocket 等），用于调用第三方服务 |
+| `native` | array | 含 `"exec"` | 放行「执行外部程序」，可启动/停止本地进程（如 `frpc.exe`）。仅`可信`插件建议声明。安装界面会据此弹出确认卡片，用户需点「信任并安装」才能继续 |
+
+```json
+{
+  "id": "my-plugin",
+  "name": "我的插件",
+  "version": "1.0.0",
+  "category": "function",
+  "permissions": {
+    "network": true,
+    "native": ["exec"]
+  },
+  "ui": {}
+}
+```
+
+> 说明：`native.exec` 使用后端 `plugin_process_exec` / `plugin_process_stop` / `plugin_process_status` 三组命令托管进程，进程 `stdout/stderr` 逐行回传 `plugin:<id>:exec-log`，退出回传 `plugin:<id>:exec-exit`。前端沙箱为声明了该权限的插件注入 `window.bridge.exec` / `stopExec` / `execStatus` / `onExecLog` / `onExecExit`。为安全起见，后端还会再读磁盘上的 `plugin.json` 二次校验，防止绕过前端直接调用。
 
 ## 完整示例
 

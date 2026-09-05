@@ -19,7 +19,8 @@ pub fn plugins_root() -> PathBuf {
     storage::resolve_data_dir().join("plugins")
 }
 
-fn plugin_dir(id: &str) -> PathBuf {
+/// 返回某插件的安装目录（供 plugin_exec 等其它模块按 id 定位磁盘清单）
+pub fn plugin_dir(id: &str) -> PathBuf {
     plugins_root().join(id)
 }
 
