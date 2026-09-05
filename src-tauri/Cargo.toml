@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "verse-tauri"
 version = "1.1.35"
 description = "VersePC Tauri 框架替换项目"

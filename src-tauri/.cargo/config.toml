@@ -1,11 +1,8 @@
-[source.crates-io]
-replace-with = "rsproxy-sparse"
+﻿[source.crates-io]
+replace-with = "ustc-sparse"
 
-[source.rsproxy-sparse]
-registry = "sparse+https://rsproxy.cn/index/"
-
-[registries.rsproxy]
-index = "sparse+https://rsproxy.cn/index/"
+[source.ustc-sparse]
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
 
 [net]
 git-fetch-with-cli = true
