@@ -210,9 +210,12 @@ async fn download_with_mirror_inner(
     // 多个源时并行测速，优先最快的源
     let urls = probe_speed_sort(&urls, timeout_secs).await;
 
-    // 大文件优先走多线程分块下载（读取设置中的并发数）。
+    // 大文件统一走多线程分块下载（读取设置中的并发数）。
     // max_chunks 是"最大分块/线程上限"，默认 32。
     // 实际并发由 chunked.rs 动态调度：初始 4 起步，速度低于下限才逐步增加。
+    // 实测 Modrinth CDN（官方 + mcimirror 镜像）支持 Range 分块且会按连接限速，
+    // 单流会被压在几十 KB/s，多线程分块可突破单连接限速、成倍提速，
+    // 因此 Modrinth 资源同样走分块（不再强制单流）。
     let max_chunks = crate::storage::load_settings()
         .get("maxChunksPerFile")
         .and_then(|v| v.as_u64())
@@ -223,13 +226,7 @@ async fn download_with_mirror_inner(
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    // Modrinth CDN（官方 + mcimirror 镜像）对 Range 分块并发不友好，
-    // 单流即可跑满带宽且不会触发限流，直接跳过分块（与镜像解析保持一致）。
-    let is_modrinth_cdn = original_url.contains("cdn.modrinth.com")
-        || original_url.contains("cdn-alt.modrinth.com")
-        || original_url.contains("mod.mcimirror.top");
-
-    if enable_chunk && !is_small_file && !is_modrinth_cdn {
+    if enable_chunk && !is_small_file {
         match chunked::download_chunked_with_mirror(
             &urls,
             dest,
@@ -687,11 +684,11 @@ async fn download_once(
     // 并发下载整体"越下越慢卡住"、进度条不动。
     // 因此额外检查：持续 LOW_SPEED_WINDOW_SECS 平均速度低于阈值且剩余字节还多时，
     // 判定该源过慢，立即换源。阈值放宽到 64KB/s，正常网络不会误伤。
+    // 对所有文件统一启用（不限制大小），与多源逐个换源策略保持一致。
     const LOW_SPEED_THRESHOLD: u64 = 64 * 1024; // 64 KB/s
     const LOW_SPEED_WINDOW_SECS: u64 = 5;
     let mut speed_window_bytes: u64 = 0;
     let mut speed_window_start = Instant::now();
-    let low_speed_enabled = expected_size.map(|s| s > 1024 * 1024).unwrap_or(false);
 
     while !finished {
         if let Some(c) = cancel {
@@ -718,12 +715,15 @@ async fn download_once(
         downloaded += chunk.len() as u64;
         speed_window_bytes += chunk.len() as u64;
 
-        // 低速检测：剩余字节仍较多时才判断，避免文件尾部（剩余不足 1MB）误判换源
+        // 低速检测：剩余字节仍较多时才判断，避免文件尾部（剩余不足 256KB）误判换源
         let remaining = total_size.saturating_sub(downloaded);
-        if low_speed_enabled && remaining > 1024 * 1024 {
+        if remaining > 256 * 1024 {
             let win_elapsed = speed_window_start.elapsed().as_secs();
             if win_elapsed >= LOW_SPEED_WINDOW_SECS {
-                let avg_speed = speed_window_bytes / LOW_SPEED_WINDOW_SECS;
+                // 用窗口实际经过的秒数计算平均速度（此前用固定 5 秒做除数，
+                // 当窗口实际时长超过 5 秒时会把速度算得偏大，导致低速检测失效、
+                // 慢源不被换掉）。窗口时间越长越准确。
+                let avg_speed = speed_window_bytes / win_elapsed.max(1);
                 if avg_speed < LOW_SPEED_THRESHOLD {
                     return Err(format!(
                         "低速检测：源速度过慢 ({}KB/s)，切换镜像",

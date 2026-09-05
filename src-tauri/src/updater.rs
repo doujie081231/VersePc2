@@ -575,13 +575,14 @@ async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Resu
     let data_dir = crate::storage::resolve_data_dir();
     let tmp_dir = data_dir.join("updates");
     let _ = fs::create_dir_all(&tmp_dir);
-    // 下载文件按平台命名：Windows .exe / macOS .zip / Linux 无后缀
+    // 下载暂存文件名与线上 release 资产名保持一致（不带版本后缀）：
+    // Windows `VersePC2.exe` / macOS `VersePC2-macos-<arch>.zip` / Linux `VersePC2-linux-x86_64`
     let file_name = match current_update_key() {
-        "win-x64" => format!("VersePC2-{}.exe", release.tag_ver),
-        "linux-x86_64" => format!("VersePC2-{}-linux-x86_64", release.tag_ver),
-        "macos-x86_64" => format!("VersePC2-{}-macos-x86_64.zip", release.tag_ver),
-        "macos-aarch64" => format!("VersePC2-{}-macos-aarch64.zip", release.tag_ver),
-        _ => format!("VersePC2-{}", release.tag_ver),
+        "win-x64" => "VersePC2.exe".to_string(),
+        "linux-x86_64" => "VersePC2-linux-x86_64".to_string(),
+        "macos-x86_64" => "VersePC2-macos-x86_64.zip".to_string(),
+        "macos-aarch64" => "VersePC2-macos-aarch64.zip".to_string(),
+        _ => "VersePC2".to_string(),
     };
     let target = tmp_dir.join(file_name);
 

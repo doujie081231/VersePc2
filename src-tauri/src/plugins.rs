@@ -333,15 +333,18 @@ pub async fn download_and_install(url: String, sha256: String, size: u64, expect
 
     let sha = if sha256.is_empty() { None } else { Some(sha256.as_str()) };
     let size_opt = if size > 0 { Some(size) } else { None };
+    eprintln!("[plugin-dbg] download_and_install url={} size={} sha256={}", url, size, sha256);
 
     let result = match crate::download::download_with_mirror(&url, &tmp, None, size_opt, "auto", 300, None).await {
         Ok(()) => {
+            eprintln!("[plugin-dbg] 下载OK, 文件大小={}", std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0));
             if let Some(expected_sha) = sha {
                 match crate::utils::calculate_sha256(&tmp) {
                     Some(actual) if actual.eq_ignore_ascii_case(expected_sha) => {
+                        eprintln!("[plugin-dbg] sha256通过, 开始安装");
                         install_from_zip(tmp.to_string_lossy().to_string(), expected_id).await
                     }
-                    _ => json!({ "ok": false, "error": "插件包校验哈希值失败".to_string() }),
+                    actual => json!({ "ok": false, "error": format!("插件包校验哈希值失败 actual={:?}", actual) }),
                 }
             } else {
                 install_from_zip(tmp.to_string_lossy().to_string(), expected_id).await
@@ -349,6 +352,7 @@ pub async fn download_and_install(url: String, sha256: String, size: u64, expect
         }
         Err(e) => json!({ "ok": false, "error": format!("插件包下载失败: {}", e) }),
     };
+
     let _ = std::fs::remove_file(&tmp);
     result
 }

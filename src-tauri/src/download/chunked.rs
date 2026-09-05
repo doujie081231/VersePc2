@@ -27,8 +27,8 @@ const MIN_CHUNK_SIZE: u64 = 512 * 1024;
 const MAX_CHUNKS: usize = 64;
 /// 单块 stall 超时（秒）：默认 30s
 const CHUNK_STALL_SECS: u64 = 30;
-/// 初始并发分块数（前 4 个分块不受速度限制）
-const INITIAL_CHUNKS: usize = 4;
+/// 初始并发分块数（前 16 个分块不受速度限制，对齐主流启动器的默认并发）
+const INITIAL_CHUNKS: usize = 16;
 /// 速度下限（字节/秒）：低于此值才新增分块并发（初始 256KB/s）
 const SPEED_FLOOR_BASE: u64 = 256 * 1024;
 

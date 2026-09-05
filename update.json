@@ -5,7 +5,7 @@
   "releaseNotes": "VersePC2 v1.1.3\n\n改进:\n- 自动更新流程改造：检测到新版本后自动下载；用户关闭程序时自动替换并重启；不再弹出「发现新版本」弹窗，重启后弹出「已更新」提示\n- 修复 Windows 更新脚本：等待旧进程退出后强制结束后台残留进程再替换，解决后台进程占用导致更新失败\n- 修复账户详情页无法上传皮肤/切换皮肤；修复离线默认皮肤头像显示空白\n- 打包产物去掉版本后缀名",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.3/VersePC2-1.1.3.exe",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.3/VersePC2.exe",
       "size": 73400832,
       "sha256": "46EAA3F5CB47EDA88586C8A33B5DE2AFBAFECA6C2104585ABAEB32AE869F9C7F"
     },
