@@ -1,28 +1,28 @@
 {
-  "version": "1.1.3",
-  "releaseName": "v1.1.3",
-  "releaseDate": "2026-08-24",
-  "releaseNotes": "VersePC2 v1.1.3\n\n改进:\n- 自动更新流程改造：检测到新版本后自动下载；用户关闭程序时自动替换并重启；不再弹出「发现新版本」弹窗，重启后弹出「已更新」提示\n- 修复 Windows 更新脚本：等待旧进程退出后强制结束后台残留进程再替换，解决后台进程占用导致更新失败\n- 修复账户详情页无法上传皮肤/切换皮肤；修复离线默认皮肤头像显示空白\n- 打包产物去掉版本后缀名",
+  "version": "1.1.35",
+  "releaseName": "v1.1.35",
+  "releaseDate": "2026-09-05",
+  "releaseNotes": "VersePC2 v1.1.35\n\n改进:\n- CurseForge API 镜像回退支持（mod.mcimirror.top）\n- CurseForge API Key 统一管理（本地文件 > 设置 > 内置）\n- 更新镜像源为 USTC 镜像\n- 各项优化与修复",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.3/VersePC2.exe",
-      "size": 73400832,
-      "sha256": "46EAA3F5CB47EDA88586C8A33B5DE2AFBAFECA6C2104585ABAEB32AE869F9C7F"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.35/VersePC2.exe",
+      "size": 73458688,
+      "sha256": "D00F827BCF6F0A558E09FD05B9E733C4D8F84463964158893CC305A5F3D8ADDA"
     },
     "linux-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.3/VersePC2-linux-x86_64",
-      "size": 69635520,
-      "sha256": "9DC4045192FC61914E13FD5B432B5F6AA6D4DAFFA79FFFC8C68E1C69EBD3F3F5"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.35/VersePC2-linux-x86_64",
+      "size": 69668704,
+      "sha256": "8EC0115D2E7ECB41DD96D32A9464ECAD15DD6DAF966043542170AB354B216B8B"
     },
     "macos-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.3/VersePC2-macos-x86_64.zip",
-      "size": 61959533,
-      "sha256": "4923B7587EFFFCB17DB57546F434F286AD651558A4505A16FE39264D1F061349"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.35/VersePC2-macos-x86_64.zip",
+      "size": 61978032,
+      "sha256": "46783D2F2846B1C86C8CD7B4C2C858F7E673BE86E7F96D8CE87823B0E969AF61"
     },
     "macos-aarch64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.3/VersePC2-macos-aarch64.zip",
-      "size": 62063962,
-      "sha256": "52946690C645C82A1D001FE1D9874AADD44DD7A868C36CADFB9ADB4A89BA2211"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.1.35/VersePC2-macos-aarch64.zip",
+      "size": 62077477,
+      "sha256": "A2B0FA90E5A56D20B368429F49D595DE2DD1B357E8D59CFDB4ADC209F1775038"
     }
   }
 }
