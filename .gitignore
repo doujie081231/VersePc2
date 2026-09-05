@@ -14,3 +14,7 @@ run_diag.ps1
 stderr.log
 stdout.log
 tauri-build-log.txt
+
+# CurseForge API Key(本地保管,不入库)
+src-tauri/.cf_api_key
+*.cf_api_key

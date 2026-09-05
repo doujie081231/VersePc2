@@ -51,8 +51,98 @@ use crate::storage;
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 /// CurseForge API
 const CURSEFORGE_API: &str = "https://api.curseforge.com/v1";
+/// CurseForge API 镜像地址
+const CURSEFORGE_API_MIRROR: &str = "https://mod.mcimirror.top/curseforge/v1";
 /// CurseForge 默认 API Key
 const DEFAULT_CF_API_KEY: &str = "$2a$10$bL4bIL5pUWqfcO7KQtnMReakwtfHbNKh6v1uTpKlzhwoueEJQnPnm";
+/// 获取当前生效的 CurseForge API Key。
+/// 优先级：本地密钥文件(src-tauri/.cf_api_key，不入库) > 设置值 > 内置默认。
+fn current_cf_api_key() -> String {
+    // 1. 本地密钥文件（已被 .gitignore 忽略，上传源码时不会泄露）
+    let key_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".cf_api_key");
+    if let Ok(v) = std::fs::read_to_string(&key_file) {
+        let k = v.trim().to_string();
+        if !k.is_empty() {
+            return k;
+        }
+    }
+    // 2. 设置中的密钥
+    if let Some(v) = storage::load_settings()
+        .get("curseforgeApiKey")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        return v.to_string();
+    }
+    // 3. 内置默认（仅作临时回退，官方已可能失效）
+    DEFAULT_CF_API_KEY.to_string()
+}
+
+/// 带镜像回退的 CurseForge API 请求。
+/// 策略：镜像(8s) -> 官方(10s) -> 官方完整(20s)。
+/// 镜像的 403/404 不阻断，继续官方；官方 403/404 才直接失败。
+/// 返回 2xx 的 JSON body。
+async fn cf_get_json(client: &reqwest::Client, url: &str, api_key: &str) -> Result<Value, String> {
+    use crate::download::mirror;
+    let mirror_url = if url.starts_with(CURSEFORGE_API) {
+        Some(url.replacen(CURSEFORGE_API, CURSEFORGE_API_MIRROR, 1))
+    } else {
+        None
+    };
+    let use_mirror = mirror_url.is_some() && mirror::is_mirror_available();
+    let steps: Vec<(String, u64, bool)> = if use_mirror {
+        let murl = mirror_url.unwrap_or_default();
+        vec![
+            (murl, 8000, true),
+            (url.to_string(), 10000, false),
+            (url.to_string(), 20000, false),
+        ]
+    } else {
+        vec![
+            (url.to_string(), 10000, false),
+            (url.to_string(), 20000, false),
+        ]
+    };
+
+    let mut last_err = String::new();
+    for (step_url, timeout_ms, is_mirror) in steps {
+        let mut req = client
+            .get(&step_url)
+            .timeout(Duration::from_millis(timeout_ms))
+            .header("x-api-key", api_key)
+            .header("Accept", "application/json");
+        match req.send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    if is_mirror {
+                        mirror::mirror_success();
+                    }
+                    match resp.json::<Value>().await {
+                        Ok(v) => return Ok(v),
+                        Err(e) => last_err = format!("JSON解析失败: {}", e),
+                    }
+                } else {
+                    last_err = format!("HTTP {}", status);
+                    if (status == 403 || status == 404) && !is_mirror {
+                        return Err(last_err);
+                    }
+                    if is_mirror {
+                        mirror::mirror_failed();
+                    }
+                }
+            }
+            Err(e) => {
+                last_err = format!("{}", e);
+                if is_mirror {
+                    mirror::mirror_failed();
+                }
+            }
+        }
+    }
+    Err(last_err)
+}
+
 
 /// 处理模组路由
 pub async fn handle(
@@ -539,12 +629,7 @@ async fn search_curseforge_mods(
     limit: usize,
     offset: usize,
 ) -> Result<(Vec<Value>, u64), String> {
-    let settings = storage::load_settings();
-    let cf_api_key = settings
-        .get("curseforgeApiKey")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_CF_API_KEY);
+    let cf_api_key = current_cf_api_key();
 
     let sort_field = match sort {
         "downloads" => "6",
@@ -578,19 +663,7 @@ async fn search_curseforge_mods(
         url.push_str(&format!("&gameVersion={}", urlencoding::encode(mc_version)));
     }
 
-    let resp = client
-        .get(&url)
-        .header("x-api-key", cf_api_key)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
-    }
-
-    let result: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let result: Value = cf_get_json(client, &url, &cf_api_key).await?;
     let hits = result
         .get("data")
         .and_then(|d| d.as_array())
@@ -741,18 +814,15 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
             Err(e) => ApiResult::err(502, &format!("请求失败: {}", e)),
         }
     } else if source == "curseforge" {
-        let settings = storage::load_settings();
-        let cf_api_key = settings
-            .get("curseforgeApiKey")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or(DEFAULT_CF_API_KEY);
+        let cf_api_key = current_cf_api_key();
         let url = format!("{}/mods/{}", CURSEFORGE_API, project_id);
-        match client.get(&url).header("x-api-key", cf_api_key).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<Value>().await {
-                    Ok(result) => {
-                        let m = result.get("data").unwrap_or(&result);
+
+        let result = match cf_get_json(&client, &url, &cf_api_key).await {
+            Ok(v) => v,
+            Err(e) => return ApiResult::err(502, &format!("CurseForge 请求失败: {}", e)),
+        };
+        let m = result.get("data").unwrap_or(&result);
+
                         let categories = m
                             .get("categories")
                             .and_then(|c| c.as_array())
@@ -822,13 +892,6 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
                             "source": "curseforge"
                         });
                         ApiResult::ok(detail)
-                    }
-                    Err(e) => ApiResult::err(502, &format!("解析失败: {}", e)),
-                }
-            }
-            Ok(resp) => ApiResult::err(502, &format!("CurseForge HTTP {}", resp.status())),
-            Err(e) => ApiResult::err(502, &format!("请求失败: {}", e)),
-        }
     } else {
         ApiResult::err(400, "Unsupported source")
     }
@@ -931,12 +994,7 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
             Err(e) => ApiResult::err(502, &format!("请求失败: {}", e)),
         }
     } else if source == "curseforge" {
-        let settings = storage::load_settings();
-        let cf_api_key = settings
-            .get("curseforgeApiKey")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or(DEFAULT_CF_API_KEY);
+        let cf_api_key = current_cf_api_key();
 
         // CurseForge 版本列表接口
         let mut url = format!("{}/mods/{}/files?pageSize=50", CURSEFORGE_API, project_id);
@@ -956,10 +1014,12 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
             }
         }
 
-        match client.get(&url).header("x-api-key", cf_api_key).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<Value>().await {
-                    Ok(result) => {
+
+        let result = match cf_get_json(&client, &url, &cf_api_key).await {
+            Ok(v) => v,
+            Err(e) => return ApiResult::err(502, &format!("CurseForge 请求失败: {}", e)),
+        };
+
                         let files = result
                             .get("data")
                             .and_then(|d| d.as_array())
@@ -1052,14 +1112,8 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                 })
                             })
                             .collect();
-                        ApiResult::ok(json!({ "versions": versions }))
-                    }
-                    Err(e) => ApiResult::err(502, &format!("解析失败: {}", e)),
-                }
-            }
-            Ok(resp) => ApiResult::err(502, &format!("CurseForge HTTP {}", resp.status())),
-            Err(e) => ApiResult::err(502, &format!("请求失败: {}", e)),
-        }
+                        
+        ApiResult::ok(json!({ "versions": versions }))
     } else {
         ApiResult::err(400, "Unsupported source")
     }
@@ -1201,12 +1255,7 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
         }
     } else {
         // CurseForge：通过 fileId 获取文件下载信息
-        let settings = storage::load_settings();
-        let cf_api_key = settings
-            .get("curseforgeApiKey")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or(DEFAULT_CF_API_KEY);
+        let cf_api_key = current_cf_api_key();
 
         // version_id 即 CurseForge 的 file id
         let file_id = if !version_id.is_empty() {
@@ -1214,13 +1263,9 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
         } else {
             // 未指定 file id 时，查最新文件
             let files_url = format!("{}/mods/{}/files?pageSize=1", CURSEFORGE_API, project_id);
-            let list_resp = client.get(&files_url).header("x-api-key", cf_api_key.clone()).send().await;
-            match list_resp {
-                Ok(r) if r.status().is_success() => {
-                    let v: Value = r.json().await.unwrap_or_default();
-                    v.pointer("/data/0/id").and_then(|i| i.as_u64()).map(|i| i.to_string()).unwrap_or_default()
-                }
-                _ => String::new(),
+            match cf_get_json(&client, &files_url, &cf_api_key).await {
+                Ok(v) => v.pointer("/data/0/id").and_then(|i| i.as_u64()).map(|i| i.to_string()).unwrap_or_default(),
+                Err(_) => String::new(),
             }
         };
 
@@ -1229,23 +1274,19 @@ async fn handle_download(body: &Option<Value>) -> ApiResult {
         }
 
         let file_url = format!("{}/mods/{}/files/{}", CURSEFORGE_API, project_id, file_id);
-        let file_resp = client.get(&file_url).header("x-api-key", cf_api_key).send().await;
-        match file_resp {
-            Ok(r) if r.status().is_success() => {
-                let v: Value = r.json().await.unwrap_or_default();
-                let f = v.get("data").unwrap_or(&v);
-                let download_url = f.get("downloadUrl").and_then(|u| u.as_str()).unwrap_or("").to_string();
-                let file_name = f.get("fileName").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                let file_size = f.get("fileLength").and_then(|s| s.as_u64()).unwrap_or(0);
-                let sha1 = f.pointer("/hashes/0/value").and_then(|s| s.as_str()).unwrap_or("").to_string();
-                if download_url.is_empty() {
-                    return ApiResult::err(502, "未找到下载文件");
-                }
-                (download_url, file_name, file_size, sha1)
-            }
-            Ok(resp) => return ApiResult::err(502, &format!("CurseForge HTTP {}", resp.status())),
-            Err(e) => return ApiResult::err(502, &format!("请求失败: {}", e)),
+        let v = match cf_get_json(&client, &file_url, &cf_api_key).await {
+            Ok(v) => v,
+            Err(e) => return ApiResult::err(502, &format!("CurseForge 请求失败: {}", e)),
+        };
+        let f = v.get("data").unwrap_or(&v);
+        let download_url = f.get("downloadUrl").and_then(|u| u.as_str()).unwrap_or("").to_string();
+        let file_name = f.get("fileName").and_then(|n| n.as_str()).unwrap_or("").to_string();
+        let file_size = f.get("fileLength").and_then(|s| s.as_u64()).unwrap_or(0);
+        let sha1 = f.pointer("/hashes/0/value").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        if download_url.is_empty() {
+            return ApiResult::err(502, "未找到下载文件");
         }
+        (download_url, file_name, file_size, sha1)
     };
 
     if download_url.is_empty() {
@@ -1578,12 +1619,7 @@ async fn handle_resolve_deps(params: &Option<Value>) -> ApiResult {
 }
 
 async fn resolve_cf_deps(ids: &[String]) -> ApiResult {
-    let settings = storage::load_settings();
-    let cf_api_key = settings
-        .get("curseforgeApiKey")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_CF_API_KEY);
+    let cf_api_key = current_cf_api_key();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .user_agent("VersePC/1.0")
@@ -1597,11 +1633,10 @@ async fn resolve_cf_deps(ids: &[String]) -> ApiResult {
         let key = cf_api_key.to_string();
         futures.push(tokio::spawn(async move {
             let url = format!("{}/mods/{}", CURSEFORGE_API, urlencoding::encode(&id));
-            let r = client.get(&url).header("x-api-key", key).send().await.ok()?;
-            if !r.status().is_success() {
-                return None;
-            }
-            let v: Value = r.json().await.ok()?;
+            let v: Value = match cf_get_json(&client, &url, &key).await {
+                Ok(v) => v,
+                Err(_) => return None,
+            };
             let p = v.get("data")?.clone();
             let pid = p.get("id").map(|i| i.to_string())?;
             let title = p.get("name")
