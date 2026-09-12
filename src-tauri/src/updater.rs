@@ -575,14 +575,13 @@ async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Resu
     let data_dir = crate::storage::resolve_data_dir();
     let tmp_dir = data_dir.join("updates");
     let _ = fs::create_dir_all(&tmp_dir);
-    // 下载暂存文件名与线上 release 资产名保持一致（不带版本后缀）：
-    // Windows `VersePC2.exe` / macOS `VersePC2-macos-<arch>.zip` / Linux `VersePC2-linux-x86_64`
+    // 下载文件按平台命名：Windows .exe / macOS .zip / Linux 无后缀
     let file_name = match current_update_key() {
-        "win-x64" => "VersePC2.exe".to_string(),
-        "linux-x86_64" => "VersePC2-linux-x86_64".to_string(),
-        "macos-x86_64" => "VersePC2-macos-x86_64.zip".to_string(),
-        "macos-aarch64" => "VersePC2-macos-aarch64.zip".to_string(),
-        _ => "VersePC2".to_string(),
+        "win-x64" => format!("VersePC2-{}.exe", release.tag_ver),
+        "linux-x86_64" => format!("VersePC2-{}-linux-x86_64", release.tag_ver),
+        "macos-x86_64" => format!("VersePC2-{}-macos-x86_64.zip", release.tag_ver),
+        "macos-aarch64" => format!("VersePC2-{}-macos-aarch64.zip", release.tag_ver),
+        _ => format!("VersePC2-{}", release.tag_ver),
     };
     let target = tmp_dir.join(file_name);
 
@@ -625,10 +624,42 @@ fn install_and_restart(app: &AppHandle, new_pkg: &Path) -> Result<(), String> {
         let script = dir.join("_versepc_update.bat");
         let n = new_pkg.to_string_lossy().replace('/', "\\");
         let c = current_exe.to_string_lossy().replace('/', "\\");
-        // 等待当前实例退出（约8秒）→ 若后台残留则强制结束 → 替换 exe → 启动新 exe → 删除脚本
-        // 说明：关窗后进程可能仍在后台占用 exe（导致 move 改名失败），必须兜底 taskkill 强制结束再替换
+        // 等待当前实例退出（约8秒）→ 若后台残留则强制结束 → 替换 exe → 启动 exe → 删除脚本
+        // 说明：关窗后进程可能仍在后台占用 exe（导致 move 改名失败），必须兜底 taskkill 强制结束再替换。
+        // 加固：替换后先校验 exe 是否真的存在（替换可能被安全软件拦截删除），
+        // 存在才启动；若主 exe 丢失则回退启动更新包原件，避免「Windows 找不到文件」原生报错。
         let content = format!(
-            "@echo off\r\nchcp 65001 >nul\r\nset /a tries=0\r\n:wait\r\ntasklist /fi \"imagename eq {exe}\" 2>nul | find /i \"{exe}\" >nul\r\nif errorlevel 1 goto replace\r\nset /a tries+=1\r\nif %tries% geq 8 goto kill\r\ntimeout /t 1 /nobreak >nul\r\ngoto wait\r\n:kill\r\ntaskkill /f /im \"{exe}\" >nul 2>nul\r\ntimeout /t 2 /nobreak >nul\r\n:replace\r\nmove /y \"{new}\" \"{cur}\" >nul\r\nif errorlevel 1 (\r\n  taskkill /f /im \"{exe}\" >nul 2>nul\r\n  timeout /t 2 /nobreak >nul\r\n  move /y \"{new}\" \"{cur}\" >nul\r\n)\r\nif errorlevel 1 goto done\r\nstart \"\" \"{cur}\"\r\n:done\r\ndel /q \"%~f0\"\r\n",
+            "@echo off\r\n\
+             chcp 65001 >nul\r\n\
+             set \"NEW={new}\"\r\n\
+             set \"CUR={cur}\"\r\n\
+             set /a tries=0\r\n\
+             :wait\r\n\
+             tasklist /fi \"imagename eq {exe}\" 2>nul | find /i \"{exe}\" >nul\r\n\
+             if errorlevel 1 goto replace\r\n\
+             set /a tries+=1\r\n\
+             if %tries% geq 8 goto kill\r\n\
+             timeout /t 1 /nobreak >nul\r\n\
+             goto wait\r\n\
+             :kill\r\n\
+             taskkill /f /im \"{exe}\" >nul 2>nul\r\n\
+             timeout /t 2 /nobreak >nul\r\n\
+             :replace\r\n\
+             move /y \"%NEW%\" \"%CUR%\" >nul 2>nul\r\n\
+             if not exist \"%CUR%\" (\r\n\
+               taskkill /f /im \"{exe}\" >nul 2>nul\r\n\
+               timeout /t 2 /nobreak >nul\r\n\
+               move /y \"%NEW%\" \"%CUR%\" >nul 2>nul\r\n\
+             )\r\n\
+             if not exist \"%CUR%\" copy /y \"%NEW%\" \"%CUR%\" >nul 2>nul\r\n\
+             if exist \"%CUR%\" (\r\n\
+               start \"\" \"%CUR%\"\r\n\
+             ) else (\r\n\
+               if exist \"%NEW%\" start \"\" \"%NEW%\"\r\n\
+               if not exist \"%NEW%\" echo [VersePC] update failed: exe missing > \"%~dp0_versepc_update_error.txt\"\r\n\
+             )\r\n\
+             :done\r\n\
+             del /q \"%~f0\"\r\n",
             exe = exe_name, new = n, cur = c
         );
         fs::write(&script, content).map_err(|e| format!("无法写入更新脚本: {}", e))?;

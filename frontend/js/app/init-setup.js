@@ -185,7 +185,6 @@ async function init() {
   // 阶段4：初始化壁纸相关界面元素（轻量、同步，不阻塞 splash）
   setProgress(90, '正在初始化壁纸...');
   cacheCommonElements();
-  initWallpaperDropZone();
   initWallpaperAutoAdapt();
   // 壁纸引擎（three.bundle.js 约 2MB）改为窗口出现后再后台加载，
   // 避免大脚本下载+解析阻塞主线程、拖慢窗口出现。窗口先出来，壁纸稍后淡入。

@@ -112,7 +112,6 @@
     minimize: function () { invoke('window_minimize'); },
     maximize: function () { invoke('window_maximize'); },
     close: function () { invoke('window_close'); },
-    destroy: function () { invoke('window_destroy'); },
     isMaximized: function () { return invoke('window_is_maximized'); },
     isFullscreen: function () { return invoke('window_is_fullscreen'); },
     restore: function () { invoke('window_restore'); },
@@ -125,12 +124,6 @@
         invoke('window_maximize');
       }
     },
-    // 设置启动器窗口尺寸 — Tauri 中可通过自定义命令实现
-    setLauncherSize: function (width, height) {
-      invoke('window_set_size', { width: width, height: height }).catch(function () {
-        // 如果 Rust 端暂无此命令，静默忽略
-      });
-    },
     quitApp: function () { invoke('window_close'); },
     // launch.js 中使用的别名
     windowMinimize: function () { invoke('window_minimize'); },
@@ -138,8 +131,7 @@
     showWindowEarly: function () {
       // 窗口默认隐藏（visible:false），splash 首屏渲染后调用此命令显示，避免启动黑屏闪一下
       invoke('window_show').catch(function () {});
-    },
-    openDevtools: function () { invoke('open_devtools'); }
+    }
   };
 
   // ============== 存储（KV Store） ==============
@@ -165,20 +157,6 @@
         default_path: opts.defaultPath || null
       }).then(function (result) {
         // 转换为前端期望的格式：兼容 { canceled, filePaths } 和 { cancelled, path } 两种格式
-        if (result && result.cancelled === false && result.path) {
-          return { canceled: false, cancelled: false, filePaths: [result.path], path: result.path };
-        }
-        return { canceled: true, cancelled: true, filePaths: [], path: undefined };
-      });
-    },
-    // 选择文件夹
-    selectFolder: function (opts) {
-      opts = opts || {};
-      return invoke('select_folder', {
-        title: opts.title || opts.prompt || null,
-        default_path: opts.defaultPath || null
-      }).then(function (result) {
-        // 兼容 { canceled, filePaths } 和 { cancelled, path } 两种格式
         if (result && result.cancelled === false && result.path) {
           return { canceled: false, cancelled: false, filePaths: [result.path], path: result.path };
         }
@@ -558,18 +536,15 @@
     minimize: windowControls.minimize,
     maximize: windowControls.maximize,
     close: windowControls.close,
-    destroy: windowControls.destroy,
     isMaximized: windowControls.isMaximized,
     isFullscreen: windowControls.isFullscreen,
     restore: windowControls.restore,
     isMinimized: windowControls.isMinimized,
     setWindowMode: windowControls.setWindowMode,
-    setLauncherSize: windowControls.setLauncherSize,
     quitApp: windowControls.quitApp,
     windowMinimize: windowControls.windowMinimize,
     windowRestore: windowControls.windowRestore,
     showWindowEarly: windowControls.showWindowEarly,
-    openDevtools: windowControls.openDevtools,
     // 启动计时诊断（写入 logs/startup-timing.log）
     writeStartupTiming: function (content) {
       invoke('write_startup_timing', { content: String(content) }).catch(function () {});
@@ -581,7 +556,6 @@
     // 对话框
     showOpenDialog: dialogs.showOpenDialog,
     selectFile: dialogs.selectFile,
-    selectFolder: dialogs.selectFolder,
     selectSaveFolder: dialogs.selectSaveFolder,
 
     // 剪贴板

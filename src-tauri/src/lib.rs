@@ -18,6 +18,7 @@ pub(crate) mod launch;
 mod modloaders;
 mod modpack;
 mod mods;
+mod nbt;
 mod network;
 mod plugin_exec;
 mod plugins;
@@ -25,6 +26,7 @@ mod private_server;
 mod promote;
 mod redstone_online;
 mod resource;
+mod saves;
 pub mod server_host;
 pub mod server_host_daemon;
 mod storage;
@@ -33,6 +35,7 @@ mod tts;
 mod updater;
 mod utils;
 mod versions;
+mod wallpaper_engine;
 
 use serde_json::{json, Value};
 use tauri::{Emitter, Manager, PhysicalPosition, Position};
@@ -354,28 +357,6 @@ fn open_external(url: String) -> bool {
 }
 
 // ============== 路径获取命令 ==============
-
-#[tauri::command]
-fn get_versions_dir() -> Value {
-    let data_dir = storage::resolve_data_dir();
-    let versions_dir = data_dir.join("versions");
-    let _ = std::fs::create_dir_all(&versions_dir);
-    json!({ "success": true, "path": versions_dir.to_string_lossy() })
-}
-
-#[tauri::command]
-fn get_external_version_folders(state: tauri::State<storage::Store>) -> Value {
-    let folders = state
-        .get("externalVersionFolders")
-        .and_then(|v| v.as_array().cloned())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    json!({ "success": true, "folders": folders })
-}
 
 #[tauri::command]
 fn get_default_mod_path(
@@ -722,6 +703,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // wewp:// 协议：为 Wallpaper Engine web 壁纸按原相对路径提供本地文件服务
+        .register_uri_scheme_protocol("wewp", |_app, request| {
+            wallpaper_engine::handle_wewp_request(&request)
+        })
         .setup(|app| {
             println!("[boot] setup start {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             // 初始化存储：使用便携版数据目录（数据跟 exe 走）
@@ -877,8 +862,6 @@ pub fn run() {
             dialog::select_file,
             filesystem::read_file_buffer,
             // 路径获取
-            get_versions_dir,
-            get_external_version_folders,
             get_default_mod_path,
             get_default_mod_save_folder,
             // API 代理分发
@@ -896,8 +879,6 @@ pub fn run() {
             write_startup_timing,
             // 系统工具
             open_external,
-            // 运行环境检查（WebView2）
-            system::check_webview2,
             // TTS 语音合成
             tts_speak,
             // AI 对话代理
@@ -932,7 +913,6 @@ pub fn run() {
             server_host::server_host_sync_mods,
             // 插件框架
             plugins::plugin_list,
-            plugins::plugin_install,
             plugins::plugin_uninstall,
             plugins::plugin_market_index,
             plugins::plugin_download_install,
@@ -953,6 +933,11 @@ pub fn run() {
             enderlink_online::enderlink_start,
             enderlink_online::enderlink_stop,
             enderlink_online::enderlink_status,
+            // Wallpaper Engine 壁纸扫描
+            wallpaper_engine::wallpaper_engine_list,
+            // 存档管理
+            saves::version_list_saves,
+            saves::version_save_update,
         ])
         .on_window_event(|window, event| {
             // 自动更新：主窗口被系统关闭（Alt+F4 / 任务栏关闭）时，若已有下载完成的更新包，

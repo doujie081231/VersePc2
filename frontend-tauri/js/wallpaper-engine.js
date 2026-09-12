@@ -551,8 +551,10 @@ class CustomImageRenderer {
             try {
                 if (window.electronAPI && window.electronAPI.readFileBuffer) {
                     const buffer = await window.electronAPI.readFileBuffer(filePath);
-                    // Tauri 返回的 Vec<u8> 会序列化为数字数组，需先转成 Uint8Array 才能正确构造 Blob
-                    const u8 = buffer ? (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)) : null;
+                    // Tauri 返回可能是 Base64 字符串 / number[] / Uint8Array，统一解码
+                    const u8 = typeof window.decodeFileBuffer === 'function'
+                        ? window.decodeFileBuffer(buffer)
+                        : (buffer ? (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)) : null);
                     if (u8 && u8.byteLength > 0) {
                         const ext = filePath.toLowerCase().split('.').pop();
                         const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' };
@@ -723,7 +725,8 @@ class CustomVideoRenderer {
 
         // 创建 video DOM 元素，用 CSS filter 实现 GPU 加速 blur
         this.video = document.createElement('video');
-        this.video.muted = true;
+        // WE 视频壁纸开启音频；普通自定义视频保持静音
+        this.video.muted = !this.engine.weVideoAudio;
         this.video.loop = true;
         this.video.playsInline = true;
         this.video.preload = 'auto';
@@ -841,6 +844,44 @@ class CustomVideoRenderer {
             this.video = null;
         }
         this.loaded = false;
+    }
+}
+
+/** Wallpaper Engine web 壁纸渲染器：在 #wallpaper-web-container 中加载 wewp:// 页面 */
+class WebWallpaperRenderer {
+    constructor(engine) {
+        this.engine = engine;
+        this.iframe = null;
+        this._container = document.getElementById('wallpaper-web-container');
+        if (engine.webWallpaperSrc) {
+            this.loadWeb(engine.webWallpaperSrc);
+        }
+    }
+
+    setTheme() {}
+    onResize() {}
+
+    loadWeb(src) {
+        if (this.iframe) {
+            this.iframe.remove();
+            this.iframe = null;
+        }
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        iframe.setAttribute('allow', 'autoplay');
+        iframe.setAttribute('tabindex', '-1');
+        iframe.src = src;
+        this.iframe = iframe;
+        if (this._container) {
+            this._container.appendChild(iframe);
+        }
+    }
+
+    destroy() {
+        if (this.iframe) {
+            this.iframe.remove();
+            this.iframe = null;
+        }
     }
 }
 

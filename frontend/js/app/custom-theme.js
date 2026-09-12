@@ -269,18 +269,28 @@ function syncCustomThemeColorUI(color) {
   document.querySelectorAll('.custom-theme-preset').forEach(preset => {
     preset.classList.toggle('active', preset.dataset.color?.toLowerCase() === color.toLowerCase());
   });
+
+  // 同步 Vue 共享状态（个性化页卡片由该状态渲染颜色/色板 active）
+  const st = typeof getPersonalizeState === 'function' ? getPersonalizeState() : null;
+  if (st) st.customColor = color;
 }
 
 /** 同步浅色模式开关状态 */
 function syncCustomThemeLightModeUI(isLight) {
   const toggle = document.getElementById('custom-theme-light-mode');
   if (toggle) toggle.checked = !!isLight;
+
+  const st = typeof getPersonalizeState === 'function' ? getPersonalizeState() : null;
+  if (st) st.customLight = !!isLight;
 }
 
 /** 显示/隐藏自定义颜色选择器区域 */
 function toggleCustomThemeColorGroup(show) {
   const group = document.getElementById('custom-theme-color-group');
   if (group) group.style.display = show ? '' : 'none';
+
+  const st = typeof getPersonalizeState === 'function' ? getPersonalizeState() : null;
+  if (st) st.customColorGroupVisible = !!show;
 }
 
 /** 颜色选择器 input 事件（实时预览并保存） */
