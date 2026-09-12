@@ -249,16 +249,14 @@ function initTerracottaPage() {
     const ob = document.getElementById('terracotta-onboarding');
     const main = document.getElementById('terracotta-main');
     if (!ob || !main) return;
-    // ===== 临时测试：每次都显示首次使用引导动画（测试完成后恢复下方按 installed 判断的逻辑）=====
-    showTerracottaOnboarding();
-    // ===== 正式逻辑（恢复点）=====
-    // API.easytierStatus().then(st => {
-    //     if (st && st.installed) {
-    //         showTerracottaMain();
-    //     } else {
-    //         showTerracottaOnboarding();
-    //     }
-    // }).catch(() => showTerracottaOnboarding());
+    // 核心已安装 → 直接显示主界面；未安装 → 首次使用引导
+    API.easytierStatus().then(st => {
+        if (st && st.installed) {
+            showTerracottaMain();
+        } else {
+            showTerracottaOnboarding();
+        }
+    }).catch(() => showTerracottaOnboarding());
 }
 
 function showTerracottaOnboarding() {
@@ -717,8 +715,12 @@ async function redstoneRefreshCurrentVersion() {
 
 /** 红石联机页面初始化（由导航跳转触发） */
 async function redstoneInitPage() {
-    // 显示首次使用引导（与陶瓦联机形式一致）
-    showRedstoneOnboarding();
+    // 首次使用才显示引导（localStorage 标记），之后直接进入主界面
+    if (!localStorage.getItem('redstone_onboarding_seen')) {
+        showRedstoneOnboarding();
+    } else {
+        showRedstoneMain();
+    }
     // 后台准备服务器节点列表（引导完成后主界面可直接使用）
     if (_redstoneServers.length === 0) redstoneRefreshServers();
     // 同步主进程隧道状态：若已开启则直接恢复主界面
@@ -777,6 +779,7 @@ function redstoneStartOnboarding() {
         setTimeout(() => {
             const ob = document.getElementById('redstone-onboarding');
             if (ob) {
+                localStorage.setItem('redstone_onboarding_seen', '1');
                 ob.classList.add('terracotta-ob--fadeout');
                 setTimeout(showRedstoneMain, 450);
             }
@@ -1119,8 +1122,12 @@ function enderlinkCopyAddr() {
 
 /** EnderLink 页面初始化（由导航跳转触发） */
 async function enderlinkInitPage() {
-    // 显示首次使用引导（与陶瓦/红石联机形式一致）
-    showEnderlinkOnboarding();
+    // 首次使用才显示引导（localStorage 标记），之后直接进入主界面
+    if (!localStorage.getItem('enderlink_onboarding_seen')) {
+        showEnderlinkOnboarding();
+    } else {
+        showEnderlinkMain();
+    }
     // 后台准备节点列表（引导完成后主界面可直接使用）
     if (_enderlinkNodes.length === 0) enderlinkRefreshNodes();
     // 同步主进程状态：若已开启则直接恢复主界面
@@ -1179,6 +1186,7 @@ function enderlinkStartOnboarding() {
         setTimeout(() => {
             const ob = document.getElementById('enderlink-onboarding');
             if (ob) {
+                localStorage.setItem('enderlink_onboarding_seen', '1');
                 ob.classList.add('terracotta-ob--fadeout');
                 setTimeout(showEnderlinkMain, 450);
             }
