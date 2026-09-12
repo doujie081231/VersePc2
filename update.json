@@ -5,22 +5,22 @@
   "releaseNotes": "VersePC2 v1.4.0\n\n改进:\n- 收藏置顶面板：主页右上角入口，支持置顶存档/版本/光影/模组并快速启动\n- 版本管理页与已安装版本页新增卡片样式（Mojang 官方版本宣传图 + 整合包封面）+ 新旧样式开关\n- 首页底部存档快速启动箭头定位修复\n- 陶瓦/红石/EnderLink 联机统一改造：首次使用引导动画、运行中实例卡片主界面、创建房间分步流程\n- 账户详情页模型默认呼吸效果\n- 工具箱页卡片样式统一",
   "files": {
     "win-x64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.4.0/VersePC2-1.4.0.exe",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.0/VersePC2-1.4.0.exe",
       "size": 73592832,
       "sha256": "3D0B50EE468680360F99DED7B256BF94A4CA67D29B4A97BA3694FAAC44A5AE6A"
     },
     "linux-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.4.0/VersePC2-linux-x86_64",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.0/VersePC2-linux-x86_64",
       "size": 69751552,
       "sha256": "D76D79FE6A964DBAED62536011589AD0230FFA95911E65D9DB44C89F69713F1D"
     },
     "macos-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.4.0/VersePC2-macos-x86_64.zip",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.0/VersePC2-macos-x86_64.zip",
       "size": 62043081,
       "sha256": "361C9DB51E9AA3F831AE3645CF7539B5781B2D73410E382DC02411EAA688279F"
     },
     "macos-aarch64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.4.0/VersePC2-macos-aarch64.zip",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.0/VersePC2-macos-aarch64.zip",
       "size": 62140554,
       "sha256": "1D9EBF2E43FC985C546D85623282F038B8518CE3E793C6C68917F78B7053B2E5"
     }
