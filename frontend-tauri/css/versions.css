@@ -1260,3 +1260,161 @@
 .version-item-settings-btn:active {
     transform: scale(0.92);
 }
+
+/* ==========================================================================
+   版本卡片样式开关（版本管理页顶部）
+   ========================================================================== */
+.ver-card-style-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    background: var(--bg-card-glass);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color var(--transition);
+}
+.ver-card-style-toggle:hover {
+    border-color: var(--accent);
+}
+.ver-card-style-label {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+   新版版本卡片（下载/浏览版本，宣传图样式，与存档卡片一致）
+   ========================================================================== */
+.ver-dl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    gap: 14px;
+    padding: 2px 8px 10px;
+}
+.ver-dl-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.ver-dl-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+.ver-dl-card:active {
+    transform: scale(0.98);
+}
+.ver-dl-card-bg {
+    position: relative;
+    height: 104px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background:
+        radial-gradient(120% 90% at 15% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 55%),
+        linear-gradient(160deg, var(--bg-secondary), var(--bg-tertiary));
+}
+.ver-dl-card-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 60%, color-mix(in srgb, var(--bg-card) 88%, transparent));
+    pointer-events: none;
+}
+.ver-dl-card-img {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    image-rendering: auto;
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35));
+}
+/* Mojang 版本宣传图：铺满卡片主体 */
+.ver-dl-card-banner {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.ver-dl-card-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 1;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 2px 8px;
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.ver-dl-card-info {
+    padding: 10px 12px 12px;
+    position: relative;
+    z-index: 1;
+}
+.ver-dl-card-name {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ver-dl-card-meta {
+    margin-top: 3px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* 已安装版本卡片：当前选中版本高亮 + 底部操作按钮
+   （inset 高亮在卡片内部，网格边缘也不会被容器裁剪） */
+.ver-dl-card.selected {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 2px var(--accent), 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+.ver-dl-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+}
+.ver-dl-card-actions .pin-btn,
+.ver-dl-card-actions .ver-dl-card-del {
+    width: 26px;
+    height: 26px;
+}
+.ver-dl-card-actions .ver-dl-card-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.ver-dl-card-actions .ver-dl-card-del:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+}
+.ver-dl-card-actions .ver-dl-card-del svg {
+    width: 14px;
+    height: 14px;
+}

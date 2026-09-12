@@ -26,6 +26,7 @@ pub async fn do_launch(
     account: Value,
     custom_game_dir: Option<String>,
     external_version_dir: Option<String>,
+    quick_play_world: Option<String>,
 ) -> Result<String, String> {
     let external_path = external_version_dir.as_ref().map(std::path::PathBuf::from);
     let launch_args = build_launch_arguments(
@@ -35,6 +36,7 @@ pub async fn do_launch(
         &version_id,
         custom_game_dir.as_deref(),
         external_path.as_deref(),
+        quick_play_world.as_deref(),
     );
 
     // 选择 Java 路径

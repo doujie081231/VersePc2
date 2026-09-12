@@ -1245,8 +1245,7 @@ async function initSkinViewer(skinUrl, resolvedModel) {
     container.appendChild(_skinViewer.canvas);
     _skinViewer.fov = 30;
     _skinViewer.zoom = 0.85;
-    _skinViewer.autoRotate = true;
-    _skinViewer.autoRotateSpeed = 0.5;
+    _skinViewer.autoRotate = false; // 默认不旋转，呈现 Idle 呼吸效果
     _skinViewer.animation = new skinview3d.IdleAnimation();
     _skinViewer.animation.speed = 0.8;
     _skinViewer.cameraLight.intensity = 1.2;

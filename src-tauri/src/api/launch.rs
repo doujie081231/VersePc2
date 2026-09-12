@@ -227,6 +227,8 @@ async fn handle_launch(app: &AppHandle, body: &Option<Value>) -> ApiResult {
     }
 
     let check_only = data.get("checkOnly").and_then(|v| v.as_bool()).unwrap_or(false);
+    // 快速进世界：quickPlay 单机存档名（1.19.3+ 的版本 JSON 会带上 --quickPlaySingleplayer）
+    let quick_play_world = utils::get_str(&data, "quickPlayWorld");
 
     // 仅校验模式不需要加锁；非校验模式必须持有锁才能继续
     let _lock_guard = if !check_only {
@@ -373,6 +375,11 @@ async fn handle_launch(app: &AppHandle, body: &Option<Value>) -> ApiResult {
         account,
         None, // custom_game_dir，由 args_builder 内部决策
         external_version_dir,
+        if quick_play_world.is_empty() {
+            None
+        } else {
+            Some(quick_play_world)
+        },
     )
     .await
     {
@@ -487,6 +494,7 @@ fn handle_args_preview(body: &Option<Value>) -> ApiResult {
         &clean_id,
         None,
         external_path.as_deref(),
+        None,
     );
 
     let java_path = dep_check::select_java_for_version(&clean_id, &settings, &version_json);
@@ -606,6 +614,7 @@ fn handle_diagnose(params: &Option<Value>) -> ApiResult {
         &clean_id,
         None,
         external_path.as_deref(),
+        None,
     );
     let args_count = launch_args.args.len();
     let cmd_len = java_path.len() + launch_args.args.iter().map(|a| a.len() + 3).sum::<usize>();

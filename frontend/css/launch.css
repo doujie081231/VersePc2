@@ -754,3 +754,669 @@
 .lan-status-dot.disconnected {
     background: #999;
 }
+
+/* ===== 存档管理 ===== */
+.saves-header-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.saves-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+/* 存档卡片：与账户页一致的长方形玻璃拟态卡片 */
+.save-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 12px 16px;
+  border-radius: 24px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 18px 40px rgba(0, 0, 0, 0.12);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.save-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: var(--accent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 24px 50px rgba(0, 0, 0, 0.18);
+}
+[data-theme="dark"] .save-card {
+  background: rgba(18, 18, 24, 0.35);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .save-card:hover {
+  border-color: var(--accent);
+}
+.save-card-bg {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: 26%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.save-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.save-card-noicon {
+  width: 40px;
+  height: 40px;
+  color: var(--text-tertiary, #555a66);
+  opacity: 0.6;
+}
+.save-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  width: 100%;
+}
+.save-card-name {
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.save-card-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+/* 存档启动按钮：圆形 SVG 播放图标 */
+.save-launch-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover, var(--accent)));
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb, 79, 158, 255), 0.35);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.save-launch-btn svg {
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+}
+.save-launch-btn:hover {
+  opacity: 0.88;
+  transform: scale(1.08);
+}
+
+/* 存档编辑弹窗 */
+.save-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.save-modal-card {
+  width: 440px;
+  max-width: 100%;
+  max-height: 86vh;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+.save-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.save-modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.save-modal-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.save-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.save-form-row label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.save-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 14px;
+}
+.save-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+.save-rule-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.save-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* ==========================================================================
+   陶瓦联机 - 首次使用引导（微软风格引导动画）
+   流程：图标居中渐入 → 欢迎语 → 下载图标 → 进度条 → 祝你使用愉快
+   ========================================================================== */
+.terracotta-ob {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 24px;
+  text-align: center;
+  opacity: 0;
+}
+.terracotta-ob--enter {
+  animation: terracotta-ob-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.terracotta-ob--fadeout {
+  animation: terracotta-ob-out 0.45s ease forwards;
+}
+@keyframes terracotta-ob-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes terracotta-ob-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* 陶瓦联机图标：无容器，只显示图标本身（无放大动画） */
+.terracotta-ob-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.terracotta-ob-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.terracotta-ob-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.terracotta-ob-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* 下载图标按钮：圆形 + 呼吸光晕引导点击 */
+.terracotta-ob-dl {
+  margin-top: 22px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  position: relative;
+}
+.terracotta-ob-dl:hover {
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
+.terracotta-ob-dl:active {
+  transform: scale(0.94);
+}
+.terracotta-ob-dl::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  animation: terracotta-dl-ring 1.8s ease-out infinite;
+}
+@keyframes terracotta-dl-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+.terracotta-ob-dl svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* 下载核心：转圈加载动画（与页面加载动画一致） */
+.terracotta-ob-spinner {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.terracotta-ob-spinner .spinner {
+  width: 44px;
+  height: 44px;
+  color: var(--accent);
+}
+.terracotta-ob-progress-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 陶瓦联机主界面：模块内容垂直居中 */
+.terracotta-home {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 55vh;
+  padding: 8px 0 16px;
+}
+
+/* 运行中实例卡片（长方形） */
+.terracotta-instance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+  margin: 8px auto 0;
+}
+.terracotta-instance-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.terracotta-instance-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.terracotta-instance-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  flex-shrink: 0;
+}
+.terracotta-instance-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.terracotta-instance-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.terracotta-instance-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.terracotta-instance-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.terracotta-instance-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+  flex-shrink: 0;
+}
+
+/* 无实例提示 */
+.terracotta-empty {
+  max-width: 520px;
+  margin: 10px auto 0;
+  padding: 26px 20px;
+  border-radius: 16px;
+  border: 1px dashed var(--border-color);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.terracotta-empty p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+/* 操作按钮 */
+.terracotta-actions {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.terracotta-actions .btn-lg {
+  min-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.terracotta-join-hint {
+  width: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ==========================================================================
+   陶瓦联机主界面：创建/加入 两个卡片 + 分步流程
+   ========================================================================== */
+.terracotta-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 16px;
+  flex-wrap: wrap;
+}
+.terracotta-choice-card {
+  width: 220px;
+  padding: 34px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-radius: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.terracotta-choice-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.13);
+}
+.terracotta-choice-card:active {
+  transform: scale(0.98);
+}
+.terracotta-choice-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.terracotta-choice-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 分步流程面板 */
+.terracotta-flow {
+  max-width: 460px;
+  margin: 12px auto;
+}
+.terracotta-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 24px;
+  text-align: center;
+  opacity: 0;
+}
+.terracotta-step--enter {
+  animation: terracotta-step-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes terracotta-step-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.terracotta-step-bigicon {
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.terracotta-step-bigicon svg {
+  width: 44px;
+  height: 44px;
+}
+.terracotta-step h3 {
+  margin: 2px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.terracotta-step-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-muted);
+}
+.terracotta-step-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.terracotta-step .spinner {
+  width: 44px;
+  height: 44px;
+  color: var(--accent);
+}
+.terracotta-port-hint {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 6px 16px;
+  border-radius: 999px;
+}
+
+/* 下一步 / 关闭 圆形 SVG 按钮 */
+.terracotta-next-btn,
+.terracotta-close-btn {
+  margin-top: 10px;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.terracotta-next-btn svg,
+.terracotta-close-btn svg {
+  width: 22px;
+  height: 22px;
+}
+.terracotta-next-btn:hover,
+.terracotta-close-btn:hover {
+  transform: scale(1.06);
+}
+.terracotta-next-btn:active,
+.terracotta-close-btn:active {
+  transform: scale(0.94);
+}
+.terracotta-next-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+/* 房间码输入 */
+.terracotta-join-textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+.terracotta-join-textarea:focus {
+  border-color: var(--accent);
+}
+
+/* 隧道信息行 */
+.terracotta-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-hover);
+}
+.terracotta-info-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.terracotta-info-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+  text-align: left;
+}
+.terracotta-copy-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+.terracotta-copy-btn:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* 完成提示：祝你使用愉快（对勾使用 SVG 矢量描边动画） */
+.terracotta-ob-done {
+  opacity: 0;
+  transform: translateY(8px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.terracotta-ob-done--show {
+  animation: terracotta-done-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.terracotta-ob-done h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.terracotta-ob-check {
+  width: 26px;
+  height: 26px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.terracotta-ob-check polyline {
+  stroke-dasharray: 25;
+  stroke-dashoffset: 25;
+}
+.terracotta-ob-done--show .terracotta-ob-check polyline {
+  animation: terracotta-check-draw 0.5s cubic-bezier(0.65, 0, 0.45, 1) 0.2s forwards;
+}
+@keyframes terracotta-check-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes terracotta-done-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

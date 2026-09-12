@@ -138,9 +138,12 @@
       <line x1="14" y1="1" x2="14" y2="4"/>
     </symbol>
 
-    <!-- 插件 - 拼图 -->
+    <!-- 插件 - 包装盒 -->
     <symbol id="icon-plugins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M11.5 2a2.5 2.5 0 0 1 2 1.2 2.5 2.5 0 0 1 4.7.9 2.5 2.5 0 0 1 .3 3.1A2.5 2.5 0 0 1 21 10a2.5 2.5 0 0 1-2.5 2.5 2.5 2.5 0 0 1-.2-.5 2.5 2.5 0 0 1-3.3-.9 2.5 2.5 0 0 1-2 1.1v4.2q0 .1-.04.2H3a2 2 0 0 1 0-4h.6A2.5 2.5 0 0 0 4 10.5a2.5 2.5 0 0 0-1-2 2.5 2.5 0 0 1 1.6-4.6A2.5 2.5 0 0 1 8 5a2.5 2.5 0 0 1 2 1.2A2.5 2.5 0 0 1 11.5 2z"/>
+      <path d="M16.5 9.4 7.55 4.24"/>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
     </symbol>
 
     <!-- 私人服务器 - 服务器 -->
@@ -229,6 +232,7 @@
 
   <div id="wallpaper-bg" style="position:fixed;inset:0;z-index:0;background:var(--bg-primary,#0a0a0a);"></div>
   <div id="wallpaper-video-container" style="position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;display:none;"></div>
+  <div id="wallpaper-web-container" style="position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;display:none;"></div>
   <canvas id="wallpaper-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;"></canvas>
   <canvas id="wallpaper-canvas-gl" style="position:fixed;inset:0;z-index:0;pointer-events:none;width:100%;height:100%;display:none;"></canvas>
   <div id="wallpaper-overlay" style="position:fixed;inset:0;z-index:1;pointer-events:none;"></div>
@@ -675,6 +679,7 @@
   <!-- 页面结构层（js/vue/）：Vue template 字符串，逻辑调用 js/app/*.js -->
   <!-- 引入 Vue 3 运行时 -->
   <script src="js/vue.global.prod.js" defer></script>
+  <script src="js/vue/pinned-store.js" defer></script>
   <script src="js/vue/page-home.js" defer></script>
   <script src="js/vue/page-versions.js" defer></script>
   <script src="js/vue/page-installed-versions.js" defer></script>
@@ -717,7 +722,7 @@
       // 第一批：主页立即同步挂载，让首屏最快可见
       if (window.VersePC.PageHome) Vue.createApp(PageHome).mount('#page-home');
 
-      // 其他页面列表（23 个），用 requestIdleCallback 分批挂载
+      // 其他页面列表（21 个），用 requestIdleCallback 分批挂载
       var _otherPages = [
         ['PageVersions', '#page-versions'],
         ['PageInstalledVersions', '#page-installed-versions'],

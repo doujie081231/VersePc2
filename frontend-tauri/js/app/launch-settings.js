@@ -376,11 +376,8 @@ async function loadLaunchSettings() {
   }
 }
 
-async function selectTheme(element) {
-  document.querySelectorAll('.theme-option').forEach(opt => opt.classList.remove('active'));
-  element.classList.add('active');
-
-  const theme = element.dataset.theme;
+/** 应用主题（值参数核心函数，供 Vue 卡片与 DOM 兼容层共用） */
+async function applyThemeByName(theme) {
   const isCustom = theme === 'custom';
 
   document.documentElement.setAttribute('data-theme', theme);
@@ -426,9 +423,21 @@ async function selectTheme(element) {
     editorIframe.contentWindow.postMessage({ type: 'editor:set-theme', theme: isCustom ? 'dark' : theme }, '*');
   }
 
+  // 同步 Vue 共享状态（个性化页卡片由该状态渲染 active）
+  const st = typeof getPersonalizeState === 'function' ? getPersonalizeState() : null;
+  if (st) st.theme = theme;
+
   try {
     await window.electronAPI.store.set('versepc_theme', theme);
   } catch (e) {
     console.error('[Settings] Save theme error:', e);
   }
+}
+
+/** DOM 兼容层：读取元素 data-theme 后委托核心（保留给旧调用方） */
+async function selectTheme(element) {
+  document.querySelectorAll('.theme-option').forEach(opt => opt.classList.remove('active'));
+  element.classList.add('active');
+
+  await applyThemeByName(element.dataset.theme);
 }

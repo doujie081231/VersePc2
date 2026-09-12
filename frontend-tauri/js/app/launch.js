@@ -3,6 +3,9 @@
  * @description 游戏启动流程 - 检查依赖、显示启动模态框、处理进度
  */
 
+// 快速进世界目标存档名（由存档快捷启动入口写入，handleLaunch 读取后立即清空）
+let quickPlayWorld = '';
+
 /**
  * 等待后端 Java 自动安装完成（轮询 /api/java/install-status）
  * @param {string} sessionId - 安装会话 ID
@@ -55,6 +58,10 @@ function getCurrentWindowSize() {
 }
 
 async function handleLaunch() {
+  // 读取本次快速进世界目标并立即清空，避免下次普通启动误进上一次的世界
+  const _quickPlayWorld = quickPlayWorld;
+  quickPlayWorld = '';
+
   if (window._versepc_launching) {
     if (typeof showToast === 'function') showToast('正在启动中，请稍候...', 'info');
     return;
@@ -268,7 +275,10 @@ async function handleLaunch() {
 
     setLaunchStep('launching', 'running', '正在启动 Minecraft...');
 
-    const result = await API.launchGame(versionId, { resolution: getCurrentWindowSize() }, 300000);
+    const result = await API.launchGame(versionId, {
+      resolution: getCurrentWindowSize(),
+      ...(_quickPlayWorld ? { quickPlayWorld: _quickPlayWorld } : {})
+    }, 300000);
 
     if (result.needDownload && result.sessionId) {
       pollLaunchDownload(result.sessionId, versionId, requiredJava);

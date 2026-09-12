@@ -39,6 +39,29 @@ const PageVersionSettings = {
       modSearch: '',
       isVanilla: false,
       modsLoaded: false,
+      // 存档卡片
+      saves: [],
+      savesLoading: false,
+      savesLoaded: false,
+      saveEditing: null,
+      ruleDefs: {
+        keepInventory: { label: '保留物品栏', def: false },
+        doDaylightCycle: { label: '昼夜循环', def: true },
+        doWeatherCycle: { label: '天气循环', def: true },
+        doMobSpawning: { label: '生物生成', def: true },
+        doMobLoot: { label: '生物掉落', def: true },
+        doTileDrops: { label: '方块掉落', def: true },
+        doEntityDrops: { label: '实体掉落', def: true },
+        mobGriefing: { label: '生物破坏地形', def: true },
+        naturalRegeneration: { label: '自然回血', def: true },
+        doFireTick: { label: '火焰蔓延', def: true },
+        pvp: { label: 'PVP 伤害', def: true },
+        showCoordinates: { label: '显示坐标', def: false },
+        commandBlockOutput: { label: '命令方块输出', def: true },
+        randomTickSpeed: { label: '随机刻速度', def: '3' }
+      },
+      _saveIconCache: {},
+      _saveIconLoading: {},
       // 导出卡片
       exportName: '',
       exportVersion: '1.0.0',
@@ -79,6 +102,13 @@ const PageVersionSettings = {
     },
     vanishPromptShown() {
       return this.activeTab === 'modmgr' && this.isVanilla;
+    },
+    boolRuleDefs() {
+      const out = {};
+      Object.keys(this.ruleDefs).forEach(k => {
+        if (k !== 'randomTickSpeed') out[k] = this.ruleDefs[k];
+      });
+      return out;
     }
   },
   watch: {
@@ -87,6 +117,8 @@ const PageVersionSettings = {
         this.loadMods();
       } else if (val === 'export' && !this.exportLoaded) {
         this.loadExportTree();
+      } else if (val === 'saves' && !this.savesLoaded) {
+        this.loadSaves();
       }
     }
   },
@@ -555,6 +587,121 @@ const PageVersionSettings = {
           }
         }).catch(() => {});
       } catch (e) {}
+    },
+    // ===== 存档管理 =====
+    async loadSaves() {
+      if (!this.versionId) return;
+      this.savesLoading = true;
+      try {
+        const res = await window.bridge.invoke('version_list_saves', { versionId: this.versionId });
+        this.saves = (res && res.saves) || [];
+        this.savesLoaded = true;
+      } catch (e) {
+        console.error('[Saves] Load error:', e);
+        this.saves = [];
+      } finally {
+        this.savesLoading = false;
+      }
+    },
+    saveIconUrl(s) {
+      if (!s || !s.icon) return '';
+      if (this._saveIconCache[s.folder]) return this._saveIconCache[s.folder];
+      if (this._saveIconLoading[s.folder]) return '';
+      this._saveIconLoading[s.folder] = true;
+      const self = this;
+      Promise.resolve(window.bridge && window.bridge.readFileBuffer(s.icon)).then((buffer) => {
+        try {
+          const u8 = typeof window.decodeFileBuffer === 'function'
+            ? window.decodeFileBuffer(buffer)
+            : (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []));
+          if (!u8 || u8.byteLength === 0) return;
+          const blob = new Blob([u8], { type: 'image/png' });
+          self._saveIconCache[s.folder] = URL.createObjectURL(blob);
+        } catch (e) {}
+      }).catch(() => {});
+      return '';
+    },
+    openSaveEditor(s) {
+      const rules = {};
+      Object.keys(this.ruleDefs).forEach(k => {
+        rules[k] = (s.rules && s.rules[k] !== undefined) ? s.rules[k] : String(this.ruleDefs[k].def);
+      });
+      this.saveEditing = {
+        folder: s.folder,
+        name: s.name,
+        difficulty: (typeof s.difficulty === 'number') ? s.difficulty : 2,
+        rules: rules
+      };
+    },
+    closeSaveEditor() {
+      this.saveEditing = null;
+    },
+    ruleBool(rules, key) {
+      return String(rules[key]) === 'true';
+    },
+    toggleRule(rules, key) {
+      rules[key] = String(rules[key]) === 'true' ? 'false' : 'true';
+    },
+    async saveSaveEdit() {
+      const ed = this.saveEditing;
+      if (!ed) return;
+      const changed = {};
+      Object.keys(this.ruleDefs).forEach(k => {
+        if (ed.rules[k] !== undefined) changed[k] = ed.rules[k];
+      });
+      try {
+        const res = await window.bridge.invoke('version_save_update', {
+          versionId: this.versionId,
+          folder: ed.folder,
+          displayName: ed.name,
+          difficulty: ed.difficulty,
+          rules: changed
+        });
+        if (res && res.success) {
+          showToast('存档已保存', 'success');
+          this.closeSaveEditor();
+          this.loadSaves();
+        } else {
+          showToast((res && res.error) || '保存失败', 'error');
+        }
+      } catch (e) {
+        showToast('保存失败: ' + (e && e.message ? e.message : String(e)), 'error');
+      }
+    },
+    launchSave(s) {
+      if (!this.versionId) return;
+      // 让启动流程以当前配置的版本为准，并带上世界名直接进存档
+      if (typeof currentLaunchVersionId !== 'undefined') currentLaunchVersionId = this.versionId;
+      if (typeof quickPlayWorld === 'undefined') {
+        showToast('启动入口未就绪', 'error');
+        return;
+      }
+      quickPlayWorld = s.folder;
+      if (typeof handleLaunch === 'function') {
+        handleLaunch();
+      } else {
+        showToast('启动入口未就绪', 'error');
+      }
+    },
+    isPinned(type, id) {
+      return typeof window.isPinned === 'function' && window.isPinned(type, id);
+    },
+    ic(name) {
+      return (window.VersePC.PIN_ICONS && window.VersePC.PIN_ICONS[name]) || '';
+    },
+    pinSave(s) {
+      if (typeof window.togglePinSave === 'function') {
+        window.togglePinSave(s.folder, s.name, this.versionId, s.icon || '', s.difficulty);
+      }
+    },
+    difficultyLabel(d) {
+      return { 0: '和平', 1: '简单', 2: '普通', 3: '困难' }[d] || '未知';
+    },
+    lastPlayedText(ms) {
+      if (!ms) return '从未游玩';
+      const d = new Date(ms);
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
     }
   },
   template: `
@@ -577,6 +724,10 @@ const PageVersionSettings = {
           <button class="vset-nav-item" :class="{ active: activeTab==='settings' }" @click="switchTab('settings')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="3"/><path d="M12 2V5"/><path d="M12 19V22"/><path d="M2 12H5"/><path d="M19 12H22"/><path d="M4.93 4.93L7.05 7.05"/><path d="M16.95 16.95L19.07 19.07"/><path d="M4.93 19.07L7.05 16.95"/><path d="M16.95 7.05L19.07 4.93"/></svg>
             <span>设置</span>
+          </button>
+          <button class="vset-nav-item" :class="{ active: activeTab==='saves' }" @click="switchTab('saves')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M20 7h-9l-2-2H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
+            <span>存档</span>
           </button>
           <button class="vset-nav-item" :class="{ active: activeTab==='modmgr' }" @click="switchTab('modmgr')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 2L21 7V17L12 22L3 17V7L12 2Z"/><path d="M12 8L16 10.5V15.5L12 18L8 15.5V10.5L12 8Z"/></svg>
@@ -699,6 +850,76 @@ const PageVersionSettings = {
               </div>
             </div>
             <div class="vset-info-bar">这些设置只对该游戏版本生效，不影响其他版本。</div>
+          </div>
+          <!-- 存档 -->
+          <div class="vset-panel" :class="{ active: activeTab==='saves' }">
+            <div class="saves-header-row">
+              <button class="btn btn-secondary btn-sm" @click="openSavesFolder()">打开存档文件夹</button>
+              <button class="btn btn-secondary btn-sm" @click="loadSaves()">刷新</button>
+            </div>
+            <p v-if="savesLoading" class="empty-text" style="padding:30px 0;text-align:center;color:var(--text-muted)">加载中...</p>
+            <p v-else-if="saves.length===0" class="empty-text" style="padding:30px 0;text-align:center;color:var(--text-muted)">暂无存档</p>
+            <div v-else class="saves-grid">
+              <div class="save-card" v-for="s in saves" :key="s.folder" @click="openSaveEditor(s)" :title="'点击修改存档信息与游戏规则'">
+                <div class="save-card-bg">
+                  <img v-if="saveIconUrl(s)" :src="saveIconUrl(s)" class="save-card-img" alt="">
+                  <svg v-else class="save-card-noicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <div class="save-card-info">
+                  <div class="save-card-name" :title="s.name">{{ s.name }}</div>
+                  <div class="save-card-meta">{{ difficultyLabel(s.difficulty) }} · {{ lastPlayedText(s.lastPlayed) }}</div>
+                </div>
+                <button class="pin-btn save-pin-btn" :class="{ active: isPinned('save', s.folder) }"
+                        :title="isPinned('save', s.folder) ? '取消置顶' : '置顶存档'" @click.stop="pinSave(s)">
+                  <span v-html="ic('pin')"></span>
+                </button>
+                <button class="save-launch-btn" @click.stop="launchSave(s)" title="启动并进入该存档">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 存档编辑弹窗 -->
+            <div v-if="saveEditing" class="save-modal" @click.self="closeSaveEditor()">
+              <div class="save-modal-card">
+                <div class="save-modal-header">
+                  <span>存档设置</span>
+                  <button class="save-modal-close" @click="closeSaveEditor()">&times;</button>
+                </div>
+                <div class="save-modal-body">
+                  <div class="save-form-row">
+                    <label>显示名称</label>
+                    <input type="text" class="vset-input" v-model="saveEditing.name" placeholder="输入新的存档名称">
+                  </div>
+                  <div class="save-form-row">
+                    <label>难度</label>
+                    <select class="vset-select" v-model.number="saveEditing.difficulty">
+                      <option :value="0">和平</option>
+                      <option :value="1">简单</option>
+                      <option :value="2">普通</option>
+                      <option :value="3">困难</option>
+                    </select>
+                  </div>
+                  <div class="save-form-row">
+                    <label>游戏规则</label>
+                    <div class="save-rules-grid">
+                      <label v-for="(rd, key) in boolRuleDefs" :key="key" class="save-rule-row" @click="toggleRule(saveEditing.rules, key)">
+                        <input type="checkbox" :checked="ruleBool(saveEditing.rules, key)" readonly>
+                        <span>{{ rd.label }}</span>
+                      </label>
+                      <label class="save-rule-row save-rule-num">
+                        <span>{{ ruleDefs.randomTickSpeed.label }}</span>
+                        <input type="number" min="0" max="10000" class="vset-input" v-model="saveEditing.rules.randomTickSpeed" style="width:84px;padding:2px 6px;">
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="save-modal-footer">
+                  <button class="btn btn-secondary btn-sm" @click="closeSaveEditor()">取消</button>
+                  <button class="btn btn-primary btn-sm" @click="saveSaveEdit()">保存</button>
+                </div>
+              </div>
+            </div>
           </div>
           <!-- 模组 -->
           <div class="vset-panel" :class="{ active: activeTab==='modmgr' }">

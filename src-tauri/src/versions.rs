@@ -2559,6 +2559,7 @@ async fn handle_export_script(body: &Option<Value>) -> crate::api::ApiResult {
         &clean_id,
         None,
         None,
+        None,
     );
 
     // 4. 选择 Java 路径

@@ -1657,3 +1657,452 @@ body.sidebar-collapsed .content-area {
     }
     .add-acct-cards { grid-template-columns: 1fr; }
 }
+
+/* ===== 首页底部存档快速启动（内嵌在首页布局中） ===== */
+/* 箭头绝对定位在底部中央，不参与 flex 流，避免把头像/启动按钮等内容顶离居中位置 */
+.home-saves-arrow {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  flex-shrink: 0;
+  width: 40px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  transition: color 0.2s ease, border-color 0.2s ease;
+  padding: 0;
+}
+.home-saves-arrow:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.home-saves-arrow svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.25s ease;
+}
+.home-saves-arrow.open {
+  color: var(--accent);
+}
+.home-saves-arrow.open svg {
+  transform: rotate(180deg);
+}
+.home-saves-wrap {
+  width: 100%;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.home-saves-wrap.open {
+  max-height: 46vh;
+}
+.home-saves-drawer {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 18px 18px 12px 12px;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.home-saves-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.home-saves-drawer-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.home-saves-body {
+  padding: 12px 18px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.home-saves-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px 0;
+}
+.home-saves-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 6px 2px 8px;
+}
+/* 存档卡片：与账户页一致的长方形玻璃拟态卡片 */
+.home-save-card {
+  flex-shrink: 0;
+  width: 170px;
+  min-height: 208px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px 12px 16px;
+  border-radius: 24px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 18px 40px rgba(0, 0, 0, 0.12);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.home-save-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: var(--accent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 24px 50px rgba(0, 0, 0, 0.18);
+}
+[data-theme="dark"] .home-save-card {
+  background: rgba(18, 18, 24, 0.35);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .home-save-card:hover {
+  border-color: var(--accent);
+}
+.home-save-card-bg {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: 26%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-save-card-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.home-save-card-bg svg {
+  width: 40px;
+  height: 40px;
+  color: var(--text-tertiary, #555a66);
+  opacity: 0.6;
+}
+.home-save-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  width: 100%;
+}
+.home-save-card-name {
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-save-card-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ===== 便利贴 ===== */
+.home-stickynote-btn {
+  position: absolute;
+  top: 14px;
+  right: 118px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  padding: 0;
+  z-index: 51;
+}
+.home-stickynote-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.home-stickynote-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.home-stickynote-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ==========================================================================
+   收藏置顶面板（主页便利贴入口展开，替代旧文本便利贴）
+   ========================================================================== */
+.pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.pin-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+.pin-btn.active {
+  color: var(--accent);
+}
+.pin-btn.active svg {
+  fill: currentColor;
+}
+.pin-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.pin-btn-star {
+  width: 28px;
+  height: 28px;
+}
+.pin-btn-star svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 存档卡片上的钉子按钮定位 */
+.home-save-card {
+  position: relative;
+}
+.home-save-pin-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+.save-pin-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+
+/* 面板容器：锚定右上角按钮，从按钮下方展开的浮动框
+   （父级 .page.active/.content-area 存在 transform，fixed 会退化，故用 absolute 相对 .home-page） */
+.home-pins-wrap {
+  position: absolute;
+  top: 56px;
+  right: 118px;
+  width: 360px;
+  max-width: calc(100% - 150px);
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-12px) scale(0.97);
+  transform-origin: top right;
+  transition: max-height 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 9990;
+}
+.home-pins-wrap.open {
+  max-height: 72vh;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.home-pins-drawer {
+  width: 100%;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.home-pins-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.home-pins-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.home-pins-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.home-pins-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 18px 10px;
+  flex-shrink: 0;
+}
+.home-pins-tab {
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.home-pins-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.home-pins-tab.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.home-pins-count {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+.home-pins-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.home-pins-empty {
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.home-pins-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-hover);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.home-pins-item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-hover));
+}
+.home-pins-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.home-pins-item-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home-pins-item-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.home-pins-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-pins-item-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-pins-item-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-pins-item-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.home-pins-item-del:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+.home-pins-item-del svg {
+  width: 15px;
+  height: 15px;
+}

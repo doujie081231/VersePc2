@@ -39,6 +39,7 @@ pub fn build_launch_arguments(
     version_id: &str,
     custom_game_dir: Option<&str>,
     external_version_dir: Option<&Path>,
+    quick_play_world: Option<&str>,
 ) -> LaunchArguments {
     let actual_version_id = if !version_id.is_empty() {
         version_id.to_string()
@@ -206,6 +207,13 @@ pub fn build_launch_arguments(
     variables.insert("quickPlaySingleplayer".to_string(), String::new());
     variables.insert("quickPlayMultiplayer".to_string(), String::new());
     variables.insert("quickPlayRealms".to_string(), String::new());
+    // 存档启动：把 quickPlaySingleplayer 变量填成世界名，版本 JSON 中引用该变量的参数即可进世界
+    let has_quick_play = quick_play_world.map(|w| !w.is_empty()).unwrap_or(false);
+    if let Some(world) = quick_play_world {
+        if !world.is_empty() {
+            variables.insert("quickPlaySingleplayer".to_string(), world.to_string());
+        }
+    }
 
     // ============== Mod 数量统计 ==============
     let mod_count = count_mods(&game_dir);
@@ -361,7 +369,7 @@ pub fn build_launch_arguments(
 
     // ============== 收集版本 JSON 中的 JVM 参数 ==============
     let has_custom_resolution = !resolution.is_empty();
-    collect_jvm_args_from_json(&mut jvm_args, version_json, &variables, has_custom_resolution);
+    collect_jvm_args_from_json(&mut jvm_args, version_json, &variables, has_custom_resolution, has_quick_play);
 
     // 始终使用 java.library.path
     fix_library_path(&mut jvm_args, &natives_dir);
@@ -432,7 +440,7 @@ pub fn build_launch_arguments(
 
     // ============== 游戏参数 ==============
     let mut game_args: Vec<String> = Vec::new();
-    collect_game_args_from_json(&mut game_args, version_json, &variables, has_custom_resolution);
+    collect_game_args_from_json(&mut game_args, version_json, &variables, has_custom_resolution, has_quick_play);
 
     // 旧版 minecraftArguments 模板
     if let Some(template) = version_json.get("minecraftArguments").and_then(|v| v.as_str()) {
@@ -643,7 +651,7 @@ pub fn build_classpath(
     for lib in &libraries {
         // rules 过滤
         if let Some(rules) = lib.get("rules").and_then(|v| v.as_array()) {
-            if !dep_check::evaluate_rules(rules, false) {
+            if !dep_check::evaluate_rules(rules, false, false) {
                 continue;
             }
         }
@@ -847,7 +855,7 @@ fn extract_natives_dir(
     let mut native_jars: Vec<PathBuf> = Vec::new();
     for lib in &libraries {
         if let Some(rules) = lib.get("rules").and_then(|v| v.as_array()) {
-            if !dep_check::evaluate_rules(rules, false) {
+            if !dep_check::evaluate_rules(rules, false, false) {
                 continue;
             }
         }
@@ -1397,6 +1405,7 @@ fn collect_jvm_args_from_json(
     version_json: &Value,
     variables: &HashMap<String, String>,
     has_custom_resolution: bool,
+    has_quick_play: bool,
 ) {
     // 收集 jvm 参数来源：标准 jvm 组 + default-user-jvm 组
     let mut sources: Vec<Value> = Vec::new();
@@ -1445,7 +1454,7 @@ fn collect_jvm_args_from_json(
             let rules_match = arg
                 .get("rules")
                 .and_then(|v| v.as_array())
-                .map(|rules| dep_check::evaluate_rules(rules, has_custom_resolution))
+                .map(|rules| dep_check::evaluate_rules(rules, has_custom_resolution, has_quick_play))
                 .unwrap_or(true);
             if !rules_match {
                 i += 1;
@@ -1736,6 +1745,7 @@ fn collect_game_args_from_json(
     version_json: &Value,
     variables: &HashMap<String, String>,
     has_custom_resolution: bool,
+    has_quick_play: bool,
 ) {
     let mut sources: Vec<Value> = Vec::new();
     if let Some(arr) = version_json
@@ -1760,7 +1770,7 @@ fn collect_game_args_from_json(
             let rules_match = arg
                 .get("rules")
                 .and_then(|v| v.as_array())
-                .map(|rules| dep_check::evaluate_rules(rules, has_custom_resolution))
+                .map(|rules| dep_check::evaluate_rules(rules, has_custom_resolution, has_quick_play))
                 .unwrap_or(true);
             if !rules_match {
                 continue;

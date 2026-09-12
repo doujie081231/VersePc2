@@ -148,112 +148,6 @@ function getImportStageText(msg) {
   return msg;
 }
 
-async function importModpackFromFile() {
-  if (window._modpackImporting) {
-    showToast('整合包正在导入中，请等待完成', 'warning');
-    return;
-  }
-  var _useVIsland = typeof DynamicIsland !== 'undefined' && DynamicIsland.isEnabled();
-  try {
-    const result = await API.selectModpackFile();
-    if (result && result.filePath) {
-      const filePath = result.filePath;
-      // 用文件名（去掉扩展名）作为默认版本名
-      const fileBaseName = (result.name || result.filePath).replace(/\.(mrpack|zip|cursemodpack)$/i, '');
-      showImportNameModal(fileBaseName, async function(customName) {
-        window._modpackImporting = true;
-        try {
-          var sessionId = 'local-modpack-' + Date.now();
-          var taskId = 'modpack-' + sessionId;
-          if (_useVIsland) {
-            DynamicIsland.show(result.name || '整合包导入');
-          } else if (typeof dlManager !== 'undefined') {
-            dlManager.add(taskId, result.name || '整合包导入', 'modpack', sessionId, '');
-          }
-          if (window.electronAPI?.onImportProgress) {
-            if (window.electronAPI.removeImportProgressListener) window.electronAPI.removeImportProgressListener();
-            // 节流控制：避免高频进度回调打爆主线程
-            var _ipThrottleTimer = null;
-            var _ipLastData = null;
-            var _ipLastTime = 0;
-            var IP_THROTTLE_MS = 250;
-            function _doImportProgress(data) {
-              var stageText = getImportStageText(data.message);
-              var pct = data.progress || 0;
-              var filesMapped = null;
-              if (data.files && data.files.length > 0) {
-                var totalSpeed = 0;
-                for (var i = 0; i < data.files.length; i++) {
-                  var f = data.files[i];
-                  if ((f.status === 'downloading' || f.s === 'downloading') && (f.speed || f.sp || 0) > 0) totalSpeed += (f.speed || f.sp || 0);
-                }
-                filesMapped = data.files.map(function (f) {
-                  return { name: f.name || f.filename || f.n || '', status: f.status || f.s || 'pending', progress: f.progress || f.p || 0, speed: f.speed || f.sp || 0 };
-                });
-              }
-              if (_useVIsland) {
-                DynamicIsland.update({ progress: pct, status: 'downloading', message: stageText, name: result.name || '整合包导入', speed: totalSpeed || data.speed || 0, files: filesMapped || [], stageHistory: data.stageHistory || [], currentFile: data.currentFile || '' });
-              } else if (typeof dlManager !== 'undefined') {
-                var speedText = '';
-                if (totalSpeed > 0) {
-                  speedText = totalSpeed > 1024 * 1024 ? ' | ' + (totalSpeed / 1024 / 1024).toFixed(1) + ' MB/s' : ' | ' + (totalSpeed / 1024).toFixed(0) + ' KB/s';
-                }
-                var u = { progress: pct, status: 'downloading', message: stageText + speedText, stageHistory: data.stageHistory || [], currentFile: data.currentFile || '' };
-                if (filesMapped) u.files = filesMapped;
-                dlManager.update(taskId, u);
-              }
-            }
-            window.electronAPI.onImportProgress(function (data) {
-              var isTerminal = (data.status === 'completed' || data.status === 'failed' || (data.progress || 0) >= 100);
-              if (isTerminal) {
-                if (_ipThrottleTimer) { clearTimeout(_ipThrottleTimer); _ipThrottleTimer = null; }
-                _doImportProgress(data);
-                return;
-              }
-              _ipLastData = data;
-              var now = Date.now();
-              if (now - _ipLastTime >= IP_THROTTLE_MS) {
-                _ipLastTime = now;
-                _doImportProgress(data);
-              } else {
-                if (!_ipThrottleTimer) {
-                  _ipThrottleTimer = setTimeout(function () {
-                    _ipThrottleTimer = null;
-                    _ipLastTime = Date.now();
-                    if (_ipLastData) _doImportProgress(_ipLastData);
-                  }, IP_THROTTLE_MS);
-                }
-              }
-            });
-          }
-          if (!_useVIsland) showToast('正在导入整合包...', 'info');
-          const importResult = await window.electronAPI.importModpack(filePath, customName);
-          if (importResult && importResult.success) {
-            if (_useVIsland) {
-              DynamicIsland.update({ progress: 100, status: 'completed', message: '导入完成' });
-            } else if (typeof dlManager !== 'undefined') {
-              dlManager.update(taskId, { status: 'completed', progress: 100, message: '导入完成' });
-            }
-            if (!_useVIsland) showToast(`整合包 "${importResult.name || '未知'}" 导入成功！`, 'success');
-          } else {
-            var errMsg = importResult?.error || '未知错误';
-            if (_useVIsland) {
-              DynamicIsland.update({ status: 'failed', message: errMsg });
-            } else if (typeof dlManager !== 'undefined') {
-              dlManager.update(taskId, { status: 'failed', progress: 100, message: errMsg, stageHistory: importResult?.stageHistory || [] });
-            }
-            if (!_useVIsland) showToast(`导入失败: ${errMsg}`, 'error');
-          }
-        } finally {
-          window._modpackImporting = false;
-        }
-      });
-    }
-  } catch (e) {
-    showToast('导入失败: ' + (e.message || ''), 'error');
-  }
-}
-
 const __resIsTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 // Tauri 环境下由 modpack-import.js 的 tauri://drag-drop 事件处理拖拽导入，
 // 这里不能 preventDefault 默认拖拽行为，否则会阻止 Tauri 的拖拽事件触发。
@@ -491,6 +385,7 @@ async function loadResourceList(type) {
             </div>
           </div>
           <div class="mod-actions" onclick="event.stopPropagation()">
+            ${type === 'shader' ? `<button class="pin-btn${isPinned('shader', item.id) ? ' active' : ''}" title="${isPinned('shader', item.id) ? '取消置顶' : '置顶光影'}" onclick="event.stopPropagation();pinBtnToggle(this,'shader','${escapeOnclick(item.id)}','${escapeOnclick(formatModNameWithChinese(item.slug || item.id, item.title))}',{projectId:'${escapeOnclick(item.id)}',source:'${escapeOnclick(item.source || 'modrinth')}',icon:'${escapeOnclick(item.icon || '')}'},'取消置顶','置顶光影')">${window.VersePC.PIN_ICONS.pin}</button>` : ''}
             <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openResourceDetail('${item.id}', '${type}')">安装</button>
           </div>
         </div>

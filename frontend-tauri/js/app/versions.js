@@ -172,6 +172,12 @@ function renderHomeCurrentVersionCard() {
   const externalBadgeHtml = v.isExternal ? '<span class="v-badge external">外部</span>' : '';
   const displayName = v.isExternal ? (v.customName || v.id.replace(/ \[外部\d*\]/, '')) : (v.customName || v.id);
 
+  // 星星收藏按钮（置顶到便利贴面板）；必须 stopPropagation，避免命中页面切换委托
+  const starBtn = `<button class="pin-btn pin-btn-star${isPinned('version', v.id) ? ' active' : ''}"
+    title="${isPinned('version', v.id) ? '取消置顶' : '置顶版本'}"
+    onclick="event.stopPropagation();pinBtnToggle(this,'version','${escapeOnclick(v.id)}','${escapeOnclick(displayName)}',{versionId:'${escapeOnclick(v.id)}',loaderText:'${escapeOnclick(badge)}'},'取消置顶','置顶版本')">
+    ${window.VersePC.PIN_ICONS.star}</button>`;
+
   card.innerHTML = `
     <div class="version-item-left">
       <div class="version-item-icon"><img src="" alt="" class="version-icon-img" ${iconDataAttrs}></div>
@@ -180,6 +186,7 @@ function renderHomeCurrentVersionCard() {
         <span class="version-item-meta"><span class="v-badge ${badgeClass}">${badge}</span>${externalBadgeHtml}</span>
       </div>
     </div>
+    ${starBtn}
     ${arrow}
   `;
   _loadVersionIcons(card);
@@ -246,6 +253,11 @@ function renderInstalledVersionsInto(container) {
     return;
   }
 
+  // 同步卡片样式开关 UI；卡片模式时懒加载官方版本宣传图
+  const cardMode = getVersionCardStyle();
+  syncVersionCardSwitches();
+  if (cardMode) fetchVersionBanners();
+
   const errorVersions = versions.filter(v => v.error);
   const normalVersions = versions.filter(v => !v.error);
 
@@ -263,6 +275,11 @@ function renderInstalledVersionsInto(container) {
     const externalPathHtml = v.isExternal && v.externalPath ? `<span style="color:var(--text-muted);font-size:11px;margin-left:4px" title="${escapeHtml(v.externalPath)}">${escapeHtml(v.externalPath)}</span>` : '';
     const displayName = v.isExternal ? (v.customName || v.id.replace(/ \[外部\d*\]/, '')) : (v.customName || v.id);
     const deleteBtnHtml = `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteVersion('${escapeOnclick(v.id)}')">${v.isExternal ? '移除' : '删除'}</button>`;
+    const loaderText = getVersionTypeLabel(v);
+    const starBtnHtml = `<button class="pin-btn pin-btn-star${isPinned('version', v.id) ? ' active' : ''}"
+      title="${isPinned('version', v.id) ? '取消置顶' : '置顶版本'}"
+      onclick="event.stopPropagation();pinBtnToggle(this,'version','${escapeOnclick(v.id)}','${escapeOnclick(displayName)}',{versionId:'${escapeOnclick(v.id)}',loaderText:'${escapeOnclick(loaderText)}'},'取消置顶','置顶版本')">
+      ${window.VersePC.PIN_ICONS.star}</button>`;
     const settingsBtnHtml = `<button class="version-item-settings-btn" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置" onclick="event.stopPropagation();openVersionSettings('${escapeOnclick(v.id)}','${escapeOnclick(displayName)}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
     </button>`;
@@ -283,25 +300,73 @@ function renderInstalledVersionsInto(container) {
         </div>
       </div>
       <div class="version-item-actions">
+        ${starBtnHtml}
         ${settingsBtnHtml}
         ${deleteBtnHtml}
       </div>
     </div>`;
   };
 
+  const renderCardItem = (v) => {
+    const iconClass = v.type === 'snapshot' ? 'snapshot' : v.type === 'special' ? 'special' : 'installed';
+    const iconDataAttrs = `data-vi-id="${escapeHtml(v.id)}" data-vi-type="${v.type || 'release'}" data-vi-forge="${v.isForge ? '1' : '0'}" data-vi-fabric="${v.isFabric ? '1' : '0'}" data-vi-neoforge="${v.isNeoForge ? '1' : '0'}" data-vi-modpack="${v.isModpack ? '1' : '0'}" data-vi-extdir="${v.externalVersionDir ? escapeHtml(v.externalVersionDir) : ''}"`;
+    const displayName = v.isExternal ? (v.customName || v.id.replace(/ \[外部\d*\]/, '')) : (v.customName || v.id);
+    const loaderText = getVersionTypeLabel(v);
+    const badge = v.isModpack ? (v.modpackLoader || '整合包') : loaderText;
+    // 整合包显示封面图（get_version_icon 对 modpack 返回 pack.png），普通版本显示 Mojang 宣传图，无图回退版本图标
+    const bannerUrl = v.isModpack ? '' : getVersionBannerUrl(v.id);
+    const bgInner = (v.isModpack || !bannerUrl)
+      ? `<img src="" alt="" class="version-icon-img ver-dl-card-img" ${iconDataAttrs}>`
+      : `<img src="${bannerUrl}" alt="" class="ver-dl-card-banner" loading="lazy">`;
+    const selectedClass = currentLaunchVersionId === v.id ? ' selected' : '';
+    const starBtnHtml = `<button class="pin-btn pin-btn-star${isPinned('version', v.id) ? ' active' : ''}"
+      title="${isPinned('version', v.id) ? '取消置顶' : '置顶版本'}"
+      onclick="event.stopPropagation();pinBtnToggle(this,'version','${escapeOnclick(v.id)}','${escapeOnclick(displayName)}',{versionId:'${escapeOnclick(v.id)}',loaderText:'${escapeOnclick(loaderText)}'},'取消置顶','置顶版本')">
+      ${window.VersePC.PIN_ICONS.star}</button>`;
+    const settingsBtnHtml = `<button class="pin-btn ver-dl-card-settings" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置" onclick="event.stopPropagation();openVersionSettings('${escapeOnclick(v.id)}','${escapeOnclick(displayName)}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
+    </button>`;
+    const deleteBtnHtml = `<button class="ver-dl-card-del" title="${v.isExternal ? '移除' : '删除'}" onclick="event.stopPropagation();deleteVersion('${escapeOnclick(v.id)}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+    </button>`;
+    return `<div class="ver-dl-card version-item-clickable${selectedClass}"
+      data-version-id="${escapeHtml(v.id)}"
+      data-version-url=""
+      data-version-type="${v.type || 'release'}"
+      data-installed="true"
+      data-custom-name="${escapeHtml(v.customName || '')}">
+      <div class="ver-dl-card-bg">
+        ${bgInner}
+        <span class="ver-dl-card-badge">${escapeHtml(badge)}</span>
+      </div>
+      <div class="ver-dl-card-info">
+        <div class="ver-dl-card-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
+        <div class="ver-dl-card-meta">${escapeHtml(loaderText)} · ${formatDate(v.releaseTime)}</div>
+        <div class="ver-dl-card-actions">
+          ${starBtnHtml}${settingsBtnHtml}${deleteBtnHtml}
+        </div>
+      </div>
+    </div>`;
+  };
+
   let html = '';
 
-  if (moddedVersions.length > 0) {
-    html += moddedVersions.map(renderVersionItem).join('');
-  }
-
-  if (vanillaVersions.length > 0) {
-    html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:0 4px">
-        <span style="font-size:12px;color:var(--text-muted);font-weight:600">\u26A0 基础版本 (${vanillaVersions.length})</span>
-      </div>
-      ${vanillaVersions.map(renderVersionItem).join('')}
-    </div>`;
+  if (cardMode) {
+    if (normalVersions.length > 0) {
+      html += '<div class="ver-dl-grid">' + normalVersions.map(renderCardItem).join('') + '</div>';
+    }
+  } else {
+    if (moddedVersions.length > 0) {
+      html += moddedVersions.map(renderVersionItem).join('');
+    }
+    if (vanillaVersions.length > 0) {
+      html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:0 4px">
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600">\u26A0 基础版本 (${vanillaVersions.length})</span>
+        </div>
+        ${vanillaVersions.map(renderVersionItem).join('')}
+      </div>`;
+    }
   }
 
   if (errorVersions.length > 0) {
@@ -332,6 +397,66 @@ function renderInstalledVersionsInto(container) {
   _loadVersionIcons(container);
 }
 
+// 版本卡片样式开关：true=新版卡片（宣传图样式），false=旧版列表
+function getVersionCardStyle() {
+  try { return localStorage.getItem('versepc_version_card_style') !== 'list'; } catch (e) { return true; }
+}
+
+// Mojang 官方版本宣传图（javaPatchNotes.json，CORS 开放），映射 versionId -> 完整图片 URL
+let _versionBannerMap = null;
+let _versionBannerLoading = false;
+
+function fetchVersionBanners() {
+  if (_versionBannerMap || _versionBannerLoading) return;
+  _versionBannerLoading = true;
+  fetch('https://launchercontent.mojang.com/v2/javaPatchNotes.json', { method: 'GET' })
+    .then(r => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+    .then(data => {
+      const map = {};
+      (data.entries || []).forEach(e => {
+        if (e.version && e.image && e.image.url) {
+          map[e.version] = e.image.url.indexOf('http') === 0
+            ? e.image.url
+            : 'https://launchercontent.mojang.com' + e.image.url;
+        }
+      });
+      _versionBannerMap = map;
+      // 已有卡片在渲染：填充宣传图并重新渲染当前列表
+      if (getVersionCardStyle() && currentVersionTab !== 'installed') renderVersions();
+    })
+    .catch(() => {})
+    .finally(() => { _versionBannerLoading = false; });
+}
+
+function getVersionBannerUrl(versionId) {
+  return _versionBannerMap ? (_versionBannerMap[versionId] || '') : '';
+}
+
+// 同步所有"卡片样式"开关的 UI 状态（版本管理页与已安装版本页各有一个）
+function syncVersionCardSwitches() {
+  const on = getVersionCardStyle();
+  document.querySelectorAll('#ver-card-style-switch').forEach(sw => {
+    sw.classList.toggle('active', on);
+  });
+}
+
+function toggleVersionCardStyle() {
+  const next = !getVersionCardStyle();
+  try { localStorage.setItem('versepc_version_card_style', next ? 'card' : 'list'); } catch (e) {}
+  syncVersionCardSwitches();
+  // 重新渲染当前可见的版本列表（未安装列表或已安装列表）
+  const active = document.querySelector('.page.active');
+  if (active && active.id === 'page-installed-versions') {
+    const c = document.getElementById('installed-versions-list');
+    if (c) renderInstalledVersionsInto(c);
+  } else {
+    renderVersions();
+  }
+  if (typeof showToast === 'function') {
+    showToast(next ? '已切换为卡片样式' : '已切换为列表样式', 'success');
+  }
+}
+
 function renderVersions() {
   const container = document.getElementById('versions-list');
   if (!container) return;
@@ -349,6 +474,41 @@ function renderVersions() {
 
   if (versions.length === 0) {
     container.innerHTML = '<p class="empty-text">暂无版本</p>';
+    return;
+  }
+
+  // 同步卡片样式开关 UI
+  const cardMode = getVersionCardStyle();
+  syncVersionCardSwitches();
+
+  // 首次渲染时懒加载官方版本宣传图（后续由 fetch 完成回调重新渲染）
+  if (cardMode) fetchVersionBanners();
+
+  // 新版卡片样式：与存档界面卡片一致，主体显示 Mojang 版本宣传图（无图时回退版本图标）
+  if (cardMode) {
+    container.innerHTML = '<div class="ver-dl-grid">' + versions.map(v => {
+      const iconClass = v.type === 'snapshot' ? 'snapshot' : v.type === 'special' ? 'special' : (v.type === 'old_beta' || v.type === 'old_alpha') ? 'old' : 'release';
+      const iconDataAttrs = `data-vi-id="${escapeHtml(v.id)}" data-vi-type="${v.type || 'release'}" data-vi-forge="0" data-vi-fabric="0" data-vi-neoforge="0" data-vi-modpack="0" data-vi-extdir=""`;
+      const badge = getVersionTypeLabel(v);
+      const bannerUrl = getVersionBannerUrl(v.id);
+      const bgInner = bannerUrl
+        ? `<img src="${bannerUrl}" alt="" class="ver-dl-card-banner" loading="lazy">`
+        : `<img src="" alt="" class="version-icon-img ver-dl-card-img" ${iconDataAttrs}>`;
+      return `<div class="ver-dl-card version-item-clickable ver-icon-${iconClass}"
+        data-version-id="${escapeHtml(v.id)}"
+        data-version-url="${escapeHtml(v.url || '')}"
+        data-version-type="${escapeHtml(v.type || 'release')}">
+        <div class="ver-dl-card-bg">
+          ${bgInner}
+          <span class="ver-dl-card-badge">${escapeHtml(badge)}</span>
+        </div>
+        <div class="ver-dl-card-info">
+          <div class="ver-dl-card-name" title="${escapeHtml(v.id)}">${escapeHtml(v.id)}</div>
+          <div class="ver-dl-card-meta">${escapeHtml(badge)} · ${formatDate(v.releaseTime)}</div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+    _loadVersionIcons(container);
     return;
   }
 
@@ -621,6 +781,10 @@ async function navigateToPage(pageName) {
   } else if (pageName === 'lan-enderlink') {
     if (typeof enderlinkInitPage === 'function') {
       setTimeout(() => enderlinkInitPage(), 100);
+    }
+  } else if (pageName === 'lan-terracotta') {
+    if (typeof initTerracottaPage === 'function') {
+      setTimeout(() => initTerracottaPage(), 100);
     }
   }
 

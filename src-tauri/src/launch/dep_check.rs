@@ -448,7 +448,7 @@ pub fn check_dependencies(version_id: &str, settings: &Value, external_version_d
     for lib in &libraries {
         // rules 筛选
         if let Some(rules) = lib.get("rules").and_then(|v| v.as_array()) {
-            if !evaluate_rules(rules, false) {
+            if !evaluate_rules(rules, false, false) {
                 continue;
             }
         }
@@ -954,7 +954,11 @@ pub(crate) fn find_main_jar(version_json: &Value, version_id: &str, external_ver
 
 /// 评估版本 JSON 的 rules 数组
 /// `has_custom_resolution` 特性
-pub(crate) fn evaluate_rules(rules: &Vec<Value>, has_custom_resolution: bool) -> bool {
+pub(crate) fn evaluate_rules(
+    rules: &Vec<Value>,
+    has_custom_resolution: bool,
+    has_quick_play: bool,
+) -> bool {
     if rules.is_empty() {
         return true;
     }
@@ -991,11 +995,17 @@ pub(crate) fn evaluate_rules(rules: &Vec<Value>, has_custom_resolution: bool) ->
             if features.contains_key("has_custom_resolution") {
                 rule_matched = rule_matched && has_custom_resolution;
             }
-            // quick play 系列一律不匹配
-            for key in ["has_quick_plays_support", "is_quick_play_singleplayer", "is_quick_play_multiplayer", "is_quick_play_realms"] {
-                if features.contains_key(key) {
-                    rule_matched = false;
-                }
+            // quick play：单机快速进世界是否启用由 has_quick_play 决定
+            if features.contains_key("has_quick_plays_support") {
+                rule_matched = rule_matched && has_quick_play;
+            }
+            if features.contains_key("is_quick_play_singleplayer") {
+                rule_matched = rule_matched && has_quick_play;
+            }
+            if features.contains_key("is_quick_play_multiplayer")
+                || features.contains_key("is_quick_play_realms")
+            {
+                rule_matched = false;
             }
         }
 

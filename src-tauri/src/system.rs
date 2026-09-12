@@ -2,8 +2,6 @@
 // 职责：检查 WebView2 内核是否安装，缺失则在默认浏览器打开官方安装程序
 // 说明：Tauri 打包为 WebView2 运行时可能未内置，首次运行需确保系统已装 WebView2。
 
-use serde_json::{json, Value};
-
 /// WebView2 Runtime 的注册表客户端 ID（EdgeUpdate Clients 键）
 const WEBVIEW2_CLIENT_ID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
 /// WebView2 官方引导安装程序地址（Evergreen Runtime）
@@ -55,10 +53,4 @@ pub fn ensure_webview2() -> (bool, bool) {
             (false, false)
         }
     }
-}
-
-/// 供前端调用的检测命令：返回是否已安装 WebView2
-#[tauri::command]
-pub fn check_webview2() -> Value {
-    json!({ "installed": webview2_installed() })
 }

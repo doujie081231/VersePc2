@@ -143,6 +143,8 @@ async function loadMods() {
             container.innerHTML = hits.map(function (mod) {
                 var isSelected = modSelectedIds.has(mod.id);
                 var isFav = _favorites.some(function(f) { return f.favs.includes(mod.id); });
+                var isPin = typeof isPinned === 'function' && isPinned('mod', mod.id);
+                var pinBtnHtml = '<button class="pin-btn' + (isPin ? ' active' : '') + '" title="' + (isPin ? '取消置顶' : '置顶模组') + '" onclick="event.stopPropagation();pinBtnToggle(this,\'mod\',\'' + escapeOnclick(mod.id) + '\',\'' + escapeOnclick(formatModNameWithChinese(mod.slug || mod.id, mod.title)) + '\',{projectId:\'' + escapeOnclick(mod.id) + '\',source:\'' + escapeOnclick(mod.source || 'modrinth') + '\',icon:\'' + escapeOnclick(mod.icon || '') + '\'},\'取消置顶\',\'置顶模组\')">' + window.VersePC.PIN_ICONS.pin + '</button>';
                 return '<div class="mod-item mod-item-clickable' + (modMultiSelectMode ? ' mod-multiselect-active' : '') + '" onclick="openModDetail(\'' + mod.id + '\', \'' + mod.source + '\')" onmouseenter="preloadModVersions(\'' + mod.id + '\', \'' + mod.source + '\')">' +
                     (modMultiSelectMode ? '<div class="mod-checkbox' + (isSelected ? ' checked' : '') + '" data-mod-id="' + mod.id + '" onclick="event.stopPropagation();toggleModSelect(\'' + mod.id + '\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>' : '') +
                     '<div class="mod-icon"><img src="' + escapeHtml(mod.icon || '') + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'mod-icon--fallback\')"></div>' +
@@ -158,6 +160,7 @@ async function loadMods() {
                         '</div>' +
                     '</div>' +
                     '<div class="mod-actions" onclick="event.stopPropagation()">' +
+                        pinBtnHtml +
                         '<button class="fav-heart-btn' + (isFav ? ' active' : '') + '" data-project-id="' + escapeHtml(mod.id) + '" onclick="event.stopPropagation(); showFavSelectDropdown(\'' + escapeOnclick(mod.id) + '\', this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></button>' +
                         '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openModDetail(\'' + mod.id + '\', \'' + mod.source + '\')">安装</button>' +
                     '</div>' +

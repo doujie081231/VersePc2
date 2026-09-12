@@ -345,18 +345,10 @@ const API = {
 
     // === 游戏版本管理 ===
     getVersions: (refresh = false) => apiGet('/api/versions', { refresh: refresh ? 'true' : '' }),
-    getVersionDetails: (url) => apiGet('/api/version-details', { url }),
-    getVersionLocalDetails: (versionId) => apiGet('/api/version-local-details', { versionId }),
     deleteVersion: (versionId, permanent) => apiPost('/api/version/delete', { versionId, permanent: !!permanent }),
     getDeleteChain: (versionId) => apiPost('/api/version/delete-chain', { versionId }),
-    renameVersion: (versionId, newName) => apiPost('/api/version/rename', { versionId, newName }),
-    deleteVersionById: (versionId) => apiPost('/api/version/delete', { versionId }),
     openVersionFolder: (versionId, folderType) => apiGet('/api/version/open-folder', { versionId, folderType }),
     getVersionExportInfo: (versionId) => apiGet('/api/version/export-info', { versionId }),
-    setVersionDescription: (versionId, description) => apiPost('/api/version/description', { versionId, description }),
-    setVersionFavorite: (versionId, favorite) => apiPost('/api/version/favorite', { versionId, favorite }),
-    setVersionIcon: (versionId, icon) => apiPost('/api/version/icon', { versionId, icon }),
-    setVersionCategory: (versionId, category) => apiPost('/api/version/category', { versionId, category }),
 
     // === 版本安装 ===
     installVersion: (url, versionId, loaderInfo = null, downloadSource = 'mojang', customName = '') =>
@@ -382,16 +374,13 @@ const API = {
     getModVersions: (projectId, source = 'modrinth', loader = '', gameVersion = '') =>
         apiGet('/api/mods/versions', { projectId, source, loader, gameVersion }),
     getModCategories: (source = 'modrinth') => apiGet('/api/mods/categories', { source }),
-    getFeaturedMods: (loader = '', gameVersion = '') => apiGet('/api/mods/featured', { loader, gameVersion }),
     toggleMod: (modId, enabled, versionId) => apiPost('/api/mods/toggle', { modId, enabled, versionId }),
     deleteMod: (modId) => apiPost('/api/mods/delete', { modId }),
-    toggleModForVersion: (modId, enabled, versionId) => apiPost('/api/mods/toggle', { modId, enabled, versionId }),
     getVersionMods: (versionId) => apiGet('/api/mods/installed', { versionId }),
     selectModFile: () => apiGet('/api/mods/select-file'),
     selectModpackFile: () => apiGet('/api/mods/select-modpack-file'),
     installModFromFile: (versionId, filePath) => apiPost('/api/mods/install-from-file', { versionId, filePath }),
     removeMod: (versionId, fileName) => apiPost('/api/mods/remove', { versionId, fileName }),
-    openModSaveFolder: () => apiGet('/api/mods/open-save-folder'),
     resolveModDeps: (ids, source = 'modrinth') => apiGet('/api/mods/resolve-deps', { ids, source }),
     resolveDepVersions: (ids, gameVersion = '', loader = '', source = 'modrinth') =>
         apiPost('/api/mods/resolve-deps-versions', { ids, gameVersion, loader, source }),
@@ -405,8 +394,6 @@ const API = {
         }
         return await apiPost('/api/mods/select-save-folder', { defaultPath });
     },
-    getModDependencies: (versionId, source = 'modrinth', gameVersion = '', loader = '', projectId = '') =>
-        apiPost('/api/mods/get-dependencies', { versionId, source, gameVersion, loader, projectId }),
 
     // === 收藏夹管理 ===
     getFavorites: () => apiGet('/api/favorites'),
@@ -416,9 +403,7 @@ const API = {
     addToFavorite: (favId, projectId) => apiPost('/api/favorites/add', { favId, projectId }),
     removeFromFavorite: (favId, projectId) => apiPost('/api/favorites/remove', { favId, projectId }),
     updateFavNote: (favId, projectId, note) => apiPost('/api/favorites/note', { favId, projectId, note }),
-    exportFavorite: (id) => apiGet(`/api/favorites/export${id ? '?id=' + id : ''}`),
     importFavorite: (data, targetFavId) => apiPost('/api/favorites/import', { data, targetFavId }),
-    checkFavorite: (projectId) => apiGet(`/api/favorites/check?projectId=${projectId}`),
 
     // === 模组加载器（Fabric/Forge/NeoForge/OptiFine）===
     getModLoaderVersions: async (gameVersion, loaderType) => {
@@ -462,36 +447,23 @@ const API = {
         const result = await apiGet('/api/optifine/versions', { game });
         return result && result.versions ? result.versions : (Array.isArray(result) ? result : []);
     },
-    installOptiFine: (gameVersion, optifineType) =>
-        apiPost('/api/optifine/install', { gameVersion, optifineType }, 120000),
 
     // === 游戏启动与生命周期 ===
     launchGame: (versionId, options, timeout) => apiPost('/api/launch', { versionId, ...(options || {}) }, timeout),
     cancelLaunch: () => apiPost('/api/launch/cancel'),
     launchCheck: (versionId, externalVersionDir) => apiPost('/api/launch/check', { versionId, externalVersionDir }),
-    getLaunchArgsPreview: (versionId) => apiPost('/api/launch/args-preview', { versionId }),
-    checkLaunchDeps: (versionId) => apiPost('/api/launch/check', { versionId }),
     downloadLaunchDeps: (versionId, sessionId, timeout) =>
         apiPost('/api/launch/download-deps', { versionId, sessionId }, timeout || 180000),
     getLaunchSessionStatus: (sessionId) => apiGet('/api/launch/session-status', { sessionId }),
     getGameStatus: () => apiGet('/api/game/status'),
-    stopGame: () => apiPost('/api/game/stop'),
     stopGameInstance: (sessionId) => apiPost('/api/game/stop', { sessionId }),
     cleanupScan: () => apiPost('/api/cleanup/scan'),
     cleanupRun: () => apiPost('/api/cleanup'),
-    getGameLog: (count = 100, offset = 0) => apiGet('/api/game/log', { count, offset }),
-    getGameLogBySession: (sessionId, count = 100, offset = 0) =>
-        apiGet('/api/game/log', { count, offset, sessionId }),
     getExitAnalysis: () => apiGet('/api/game/exit-analysis'),
-    getCrashLog: (versionId) => apiGet('/api/game/crash-log', { versionId }),
     analyzeCrash: (versionId) => apiGet('/api/game/crash-analyze', { versionId }),
-    diagnoseGame: (versionId) => apiGet('/api/game/diagnose', { versionId }),
     exportLaunchScript: (versionId) => apiPost('/api/version/export-script', { versionId }),
 
     // === 版本修复 ===
-    repairVersion: (versionId) => apiPost('/api/version/repair', { versionId }),
-    repairVersionFiles: (versionId) => apiPost('/api/version/repair-files', { versionId }),
-    cleanupVersion: (versionId) => apiGet('/api/version/cleanup', { versionId }),
     repairStart: (versionId) => apiPost('/api/version/repair-start', { versionId }),
     repairProgress: (sessionId, sse = false) =>
         apiGet('/api/version/repair-progress', { sessionId, sse: sse ? 'true' : '' }),
@@ -516,8 +488,6 @@ const API = {
     addOfflineAccount: (username) => apiPost('/api/accounts/add-offline', { username }),
     deleteAccount: (accountId) => apiPost('/api/accounts/delete', { accountId }),
     selectAccount: (accountId) => apiPost('/api/accounts/select', { accountId }),
-    addThirdPartyAccount: (serverUrl, username, password) =>
-        apiPost('/api/accounts/add-thirdparty', { serverUrl, username, password }),
     loginThirdParty: (serverUrl, username, password) =>
         apiPost('/api/accounts/thirdparty-login', { serverUrl, username, password }),
     verifyThirdPartyServer: (serverUrl) =>
@@ -533,8 +503,6 @@ const API = {
     detectJava: () => apiGet('/api/java/detect'),
     getJavaList: () => apiGet('/api/java/list'),
     getInstalledJava: () => apiGet('/api/java/installed'),
-    installJava: (component = 'java-runtime-gamma') =>
-        apiPost('/api/java/install', { component }),
     getJavaInstallStatus: (sessionId) =>
         apiGet('/api/java/install-status', { sessionId }),
     autoInstallJava: (requiredVersion = 17) =>
@@ -544,8 +512,6 @@ const API = {
     cancelJavaDownload: (sessionId) => apiPost('/api/java/cancel', { sessionId }),
     getJavaDownloadStatus: (sessionId) =>
         apiGet('/api/java/download-status', { sessionId }),
-    configureJavaEnv: (javaHome, majorVersion) =>
-        apiPost('/api/java/configure-env', { javaHome, majorVersion }),
     deleteJava: (javaHome) => apiPost('/api/java/delete', { javaHome }),
     addManualJava: (javaPath) => apiPost('/api/java/add-manual', { javaPath }),
     importJava: (type, path) => apiPost('/api/java/import', { type, path }),
@@ -555,10 +521,6 @@ const API = {
     getOptimizedJvmArgs: (versionId) => apiGet('/api/jvm/optimize-args', { versionId }),
     generateCds: (versionId) => apiPost('/api/jvm/generate-cds', { versionId }),
     getCdsStatus: (versionId) => apiGet('/api/jvm/cds-status', { versionId }),
-
-    // === authlib-injector（外置登录）===
-    getAuthlibInfo: () => apiGet('/api/authlib-injector/info'),
-    downloadAuthlib: () => apiPost('/api/authlib-injector/download'),
 
     // === 服务端状态 ===
     getStatus: () => apiGet('/api/status'),
@@ -570,7 +532,6 @@ const API = {
     getDefaultResourcePath: (type) => apiGet('/api/filesystem/default-resource-path', { type }),
     getQuickAccessPaths: () => apiGet('/api/filesystem/quick-access'),
     getDrives: () => apiGet('/api/filesystem/drives'),
-    getFolderContents: (folderPath) => apiGet('/api/filesystem/list', { path: folderPath }),
     browseDirectory: (path, showHidden) =>
         apiPost('/api/filesystem/browse', { path, showHidden }),
     createDirectory: (parentPath, name) =>
@@ -615,40 +576,20 @@ const API = {
     // === 资源搜索 ===
     searchResources: (query, type = 'modpack', loader = '', version = '', category = '', sort = 'downloads', limit = 15, offset = 0, source = '') =>
         apiGet('/api/resources/search', { query, type, loader, version, category, sort, limit, offset, source }),
-    getResourceDetail: (projectId) => apiGet('/api/resources/detail', { projectId }),
     getResourceVersions: (projectId, source = 'modrinth', loader = '', gameVersion = '') =>
         apiGet('/api/resources/versions', { projectId, source, loader, gameVersion }),
     downloadResource: (versionId, projectId, projectType = 'mod', targetVersionId = '', savePath = '', customName = '', source = 'modrinth') =>
         apiPost('/api/resources/download', { versionId, projectId, projectType, targetVersionId, savePath, customName, source }, 120000),
-
-    // === 局域网联机 (LAN) ===
-    lanGetMyIP: () => apiGet('/api/lan/my-ip'),
-    lanUPnPMap: (internalPort, externalPort, description) =>
-        apiPost('/api/lan/upnp-map', { internalPort, externalPort, description }),
-    lanUPnPUnmap: (externalPort) => apiPost('/api/lan/upnp-unmap', { externalPort }),
-    lanUPnPStatus: () => apiGet('/api/lan/upnp-status'),
-    lanUPnPDiagnose: () => apiGet('/api/lan/upnp-diagnose'),
-    lanRemoteCreate: (name, port, playerName, useUPnP) =>
-        apiPost('/api/lan/remote-create', { name, port, playerName, useUPnP }),
-    lanGetPublicIP: () => apiGet('/api/lan/public-ip'),
 
     // === EasyTier 虚拟组网 ===
     easytierStatus: () => apiGet('/api/easytier/status'),
     easytierHost: (gamePort, playerName) => apiPost('/api/easytier/host', { gamePort, playerName }),
     easytierGuest: (roomCode, playerName) => apiPost('/api/easytier/guest', { roomCode, playerName }),
     easytierStop: () => apiPost('/api/easytier/stop', {}),
-    easytierDiagnose: () => apiGet('/api/easytier/diagnose'),
     easytierPeers: () => apiGet('/api/easytier/peers'),
-    easytierProfiles: () => apiGet('/api/easytier/profiles'),
-    easytierIdle: () => apiPost('/api/easytier/ide', {}),
     easytierLog: () => apiGet('/api/easytier/log'),
 
     checkModUpdates: (versionId) => apiPost('/api/mods/check-updates', { versionId }),
-
-    // === 下载管理 ===
-    getDownloadQueue: () => apiGet('/api/downloads/queue'),
-    cancelDownload: (taskId) => apiPost('/api/downloads/cancel', { taskId }),
-    getDownloadHistory: (limit = 15, offset = 0) => apiGet('/api/downloads/history', { limit, offset }),
 
     // === 崩溃分析器 ===
     getCrashLogs: (version) => apiGet('/api/crash/logs', { version }),

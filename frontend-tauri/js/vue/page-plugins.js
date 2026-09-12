@@ -202,22 +202,18 @@ const PagePlugins = {
 
     <div v-else class="plugins-grid">
       <div class="plugin-card" v-for="p in filtered" :key="p.id">
-        <div class="plugin-top">
-          <div class="plugin-icon-wrap">
-            <img v-if="p.icon" :src="p.icon" class="plugin-icon" alt="">
-            <span v-else class="plugin-icon-fallback" v-html="'<svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.8&quot;>' + catIcon(p.category) + '</svg>'"></span>
-          </div>
-          <div class="plugin-main">
-            <div class="plugin-name-row">
-              <span class="plugin-name">{{ p.name || p.id }}</span>
-              <span class="plugin-cat">{{ catName(p.category) }}</span>
-            </div>
-            <div class="plugin-description">{{ p.description || '' }}</div>
-            <div class="plugin-meta">
-              <span class="plugin-version">v{{ p.version }}</span>
-              <span v-if="p.author" class="plugin-author">{{ p.author }}</span>
-              <span v-if="p.isInstalled" class="plugin-installed-tag">已安装 v{{ p.installedVersion }}</span>
-            </div>
+        <div class="plugin-icon-wrap">
+          <img v-if="p.icon" :src="p.icon" class="plugin-icon" alt="">
+          <span v-else class="plugin-icon-fallback" v-html="'<svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.8&quot;>' + catIcon(p.category) + '</svg>'"></span>
+        </div>
+        <div class="plugin-main">
+          <div class="plugin-name">{{ p.name || p.id }}</div>
+          <span class="plugin-cat">{{ catName(p.category) }}</span>
+          <div class="plugin-description">{{ p.description || '' }}</div>
+          <div class="plugin-meta">
+            <span class="plugin-version">v{{ p.version }}</span>
+            <span v-if="p.author" class="plugin-author">{{ p.author }}</span>
+            <span v-if="p.isInstalled" class="plugin-installed-tag">已安装 v{{ p.installedVersion }}</span>
           </div>
         </div>
         <div class="plugin-actions">

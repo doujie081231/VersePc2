@@ -1,19 +1,15 @@
 function switchLanTab(page, tab, btnEl) {
     const tabsContainer = btnEl.closest('.lan-tabs');
-    tabsContainer.querySelectorAll('.lan-tab').forEach(t => t.classList.remove('active'));
+    if (tabsContainer) tabsContainer.querySelectorAll('.lan-tab').forEach(t => t.classList.remove('active'));
     btnEl.classList.add('active');
 
     if (page === 'terracotta') {
-        const hostPanel = document.getElementById('terracotta-host-panel');
-        const joinPanel = document.getElementById('terracotta-join-panel');
         const connected = document.getElementById('terracotta-connected');
-        if (connected.style.display !== 'none') return;
-        hostPanel.style.display = tab === 'host' ? '' : 'none';
-        joinPanel.style.display = tab === 'join' ? '' : 'none';
+        if (connected && connected.style.display !== 'none') return;
         if (tab === 'host') {
-            terracottaHost();
+            terracottaHostStep1();
         } else {
-            updateTerracottaStatus('陶瓦联机 - 加入房间', '输入房间码加入', 'disconnected');
+            terracottaJoinStep1();
         }
     }
 }
@@ -32,146 +28,152 @@ function updateTerracottaStatus(title, desc, state) {
     else dot.classList.add('disconnected');
 }
 
-async function terracottaHost() {
-    document.getElementById('terracotta-host-panel').style.display = '';
+async function terracottaHostStep1() {
+    terracottaHide();
+    document.getElementById('terracotta-home').style.display = 'none';
     document.getElementById('terracotta-join-panel').style.display = 'none';
-    document.getElementById('terracotta-connected').style.display = 'none';
-    document.getElementById('terracotta-tabs').style.display = '';
-    updateTerracottaStatus('陶瓦联机 - 创建房间', '准备创建房间', 'disconnected');
-    try {
-        const lanResult = await fetch('/api/lan/port');
-        if (lanResult.ok) {
-            const data = await lanResult.json();
-            if (data.port) {
-                document.getElementById('terracotta-host-port').value = data.port;
+    const panel = document.getElementById('terracotta-host-panel');
+    panel.style.display = '';
+    showTerracottaStep('host', 1);
+    updateTerracottaStatus('陶瓦联机 - 创建房间', '请先启动游戏并开放局域网', 'disconnected');
+    // 启动游戏状态监听：游戏运行后启用"下一步"
+    const nextBtn = document.getElementById('terracotta-host-next');
+    const doCheck = async () => {
+        try {
+            const gs = await API.getGameStatus();
+            const running = !!(gs && gs.running);
+            if (nextBtn) {
+                nextBtn.disabled = !running;
+                nextBtn.title = running ? '下一步' : '请先启动游戏并开放局域网';
             }
-        }
-    } catch (e) {}
+        } catch (e) {}
+    };
+    doCheck();
+    if (window._terracottaGamePoll) clearInterval(window._terracottaGamePoll);
+    window._terracottaGamePoll = setInterval(doCheck, 2000);
 }
 
-async function terracottaJoin() {
-    document.getElementById('terracotta-join-panel').style.display = '';
+async function terracottaHostNext() {
+    // 未启动游戏则无法下一步
+    let gs = null;
+    try { gs = await API.getGameStatus(); } catch (e) {}
+    if (!gs || !gs.running) {
+        showToast('请先启动游戏，然后在游戏内开放局域网联机', 'error');
+        return;
+    }
+    if (window._terracottaGamePoll) { clearInterval(window._terracottaGamePoll); window._terracottaGamePoll = null; }
+    const agreed = await terracottaShowAgreement();
+    if (!agreed) return;
+
+    let gamePort = gs.lanPort || 25565;
+    const playerName = localStorage.getItem('cachedPlayerName') || 'Player';
+    // 进入"正在创建隧道连接中"
+    showTerracottaStep('host', 2);
+    updateTerracottaStatus('陶瓦联机 - 主机', '正在创建隧道连接中...', 'connecting');
+    try {
+        const result = await API.easytierHost(gamePort, playerName);
+        if (!result.success) throw new Error(result.error || '创建失败');
+        terracottaState = { mode: 'host', connected: true };
+        document.getElementById('terracotta-hint').textContent = '隧道创建中，请稍候...';
+        document.getElementById('terracotta-hint').style.display = '';
+        document.getElementById('terracotta-hint').style.background = 'rgba(59,130,246,0.1)';
+        document.getElementById('terracotta-hint').style.color = 'var(--blue)';
+        terracottaStartPolling();
+    } catch (e) {
+        showToast('创建联机失败: ' + (e.message || e), 'error');
+        terracottaBackToHome();
+    }
+}
+
+function terracottaJoinStep1() {
+    terracottaHide();
+    document.getElementById('terracotta-home').style.display = 'none';
     document.getElementById('terracotta-host-panel').style.display = 'none';
-    document.getElementById('terracotta-connected').style.display = 'none';
-    document.getElementById('terracotta-tabs').style.display = '';
-    updateTerracottaStatus('陶瓦联机 - 加入房间', '输入房间码加入', 'disconnected');
+    document.getElementById('terracotta-join-panel').style.display = '';
+    showTerracottaStep('join', 1);
+    updateTerracottaStatus('陶瓦联机 - 加入房间', '请输入房主发来的房间码', 'disconnected');
+    const codeBox = document.getElementById('terracotta-join-code');
+    if (codeBox) codeBox.value = '';
+    const nextBtn = document.getElementById('terracotta-join-next');
+    if (nextBtn) nextBtn.disabled = true;
 }
 
-function terracottaBackToActions() {
-    document.getElementById('terracotta-host-panel').style.display = '';
+function terracottaJoinCodeInput() {
+    const code = (document.getElementById('terracotta-join-code').value || '').trim();
+    const nextBtn = document.getElementById('terracotta-join-next');
+    if (nextBtn) {
+        nextBtn.disabled = !code;
+        nextBtn.title = code ? '下一步' : '请先输入房间码';
+    }
+}
+
+async function terracottaJoinNext() {
+    const codeText = (document.getElementById('terracotta-join-code').value || '').trim();
+    if (!codeText) {
+        showToast('请输入房间码', 'error');
+        return;
+    }
+    const agreed = await terracottaShowAgreement();
+    if (!agreed) return;
+
+    const playerName = localStorage.getItem('cachedPlayerName') || 'Player';
+    showTerracottaStep('join', 2);
+    updateTerracottaStatus('陶瓦联机 - 客户端', '正在连接房间...', 'connecting');
+    try {
+        const result = await API.easytierGuest(codeText, playerName);
+        if (!result.success) throw new Error(result.error || '加入失败');
+        terracottaState = { mode: 'guest', connected: true };
+        document.getElementById('terracotta-hint').textContent = '正在建立 P2P 连接，请稍候...';
+        document.getElementById('terracotta-hint').style.display = '';
+        document.getElementById('terracotta-hint').style.background = 'rgba(59,130,246,0.1)';
+        document.getElementById('terracotta-hint').style.color = 'var(--blue)';
+        terracottaStartPolling();
+    } catch (e) {
+        showToast('加入联机失败: ' + (e.message || e), 'error');
+        terracottaBackToHome();
+    }
+}
+
+// 流程步骤切换：flow='host'|'join'
+function showTerracottaStep(flow, step) {
+    const flowEl = document.getElementById('terracotta-' + flow + '-panel');
+    for (let i = 1; i <= 3; i++) {
+        const st = flowEl.querySelector('#terracotta-' + flow + '-step' + i);
+        if (st) st.style.display = i === step ? '' : 'none';
+    }
+    const stepEl = flowEl.querySelector('#terracotta-' + flow + '-step' + step);
+    if (stepEl) {
+        stepEl.classList.remove('terracotta-step--enter');
+        void stepEl.offsetWidth;
+        stepEl.classList.add('terracotta-step--enter');
+    }
+}
+
+function terracottaBackToHome() {
+    if (window._terracottaGamePoll) { clearInterval(window._terracottaGamePoll); window._terracottaGamePoll = null; }
+    if (terracottaPollTimer) { clearInterval(terracottaPollTimer); terracottaPollTimer = null; }
+    if (_terracottaPollRefresher) { clearInterval(_terracottaPollRefresher); _terracottaPollRefresher = null; }
+    document.getElementById('terracotta-host-panel').style.display = 'none';
     document.getElementById('terracotta-join-panel').style.display = 'none';
-    document.getElementById('terracotta-connected').style.display = 'none';
-    document.getElementById('terracotta-tabs').style.display = '';
-    const tabs = document.getElementById('terracotta-tabs');
-    tabs.querySelectorAll('.lan-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
-    updateTerracottaStatus('未连接', '创建房间或输入房间码加入', 'disconnected');
+    document.getElementById('terracotta-hint').style.display = 'none';
+    document.getElementById('terracotta-home').style.display = '';
+    updateTerracottaStatus('未连接', '启动游戏后可创建房间或加入房间', 'disconnected');
+    terracottaState = { mode: null, connected: false };
 }
 
 function terracottaHide() {
     document.getElementById('terracotta-host-panel').style.display = 'none';
     document.getElementById('terracotta-join-panel').style.display = 'none';
-    document.getElementById('terracotta-connected').style.display = 'none';
-    document.getElementById('terracotta-tabs').style.display = 'none';
+    document.getElementById('terracotta-hint').style.display = 'none';
     if (terracottaPollTimer) { clearInterval(terracottaPollTimer); terracottaPollTimer = null; }
     if (_terracottaPollRefresher) { clearInterval(_terracottaPollRefresher); _terracottaPollRefresher = null; }
-}
-
-async function terracottaStartHost() {
-    try {
-        const agreed = await terracottaShowAgreement();
-        if (!agreed) return;
-
-        const gameStatus = await API.getGameStatus();
-        if (!gameStatus.running) {
-            showToast('请先启动游戏，然后在游戏内开放局域网联机', 'error');
-            return;
-        }
-        
-        let gamePort = gameStatus.lanPort;
-        if (!gamePort) {
-            const manualPort = parseInt(document.getElementById('terracotta-host-port').value, 10);
-            if (manualPort > 0 && manualPort < 65536) {
-                gamePort = manualPort;
-            }
-        }
-        if (!gamePort) {
-            showToast('请在游戏内先开放局域网联机（按Esc → 对局域网开放）', 'error');
-            return;
-        }
-        
-        document.getElementById('terracotta-host-port').value = gamePort;
-        
-        const playerName = localStorage.getItem('cachedPlayerName') || 'Player';
-        showToast('正在初始化陶瓦联机...', 'info');
-        
-        const result = await API.easytierHost(gamePort, playerName);
-        if (result.success) {
-            terracottaState = { mode: 'host', connected: true };
-            
-            document.getElementById('terracotta-host-panel').style.display = 'none';
-            document.getElementById('terracotta-connected').style.display = '';
-            document.getElementById('terracotta-addr-field').style.display = 'none';
-            document.getElementById('terracotta-roomcode').textContent = '等待分配房间码...';
-            document.getElementById('terracotta-conn-status').textContent = '正在创建房间...';
-            document.getElementById('terracotta-hint').textContent = `已检测到局域网端口 ${gamePort}，房间创建中...`;
-            document.getElementById('terracotta-hint').style.background = 'rgba(59,130,246,0.1)';
-            document.getElementById('terracotta-hint').style.color = 'var(--blue)';
-            
-            updateTerracottaStatus('陶瓦联机 - 主机', '正在创建房间...', 'connecting');
-            
-            terracottaStartPolling();
-        }
-    } catch (e) {
-        showToast('创建联机失败: ' + e.message, 'error');
-    }
-}
-
-async function terracottaJoinRoom() {
-    const codeText = document.getElementById('terracotta-join-code').value.trim();
-    if (!codeText) {
-        showToast('请输入房间码', 'error');
-        return;
-    }
-    
-    try {
-        const agreed = await terracottaShowAgreement();
-        if (!agreed) return;
-
-        showToast('正在初始化陶瓦联机...', 'info');
-        
-        const playerName = localStorage.getItem('cachedPlayerName') || 'Player';
-        const result = await API.easytierGuest(codeText, playerName);
-        if (result.success) {
-            terracottaState = { mode: 'guest', connected: true };
-            
-            document.getElementById('terracotta-join-panel').style.display = 'none';
-            document.getElementById('terracotta-connected').style.display = '';
-            document.getElementById('terracotta-addr-field').style.display = '';
-            document.getElementById('terracotta-roomcode').textContent = '--';
-            document.getElementById('terracotta-connect-addr').textContent = '等待分配...';
-            document.getElementById('terracotta-conn-status').textContent = '正在连接...';
-            document.getElementById('terracotta-hint').textContent = '正在连接到主机...';
-            document.getElementById('terracotta-hint').style.background = 'rgba(59,130,246,0.1)';
-            document.getElementById('terracotta-hint').style.color = 'var(--blue)';
-            
-            updateTerracottaStatus('陶瓦联机 - 客户端', '正在连接...', 'connecting');
-            
-            terracottaStartPolling();
-        }
-    } catch (e) {
-        showToast('加入联机失败: ' + e.message, 'error');
-    }
 }
 
 async function terracottaDisconnect() {
     try {
         await API.easytierStop();
     } catch (e) {}
-    
-    terracottaState = { mode: null, connected: false };
-    if (terracottaPollTimer) { clearInterval(terracottaPollTimer); terracottaPollTimer = null; }
-    
-    terracottaBackToActions();
+    terracottaBackToHome();
     showToast('已断开陶瓦联机', 'info');
 }
 
@@ -239,6 +241,109 @@ async function terracottaExportLog() {
     }
 }
 
+/* ============================================================================
+   陶瓦联机 - 首次使用引导（核心未安装时显示，微软风格引导动画）
+   流程：图标居中渐入 → 欢迎语 → 点击下载图标 → 变进度条 → 完成显示"祝你使用愉快！"
+   ============================================================================ */
+function initTerracottaPage() {
+    const ob = document.getElementById('terracotta-onboarding');
+    const main = document.getElementById('terracotta-main');
+    if (!ob || !main) return;
+    // ===== 临时测试：每次都显示首次使用引导动画（测试完成后恢复下方按 installed 判断的逻辑）=====
+    showTerracottaOnboarding();
+    // ===== 正式逻辑（恢复点）=====
+    // API.easytierStatus().then(st => {
+    //     if (st && st.installed) {
+    //         showTerracottaMain();
+    //     } else {
+    //         showTerracottaOnboarding();
+    //     }
+    // }).catch(() => showTerracottaOnboarding());
+}
+
+function showTerracottaOnboarding() {
+    const ob = document.getElementById('terracotta-onboarding');
+    const main = document.getElementById('terracotta-main');
+    if (!ob || !main) return;
+    terracottaHide();
+    main.style.display = 'none';
+    ob.style.display = 'flex';
+    // 重置到初始阶段（图标+欢迎语+下载按钮），触发入场动画
+    document.getElementById('terracotta-ob-dl').style.display = '';
+    document.getElementById('terracotta-ob-spinner').style.display = 'none';
+    document.getElementById('terracotta-ob-done').style.display = 'none';
+    document.getElementById('terracotta-ob-title').textContent = '你好！欢迎使用陶瓦联机';
+    document.getElementById('terracotta-ob-desc').textContent = '在首次使用前，请先下载核心';
+    ob.classList.remove('terracotta-ob--fadeout');
+    void ob.offsetWidth;
+    ob.classList.add('terracotta-ob--enter');
+}
+
+function showTerracottaMain() {
+    const ob = document.getElementById('terracotta-onboarding');
+    const main = document.getElementById('terracotta-main');
+    if (!ob || !main) return;
+    ob.style.display = 'none';
+    main.style.display = '';
+    terracottaBackToHome();
+}
+
+async function terracottaDownloadCore() {
+    const dlBtn = document.getElementById('terracotta-ob-dl');
+    const spinnerBox = document.getElementById('terracotta-ob-spinner');
+    const progText = document.getElementById('terracotta-ob-progress-text');
+    if (!dlBtn || !spinnerBox) return;
+    // 下载图标 → 转圈加载动画
+    dlBtn.style.display = 'none';
+    spinnerBox.style.display = 'flex';
+    if (progText) progText.textContent = '正在下载核心...';
+
+    try {
+        const res = await API.easytierDownload();
+        if (res && res.error) throw new Error(res.error);
+        // 确认安装状态（后端下载为同步完成，轮询一次即可）
+        let st = null;
+        for (let i = 0; i < 10; i++) {
+            st = await API.easytierDownloadStatus('easytier');
+            if (st && (st.status === 'completed' || st.status === 'error')) break;
+            await new Promise(r => setTimeout(r, 400));
+        }
+        if (st && st.status === 'completed') {
+            completeTerracottaOnboarding();
+        } else {
+            failTerracottaDownload();
+        }
+    } catch (e) {
+        failTerracottaDownload();
+    }
+}
+
+function completeTerracottaOnboarding() {
+    const spinnerBox = document.getElementById('terracotta-ob-spinner');
+    const done = document.getElementById('terracotta-ob-done');
+    if (!spinnerBox || !done) return;
+    // 转圈结束 → 打钩矢量动画 + "祝你使用愉快！"
+    spinnerBox.style.display = 'none';
+    done.style.display = 'block';
+    done.classList.add('terracotta-ob-done--show');
+    setTimeout(() => {
+        const ob = document.getElementById('terracotta-onboarding');
+        if (ob) {
+            ob.classList.add('terracotta-ob--fadeout');
+            setTimeout(showTerracottaMain, 450);
+        }
+    }, 1600);
+}
+
+function failTerracottaDownload() {
+    const dlBtn = document.getElementById('terracotta-ob-dl');
+    const spinnerBox = document.getElementById('terracotta-ob-spinner');
+    if (dlBtn) dlBtn.style.display = '';
+    if (spinnerBox) spinnerBox.style.display = 'none';
+    document.getElementById('terracotta-ob-title').textContent = '下载失败，请检查网络后重试';
+    document.getElementById('terracotta-ob-desc').textContent = '点击下载图标重新下载核心';
+}
+
 let _lastTerracottaStateIndex = -1;
 let _terracottaPollFailCount = 0;
 
@@ -257,10 +362,10 @@ function terracottaStartPolling() {
             if (!result.running) {
                 _terracottaPollFailCount++;
                 if (_terracottaPollFailCount < 5) return;
-                document.getElementById('terracotta-conn-status').textContent = '已断开';
-                document.getElementById('terracotta-conn-status').style.color = 'var(--red)';
+                if (typeof showToast === 'function') showToast('陶瓦联机已断开', 'info');
                 clearInterval(terracottaPollTimer);
                 terracottaPollTimer = null;
+                terracottaBackToHome();
                 return;
             }
             if (!result.state) return;
@@ -285,67 +390,54 @@ function terracottaStartPolling() {
             const errorMessage = result.errorMessage || null;
 
             if (terracottaState.mode === 'host') {
-                if (stateType === 'host-scanning') {
-                    document.getElementById('terracotta-conn-status').textContent = '正在扫描局域网游戏...';
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--blue)';
-                } else if (stateType === 'host-starting') {
-                    document.getElementById('terracotta-conn-status').textContent = '正在启动房间...';
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--blue)';
-                } else if (stateType === 'host-ok') {
+                if (stateType === 'host-ok') {
                     const roomObj = state.room;
                     const roomCode = (typeof roomObj === 'object' && roomObj !== null) ? (roomObj.code || '') : (roomObj || result.roomCode || '');
                     document.getElementById('terracotta-roomcode').textContent = roomCode;
                     const profileText = profiles.length > 0 ? ` (${profiles.length}人已连接)` : '';
-                    document.getElementById('terracotta-conn-status').textContent = '房间已创建 (P2P)' + profileText;
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--green)';
-                    document.getElementById('terracotta-hint').textContent = '将房间码发送给朋友即可联机';
+                    document.getElementById('terracotta-hint').textContent = '将房间码发送给朋友即可联机' + profileText;
+                    document.getElementById('terracotta-hint').style.display = '';
                     document.getElementById('terracotta-hint').style.background = 'rgba(16,185,129,0.1)';
                     document.getElementById('terracotta-hint').style.color = 'var(--green)';
                     updateTerracottaStatus('陶瓦联机 - 主机', `房间码: ${roomCode}`, 'connected');
+                    showTerracottaStep('host', 3);
                 } else if (stateType === 'exception') {
                     const errMsg = errorMessage || '连接异常';
-                    document.getElementById('terracotta-conn-status').textContent = errMsg;
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--red)';
-                    document.getElementById('terracotta-hint').textContent = errorType ? `错误类型: ${errorType}` : '';
+                    document.getElementById('terracotta-hint').textContent = errMsg + (errorType ? ` (${errorType})` : '');
+                    document.getElementById('terracotta-hint').style.display = '';
                     document.getElementById('terracotta-hint').style.background = 'rgba(239,68,68,0.1)';
                     document.getElementById('terracotta-hint').style.color = 'var(--red)';
+                    if (typeof showToast === 'function') showToast('创建房间失败: ' + errMsg, 'error');
                 }
             } else if (terracottaState.mode === 'guest') {
-                if (stateType === 'guest-connecting') {
-                    document.getElementById('terracotta-conn-status').textContent = '正在连接...';
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--blue)';
-                } else if (stateType === 'guest-starting') {
-                    const diffMap = { 'EASIEST': '和平', 'SIMPLE': '简单', 'MEDIUM': '普通', 'TOUGH': '困难' };
-                    const diffText = difficulty && difficulty !== 'UNKNOWN' ? ` | 难度: ${diffMap[difficulty] || difficulty}` : '';
-                    document.getElementById('terracotta-conn-status').textContent = '正在建立P2P连接...' + diffText;
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--blue)';
-                } else if (stateType === 'guest-ok') {
+                if (stateType === 'guest-ok') {
                     const rawUrl = state.url || result.virtualIP || '';
                     const connectUrl = rawUrl.startsWith('127.0.0.1') ? rawUrl : `127.0.0.1${rawUrl.includes(':') ? ':' + rawUrl.split(':').pop() : ''}`;
-                    document.getElementById('terracotta-roomcode').textContent = connectUrl;
                     document.getElementById('terracotta-connect-addr').textContent = connectUrl;
                     const profileText = profiles.length > 0 ? ` (${profiles.length}人在线)` : '';
-                    document.getElementById('terracotta-conn-status').textContent = '已连接 (P2P)' + profileText;
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--green)';
-                    document.getElementById('terracotta-hint').textContent = `在Minecraft多人游戏中添加服务器地址: ${connectUrl}`;
+                    document.getElementById('terracotta-hint').textContent = `在Minecraft多人游戏中添加服务器地址: ${connectUrl}` + profileText;
+                    document.getElementById('terracotta-hint').style.display = '';
                     document.getElementById('terracotta-hint').style.background = 'rgba(16,185,129,0.1)';
                     document.getElementById('terracotta-hint').style.color = 'var(--green)';
                     updateTerracottaStatus('陶瓦联机 - 客户端', `连接地址: ${connectUrl}`, 'connected');
+                    showTerracottaStep('join', 3);
                 } else if (stateType === 'exception') {
                     const errMsg = errorMessage || '连接异常';
-                    document.getElementById('terracotta-conn-status').textContent = errMsg;
-                    document.getElementById('terracotta-conn-status').style.color = 'var(--red)';
-                    document.getElementById('terracotta-hint').textContent = errorType ? `错误类型: ${errorType}` : '';
+                    document.getElementById('terracotta-hint').textContent = errMsg + (errorType ? ` (${errorType})` : '');
+                    document.getElementById('terracotta-hint').style.display = '';
                     document.getElementById('terracotta-hint').style.background = 'rgba(239,68,68,0.1)';
                     document.getElementById('terracotta-hint').style.color = 'var(--red)';
+                    if (typeof showToast === 'function') showToast('加入房间失败: ' + errMsg, 'error');
                 }
             }
         } catch (e) {
             _terracottaPollFailCount++;
             console.warn(`[Terracotta] 状态轮询失败 (连续${_terracottaPollFailCount}次):`, e.message || e);
             if (_terracottaPollFailCount >= 8) {
-                document.getElementById('terracotta-conn-status').textContent = '网络连接异常，请检查网络';
-                document.getElementById('terracotta-conn-status').style.color = 'var(--red)';
+                document.getElementById('terracotta-hint').textContent = '网络连接异常，请检查网络';
+                document.getElementById('terracotta-hint').style.display = '';
+                document.getElementById('terracotta-hint').style.background = 'rgba(239,68,68,0.1)';
+                document.getElementById('terracotta-hint').style.color = 'var(--red)';
             }
         }
     };
@@ -396,7 +488,6 @@ function redstoneSwitchTab(tab) {
 async function redstoneRefreshServers() {
     const btn = document.getElementById('redstone-server-btn');
     const info = document.getElementById('redstone-server-info');
-    if (!btn) return;
     if (btn) btn.textContent = '服务器: 加载中...';
     if (info) info.textContent = '正在加载节点列表...';
     try {
@@ -626,108 +717,168 @@ async function redstoneRefreshCurrentVersion() {
 
 /** 红石联机页面初始化（由导航跳转触发） */
 async function redstoneInitPage() {
-    // 同步主进程状态：每次进入页面都检查真实隧道状态
-    // 防止页面切换后 _redstoneRunning 与主进程不一致
+    // 显示首次使用引导（与陶瓦联机形式一致）
+    showRedstoneOnboarding();
+    // 后台准备服务器节点列表（引导完成后主界面可直接使用）
+    if (_redstoneServers.length === 0) redstoneRefreshServers();
+    // 同步主进程隧道状态：若已开启则直接恢复主界面
     try {
         const status = await window.electronAPI.redstoneOnline.getStatus();
-        if (status.reconnecting) {
-            // 正在自动重连中
-            _redstoneRunning = true;
-            const btn = document.getElementById('redstone-action-btn');
-            if (btn) { btn.textContent = '关闭隧道'; btn.disabled = false; }
-            updateRedstoneStatus('正在自动重连...', 'connecting');
-        } else if (!status.running) {
-            _redstoneRunning = false;
-            const btn = document.getElementById('redstone-action-btn');
-            if (btn) { btn.textContent = '开启隧道'; btn.disabled = false; }
-            const info = document.getElementById('redstone-connected-info');
-            if (info) info.style.display = 'none';
-            updateRedstoneStatus('未连接', 'disconnected');
-        } else {
-            _redstoneRunning = true;
-            const btn = document.getElementById('redstone-action-btn');
-            if (btn) { btn.textContent = '关闭隧道'; btn.disabled = false; }
-            const info = document.getElementById('redstone-connected-info');
-            if (info) info.style.display = '';
-            if (status.address) {
-                document.getElementById('redstone-room-addr').textContent = status.address;
-                updateRedstoneStatus('隧道已开启 | ' + status.address, 'connected');
+        if (status && status.running && status.address) {
+            showRedstoneMain();
+            const addrEl = document.getElementById('redstone-room-addr');
+            if (addrEl) addrEl.textContent = status.address;
+        }
+    } catch (e) {}
+}
+
+/* ============================================================================
+   红石联机 - 与陶瓦联机一致的流程（首次引导 / 实例卡片主界面 / 创建 / 加入）
+   ============================================================================ */
+function showRedstoneOnboarding() {
+    const ob = document.getElementById('redstone-onboarding');
+    const main = document.getElementById('redstone-main');
+    if (!ob || !main) return;
+    main.style.display = 'none';
+    ob.style.display = 'flex';
+    document.getElementById('redstone-ob-dl').style.display = '';
+    document.getElementById('redstone-ob-spinner').style.display = 'none';
+    document.getElementById('redstone-ob-done').style.display = 'none';
+    document.getElementById('redstone-ob-title').textContent = '你好！欢迎使用红石联机';
+    document.getElementById('redstone-ob-desc').textContent = '基于 frp 的内网穿透，一键开启外网联机';
+    ob.classList.remove('terracotta-ob--fadeout');
+    void ob.offsetWidth;
+    ob.classList.add('terracotta-ob--enter');
+}
+
+function showRedstoneMain() {
+    const ob = document.getElementById('redstone-onboarding');
+    const main = document.getElementById('redstone-main');
+    if (!ob || !main) return;
+    ob.style.display = 'none';
+    main.style.display = '';
+    redstoneBackToHome();
+}
+
+function redstoneStartOnboarding() {
+    const dlBtn = document.getElementById('redstone-ob-dl');
+    const spinnerBox = document.getElementById('redstone-ob-spinner');
+    if (!dlBtn || !spinnerBox) return;
+    dlBtn.style.display = 'none';
+    spinnerBox.style.display = 'flex';
+    // 红石联机无独立核心需下载，模拟初始化动画后进入主界面
+    setTimeout(() => {
+        spinnerBox.style.display = 'none';
+        const done = document.getElementById('redstone-ob-done');
+        if (done) {
+            done.style.display = 'block';
+            done.classList.add('terracotta-ob-done--show');
+        }
+        setTimeout(() => {
+            const ob = document.getElementById('redstone-onboarding');
+            if (ob) {
+                ob.classList.add('terracotta-ob--fadeout');
+                setTimeout(showRedstoneMain, 450);
             }
-            // 恢复最大人数显示
-            const maxPlayersInput = document.getElementById('redstone-max-players');
-            if (maxPlayersInput && status.maxPlayers !== undefined) {
-                maxPlayersInput.value = status.maxPlayers;
+        }, 1500);
+    }, 1200);
+}
+
+function redstoneHide() {
+    document.getElementById('redstone-host-panel').style.display = 'none';
+    const jp = document.getElementById('redstone-join-panel');
+    if (jp) jp.style.display = 'none';
+    document.getElementById('redstone-hint').style.display = 'none';
+}
+
+function redstoneBackToHome() {
+    document.getElementById('redstone-host-panel').style.display = 'none';
+    const jp = document.getElementById('redstone-join-panel');
+    if (jp) jp.style.display = 'none';
+    document.getElementById('redstone-hint').style.display = 'none';
+    document.getElementById('redstone-home').style.display = '';
+    updateRedstoneStatus('未连接', 'disconnected');
+}
+
+function showLanStep(prefix, flow, step) {
+    const flowEl = document.getElementById(prefix + '-' + flow + '-panel');
+    if (!flowEl) return;
+    for (let i = 1; i <= 3; i++) {
+        const st = flowEl.querySelector('#' + prefix + '-' + flow + '-step' + i);
+        if (st) st.style.display = i === step ? '' : 'none';
+    }
+    const stepEl = flowEl.querySelector('#' + prefix + '-' + flow + '-step' + step);
+    if (stepEl) {
+        stepEl.classList.remove('terracotta-step--enter');
+        void stepEl.offsetWidth;
+        stepEl.classList.add('terracotta-step--enter');
+    }
+}
+
+async function redstoneHostStep1() {
+    redstoneHide();
+    document.getElementById('redstone-home').style.display = 'none';
+    document.getElementById('redstone-join-panel').style.display = 'none';
+    document.getElementById('redstone-host-panel').style.display = '';
+    showLanStep('redstone', 'host', 1);
+    const nextBtn = document.getElementById('redstone-host-next');
+    const doCheck = async () => {
+        try {
+            const gs = await API.getGameStatus();
+            const running = !!(gs && gs.running);
+            if (nextBtn) {
+                nextBtn.disabled = !running;
+                nextBtn.title = running ? '下一步' : '请先启动游戏并开放局域网';
             }
+        } catch (e) {}
+    };
+    doCheck();
+    if (window._redstoneGamePoll) clearInterval(window._redstoneGamePoll);
+    window._redstoneGamePoll = setInterval(doCheck, 2000);
+}
+
+async function redstoneHostNext() {
+    let gs = null;
+    try { gs = await API.getGameStatus(); } catch (e) {}
+    if (!gs || !gs.running) {
+        showToast('请先启动游戏，然后在游戏内开放局域网联机', 'error');
+        return;
+    }
+    if (window._redstoneGamePoll) { clearInterval(window._redstoneGamePoll); window._redstoneGamePoll = null; }
+    showLanStep('redstone', 'host', 2);
+    try {
+        if (_redstoneServers.length === 0) await redstoneRefreshServers();
+        const server = _redstoneServers[_redstoneServerIdx % _redstoneServers.length];
+        if (!server) throw new Error('服务器节点不可用');
+        let gamePort = gs.lanPort;
+        if (!gamePort) {
+            const scanResult = await window.electronAPI.redstoneOnline.scanPort();
+            gamePort = scanResult && scanResult.ok && scanResult.port ? scanResult.port : 25565;
+        }
+        const r = await window.electronAPI.redstoneOnline.start({
+            serverAddress: server.address, gamePort: gamePort, maxPlayers: ''
+        });
+        if (!r || !r.ok) throw new Error(r && r.error ? r.error : '开启失败');
+        const addrEl = document.getElementById('redstone-room-addr');
+        if (addrEl) addrEl.textContent = r.address;
+        showLanStep('redstone', 'host', 3);
+        const hint = document.getElementById('redstone-hint');
+        if (hint) {
+            hint.textContent = '联机地址已生成，发送给朋友即可加入';
+            hint.style.display = '';
+            hint.style.background = 'rgba(16,185,129,0.1)';
+            hint.style.color = 'var(--green)';
         }
     } catch (e) {
-        // 查不到状态时按断开处理
-        _redstoneRunning = false;
+        showToast('开启隧道失败: ' + (e.message || e), 'error');
+        redstoneBackToHome();
     }
+}
 
-    redstoneSwitchTab('connect');
-    redstoneRefreshServers();
-    // 主动读取当前版本显示在页面上（不阻塞，后台执行）
-    redstoneRefreshCurrentVersion();
-    // 监听主进程日志
-    if (!window._redstoneLogListener) {
-        window._redstoneLogListener = true;
-        try { window.electronAPI.redstoneOnline.onLog((msg) => addRedstoneLog(msg)); } catch (_) {}
-    }
-    // 监听自动重连中通知
-    if (!window._redstoneReconnectingListener) {
-        window._redstoneReconnectingListener = true;
-        try {
-            window.electronAPI.redstoneOnline.onReconnecting((info) => {
-                _redstoneRunning = true;
-                const btn = document.getElementById('redstone-action-btn');
-                if (btn) { btn.textContent = '关闭隧道'; btn.disabled = false; }
-                updateRedstoneStatus(
-                    '正在自动重连 (' + (info.attempt || 0) + '/' + (info.maxAttempts || 5) + ')',
-                    'connecting'
-                );
-                addRedstoneLog('隧道异常断开，' + (info.delay || 0) / 1000 + ' 秒后自动重连');
-                showToast('隧道断开，正在自动重连...', 'info');
-            });
-        } catch (_) {}
-    }
-    // 监听自动重连成功通知
-    if (!window._redstoneReconnectedListener) {
-        window._redstoneReconnectedListener = true;
-        try {
-            window.electronAPI.redstoneOnline.onReconnected((info) => {
-                _redstoneRunning = true;
-                const btn = document.getElementById('redstone-action-btn');
-                if (btn) { btn.textContent = '关闭隧道'; btn.disabled = false; }
-                const info2 = document.getElementById('redstone-connected-info');
-                if (info2) info2.style.display = '';
-                if (info && info.address) {
-                    document.getElementById('redstone-room-addr').textContent = info.address;
-                    updateRedstoneStatus('隧道已开启 | ' + info.address, 'connected');
-                } else {
-                    updateRedstoneStatus('隧道已开启', 'connected');
-                }
-                addRedstoneLog('自动重连成功');
-                showToast('隧道已自动重连', 'success');
-            });
-        } catch (_) {}
-    }
-    // 监听彻底断开通知（超出最大重连次数）
-    if (!window._redstoneDisconnectListener) {
-        window._redstoneDisconnectListener = true;
-        try {
-            window.electronAPI.redstoneOnline.onDisconnected(() => {
-                if (!_redstoneRunning) return;
-                _redstoneRunning = false;
-                const btn = document.getElementById('redstone-action-btn');
-                if (btn) { btn.textContent = '开启隧道'; btn.disabled = false; }
-                const info = document.getElementById('redstone-connected-info');
-                if (info) info.style.display = 'none';
-                updateRedstoneStatus('连接已断开', 'disconnected');
-                addRedstoneLog('隧道连接已彻底断开（自动重连已达最大次数）');
-                showToast('红石联机隧道已断开，请重新开启', 'error');
-            });
-        } catch (_) {}
-    }
+async function redstoneDisconnect() {
+    try { await window.electronAPI.redstoneOnline.stop(); } catch (e) {}
+    redstoneBackToHome();
+    showToast('已断开红石联机', 'info');
 }
 
 // ===== EnderLink 联机：标签页 / 节点 / 大厅 / 隧道开闭 =====
@@ -968,48 +1119,157 @@ function enderlinkCopyAddr() {
 
 /** EnderLink 页面初始化（由导航跳转触发） */
 async function enderlinkInitPage() {
+    // 显示首次使用引导（与陶瓦/红石联机形式一致）
+    showEnderlinkOnboarding();
+    // 后台准备节点列表（引导完成后主界面可直接使用）
+    if (_enderlinkNodes.length === 0) enderlinkRefreshNodes();
+    // 同步主进程状态：若已开启则直接恢复主界面
     try {
         const status = await window.electronAPI.enderlinkOnline.getStatus();
-        _enderlinkRunning = !!status.running;
-        const btn = document.getElementById('enderlink-action-btn');
-        if (status.running) {
-            if (btn) { btn.textContent = '关闭联机'; btn.disabled = false; }
-            const info = document.getElementById('enderlink-connected-info');
-            if (info) info.style.display = '';
-            if (status.address) {
-                document.getElementById('enderlink-room-addr').textContent = status.address;
-                updateEnderlinkStatus('联机已开启 | ' + status.address, 'connected');
-            } else {
-                updateEnderlinkStatus('联机已开启', 'connected');
-            }
-        } else {
-            if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
-            const info = document.getElementById('enderlink-connected-info');
-            if (info) info.style.display = 'none';
-            updateEnderlinkStatus('未连接', 'disconnected');
+        if (status && status.running && status.address) {
+            showEnderlinkMain();
+            const addrEl = document.getElementById('enderlink-room-addr');
+            if (addrEl) addrEl.textContent = status.address;
         }
     } catch (e) { _enderlinkRunning = false; }
+}
 
-    enderlinkSwitchTab('connect');
-    enderlinkRefreshNodes();
-    enderlinkRefreshRooms();
-    if (!window._enderlinkLogListener) {
-        window._enderlinkLogListener = true;
-        try { window.electronAPI.enderlinkOnline.onLog((msg) => addEnderlinkLog(msg)); } catch (_) {}
-    }
-    if (!window._enderlinkDisconnectedListener) {
-        window._enderlinkDisconnectedListener = true;
+/* ============================================================================
+   EnderLink 联机 - 与陶瓦/红石联机一致的流程
+   ============================================================================ */
+function showEnderlinkOnboarding() {
+    const ob = document.getElementById('enderlink-onboarding');
+    const main = document.getElementById('enderlink-main');
+    if (!ob || !main) return;
+    main.style.display = 'none';
+    ob.style.display = 'flex';
+    document.getElementById('enderlink-ob-dl').style.display = '';
+    document.getElementById('enderlink-ob-spinner').style.display = 'none';
+    document.getElementById('enderlink-ob-done').style.display = 'none';
+    document.getElementById('enderlink-ob-title').textContent = '你好！欢迎使用 EnderLink 联机';
+    document.getElementById('enderlink-ob-desc').textContent = '基于 lytapi 大厅 + frp 内网穿透，一键开启外网联机';
+    ob.classList.remove('terracotta-ob--fadeout');
+    void ob.offsetWidth;
+    ob.classList.add('terracotta-ob--enter');
+}
+
+function showEnderlinkMain() {
+    const ob = document.getElementById('enderlink-onboarding');
+    const main = document.getElementById('enderlink-main');
+    if (!ob || !main) return;
+    ob.style.display = 'none';
+    main.style.display = '';
+    enderlinkBackToHome();
+}
+
+function enderlinkStartOnboarding() {
+    const dlBtn = document.getElementById('enderlink-ob-dl');
+    const spinnerBox = document.getElementById('enderlink-ob-spinner');
+    if (!dlBtn || !spinnerBox) return;
+    dlBtn.style.display = 'none';
+    spinnerBox.style.display = 'flex';
+    // EnderLink 无独立核心需下载，模拟初始化动画后进入主界面
+    setTimeout(() => {
+        spinnerBox.style.display = 'none';
+        const done = document.getElementById('enderlink-ob-done');
+        if (done) {
+            done.style.display = 'block';
+            done.classList.add('terracotta-ob-done--show');
+        }
+        setTimeout(() => {
+            const ob = document.getElementById('enderlink-onboarding');
+            if (ob) {
+                ob.classList.add('terracotta-ob--fadeout');
+                setTimeout(showEnderlinkMain, 450);
+            }
+        }, 1500);
+    }, 1200);
+}
+
+function enderlinkHide() {
+    document.getElementById('enderlink-host-panel').style.display = 'none';
+    const jp = document.getElementById('enderlink-join-panel');
+    if (jp) jp.style.display = 'none';
+    document.getElementById('enderlink-hint').style.display = 'none';
+}
+
+function enderlinkBackToHome() {
+    document.getElementById('enderlink-host-panel').style.display = 'none';
+    const jp = document.getElementById('enderlink-join-panel');
+    if (jp) jp.style.display = 'none';
+    document.getElementById('enderlink-hint').style.display = 'none';
+    document.getElementById('enderlink-home').style.display = '';
+    updateEnderlinkStatus('未连接', 'disconnected');
+}
+
+async function enderlinkHostStep1() {
+    enderlinkHide();
+    document.getElementById('enderlink-home').style.display = 'none';
+    document.getElementById('enderlink-join-panel').style.display = 'none';
+    document.getElementById('enderlink-host-panel').style.display = '';
+    showLanStep('enderlink', 'host', 1);
+    const nextBtn = document.getElementById('enderlink-host-next');
+    const doCheck = async () => {
         try {
-            window.electronAPI.enderlinkOnline.onDisconnected(() => {
-                if (!_enderlinkRunning) return;
-                _enderlinkRunning = false;
-                const btn = document.getElementById('enderlink-action-btn');
-                if (btn) { btn.textContent = '开启联机'; btn.disabled = false; }
-                document.getElementById('enderlink-connected-info').style.display = 'none';
-                updateEnderlinkStatus('连接已断开', 'disconnected');
-                addEnderlinkLog('联机连接已断开');
-                showToast('EnderLink 联机已断开，请重新开启', 'error');
-            });
-        } catch (_) {}
+            const gs = await API.getGameStatus();
+            const running = !!(gs && gs.running);
+            if (nextBtn) {
+                nextBtn.disabled = !running;
+                nextBtn.title = running ? '下一步' : '请先启动游戏并开放局域网';
+            }
+        } catch (e) {}
+    };
+    doCheck();
+    if (window._enderlinkGamePoll) clearInterval(window._enderlinkGamePoll);
+    window._enderlinkGamePoll = setInterval(doCheck, 2000);
+}
+
+async function enderlinkHostNext() {
+    let gs = null;
+    try { gs = await API.getGameStatus(); } catch (e) {}
+    if (!gs || !gs.running) {
+        showToast('请先启动游戏，然后在游戏内开放局域网联机', 'error');
+        return;
     }
+    if (window._enderlinkGamePoll) { clearInterval(window._enderlinkGamePoll); window._enderlinkGamePoll = null; }
+    showLanStep('enderlink', 'host', 2);
+    try {
+        if (_enderlinkNodes.length === 0) await enderlinkRefreshNodes();
+        const node = _enderlinkNodes[_enderlinkNodeIdx % _enderlinkNodes.length];
+        if (!node) throw new Error('联机节点不可用');
+        let gamePort = gs.lanPort;
+        if (!gamePort) {
+            const scanResult = await window.electronAPI.redstoneOnline.scanPort();
+            gamePort = scanResult && scanResult.ok && scanResult.port ? scanResult.port : 25565;
+        }
+        const r = await window.electronAPI.enderlinkOnline.start({
+            node: node,
+            localPort: gamePort,
+            roomName: '',
+            gameVersion: gs.versionId || '1.12.2',
+            isPublic: false
+        });
+        if (!r || !r.ok) throw new Error(r && r.error ? r.error : '开启失败');
+        _enderlinkRunning = true;
+        const addrEl = document.getElementById('enderlink-room-addr');
+        if (addrEl) addrEl.textContent = r.address;
+        showLanStep('enderlink', 'host', 3);
+        const hint = document.getElementById('enderlink-hint');
+        if (hint) {
+            hint.textContent = '联机地址已生成，发送给朋友即可加入';
+            hint.style.display = '';
+            hint.style.background = 'rgba(16,185,129,0.1)';
+            hint.style.color = 'var(--green)';
+        }
+    } catch (e) {
+        showToast('开启联机失败: ' + (e.message || e), 'error');
+        enderlinkBackToHome();
+    }
+}
+
+async function enderlinkDisconnect() {
+    try { await window.electronAPI.enderlinkOnline.stop(); } catch (e) {}
+    _enderlinkRunning = false;
+    enderlinkBackToHome();
+    showToast('已断开 EnderLink 联机', 'info');
 }
