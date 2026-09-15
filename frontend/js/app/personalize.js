@@ -112,7 +112,7 @@ async function applyWallpaperByName(mode) {
 }
 
 /** 按 WE 壁纸类型分发到对应渲染器（需引擎已初始化） */
-function _applyWeDispatch(sel) {
+async function _applyWeDispatch(sel) {
   if (!sel || typeof wallpaperEngine === 'undefined' || !wallpaperEngine) return;
   const type = sel.type;
   if (type === 'video' && sel.filePath) {
@@ -133,8 +133,13 @@ function _applyWeDispatch(sel) {
     } else if (typeof switchWallpaperMode === 'function') {
       switchWallpaperMode('webWallpaper');
     }
+  } else if (type === 'scene') {
+    // 场景壁纸：启动离屏渲染进程，<img> 显示本地 MJPEG 流
+    if (typeof startSceneWallpaper === 'function') {
+      await startSceneWallpaper(sel.id);
+    }
   } else {
-    // scene / application / 未知类型：用预览图静态占位
+    // application / 未知类型：用预览图静态占位
     if (sel.previewPath) {
       wallpaperEngine.customImagePath = sel.previewPath;
       if (wallpaperEngine.currentMode === 'customImage' && wallpaperEngine.renderer && wallpaperEngine.renderer.loadImage) {
