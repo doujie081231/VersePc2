@@ -159,7 +159,8 @@ fn apply_install(tmp_root: &Path, effective: &Path, id: &str) -> Result<Value, S
 }
 
 /// 安全解压：逐项写出，防 zip-slip（拒绝越过目标目录的路径）。
-fn extract_safely(archive: &mut zip::ZipArchive<std::fs::File>, dest: &Path) -> Result<(), String> {
+/// 供插件安装与场景渲染器组件解压复用。
+pub(crate) fn extract_safely(archive: &mut zip::ZipArchive<std::fs::File>, dest: &Path) -> Result<(), String> {
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| format!("读取 zip 项失败: {}", e))?;
         let name = entry.name().to_string();
