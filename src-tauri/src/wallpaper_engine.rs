@@ -75,7 +75,7 @@ fn we_project_dirs() -> Vec<PathBuf> {
 }
 
 /// 按作品 ID 定位壁纸项目目录（wewp 协议用）
-fn resolve_we_project_dir(workshop_id: &str) -> Option<PathBuf> {
+pub fn resolve_we_project_dir(workshop_id: &str) -> Option<PathBuf> {
     for lib in steam_library_folders() {
         let d = lib
             .join("workshop")
