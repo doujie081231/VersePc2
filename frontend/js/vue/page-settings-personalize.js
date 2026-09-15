@@ -33,7 +33,10 @@
       weWallpapers: [],
       weWallpaper: null,
       wePickerOpen: false,
-      weLoading: false
+      weLoading: false,
+      // 场景渲染器组件（可选下载）：null=未知, true=已安装, false=未安装
+      weRendererInstalled: null,
+      weRendererDownloading: false
     });
   }
 
@@ -209,6 +212,56 @@
         const st = this.state;
         st.wePickerOpen = true;
         if (!st.weWallpapers.length) this.loadWe();
+        this.checkRendererStatus();
+      },
+      async checkRendererStatus() {
+        const st = this.state;
+        try {
+          const res = window.bridge && window.bridge.sceneRenderer
+            ? await window.bridge.sceneRenderer.installed()
+            : null;
+          st.weRendererInstalled = !!(res && res.installed);
+        } catch (e) {
+          st.weRendererInstalled = false;
+        }
+      },
+      async downloadRenderer() {
+        const st = this.state;
+        if (st.weRendererDownloading) return;
+        const confirmed = typeof showConfirmDialog === 'function'
+          ? await showConfirmDialog('下载场景渲染器', '场景壁纸需要额外的渲染组件（约 314MB）。是否现在下载并安装？', '下载', '取消')
+          : true;
+        if (!confirmed) return;
+        st.weRendererDownloading = true;
+        let unsub = null;
+        if (window.bridge && window.bridge.sceneRenderer && window.bridge.sceneRenderer.onProgress) {
+          unsub = window.bridge.sceneRenderer.onProgress((p) => {
+            if (!p) return;
+            if (p.stage === 'download' && typeof showGlobalDownloadProgress === 'function') {
+              showGlobalDownloadProgress('正在下载场景渲染器组件', p.percent || 0);
+            } else if (p.stage === 'extract' && typeof showGlobalDownloadProgress === 'function') {
+              showGlobalDownloadProgress('正在解压场景渲染器组件', 99);
+            }
+          });
+        }
+        try {
+          const res = window.bridge && window.bridge.sceneRenderer
+            ? await window.bridge.sceneRenderer.download()
+            : null;
+          if (typeof hideGlobalDownloadProgress === 'function') hideGlobalDownloadProgress();
+          if (res && res.ok) {
+            st.weRendererInstalled = true;
+            if (typeof showToast === 'function') showToast('场景渲染器安装完成', 'success');
+          } else {
+            if (typeof showToast === 'function') showToast('场景渲染器下载失败: ' + ((res && res.error) || '未知错误'), 'error');
+          }
+        } catch (e) {
+          if (typeof hideGlobalDownloadProgress === 'function') hideGlobalDownloadProgress();
+          if (typeof showToast === 'function') showToast('场景渲染器下载失败', 'error');
+        } finally {
+          st.weRendererDownloading = false;
+          if (unsub) { try { unsub(); } catch (e) {} }
+        }
       },
       async loadWe() {
         const st = this.state;
@@ -304,6 +357,16 @@
                     <div v-if="wp.author" style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ wp.author }}</div>
                   </div>
                 </div>
+              </div>
+              <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#2a2f3a);display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;color:var(--text-muted);">
+                <span>场景壁纸渲染组件：
+                  <span v-if="state.weRendererInstalled === null">检测中...</span>
+                  <span v-else-if="state.weRendererInstalled" style="color:var(--success,#3dd68c);">已安装</span>
+                  <span v-else>未安装（约 314MB）</span>
+                </span>
+                <button v-if="!state.weRendererInstalled && state.weRendererInstalled !== null" class="btn btn-primary btn-sm" :disabled="state.weRendererDownloading" @click="downloadRenderer">
+                  {{ state.weRendererDownloading ? '下载中...' : '下载组件' }}
+                </button>
               </div>
             </div>
             <div class="form-group" id="panorama-theme-group" v-show="state.wallpaper === 'panorama'">
