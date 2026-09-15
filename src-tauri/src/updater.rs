@@ -10,8 +10,10 @@
 // 推送（payload 为 { channel, data }，channel 与 Electron 版一致）。
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -47,7 +49,9 @@ fn mirror_urls(url: &str) -> Vec<String> {
     v
 }
 
-fn build_download_sources(url: &str) -> Vec<String> {
+/// 把 release 下载地址展开为完整下载源列表：Gitee 优先，GitHub 次之，最后 ghfast 等镜像。
+/// 供更新器与场景渲染器组件下载复用。
+pub(crate) fn build_download_sources(url: &str) -> Vec<String> {
     let seg: Vec<&str> = url.split('/').collect();
     let (tag, file) = if seg.len() >= 3 {
         (seg[seg.len() - 2], seg[seg.len() - 1])
@@ -104,6 +108,23 @@ static UPDATE_STATE: Mutex<Option<UpdateState>> = Mutex::new(None);
 fn emit(app: &AppHandle, channel: &str, data: &Value) {
     let _ = app.emit("updater:status", json!({ "channel": channel, "data": data }));
 }
+
+/// 更新下载诊断日志：追加写入 <数据目录>/logs/updater-download.log，
+/// 记录下载源切换、断点、校验、进度事件，用于排查进度条乱跳等问题。
+fn log_download(line: &str) {
+    let path = crate::storage::resolve_data_dir()
+        .join("logs")
+        .join("updater-download.log");
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "[{}] {}", chrono::Local::now().format("%H:%M:%S%.3f"), line);
+    }
+}
+
+/// 是否正在下载更新包（防止自动下载与手动点击并发写同一 .part 导致进度乱跳/文件损坏）
+static UPDATE_DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
 fn current_version() -> (u32, u32, u32) {
     parse_version(env!("CARGO_PKG_VERSION"))
@@ -379,19 +400,10 @@ async fn stream_download(
     if expected_size > 0 && resume >= expected_size {
         return Ok(());
     }
-
-    // 已存在部分下载时，通知前端从断点续传，避免出现"进度归零"的错觉
-    if resume > 0 {
-        emit(app, "download-progress", &json!({
-            "percent": if expected_size > 0 {
-                ((resume as f64 / expected_size as f64) * 100.0 * 10.0).round() / 10.0
-            } else { 0.0 },
-            "transferred": resume,
-            "total": expected_size.max(resume),
-            "bytesPerSecond": 0,
-            "resuming": true,
-        }));
-    }
+    log_download(&format!(
+        "[stream] 开始下载 {} resume={}B expected={}B",
+        url, resume, expected_size
+    ));
 
     let client = Client::builder()
         .timeout(Duration::from_secs(30))
@@ -411,8 +423,13 @@ async fn stream_download(
         return Err(format!("HTTP {}", resp.status()));
     }
     if resume > 0 && !status_206 {
-        let _ = fs::remove_file(&tmp);
-        resume = 0;
+        // 该源不支持 Range（返回 200 全量）：保留 .part 断点给下一个支持 Range 的镜像续传，
+        // 并返回特殊错误让 fallback 直接切换镜像（同源重试无意义，只会再次全量重下导致进度回跳）
+        log_download(&format!(
+            "[stream] 服务器不支持 Range(HTTP {})，保留断点，切换镜像续传",
+            resp.status().as_u16()
+        ));
+        return Err("NO_RANGE_SOURCE: 服务器不支持断点续传，切换镜像".to_string());
     }
 
     let total = if status_206 {
@@ -427,6 +444,25 @@ async fn stream_download(
     };
     let total = if total > 0 { total } else { expected_size };
 
+    // 断点续传提示：拿到 total 后再发，与下载中的 percent 用同一基准，避免基准不同导致百分比跳动
+    if resume > 0 {
+        let pct = if total > 0 {
+            ((resume as f64 / total as f64) * 100.0 * 10.0).round() / 10.0
+        } else {
+            0.0
+        };
+        log_download(&format!("[stream] 断点续传 resume={}B total={}B ({:.1}%)", resume, total, pct));
+        emit(app, "download-progress", &json!({
+            "percent": pct,
+            "transferred": resume,
+            "total": total.max(resume),
+            "bytesPerSecond": 0,
+            "resuming": true,
+        }));
+    } else {
+        log_download(&format!("[stream] 全新下载 total={}B (content-length)", total));
+    }
+
     let mut f = tokio::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -438,6 +474,7 @@ async fn stream_download(
     let mut transferred = resume;
     let mut last_report = Instant::now();
     let mut last_bytes = resume;
+    let mut last_log_pct = -1.0;
     // 距上次收到数据的时刻；仅当超过 IDLE_TIMEOUT 仍无任何字节时才判源失效，
     // 避免把 Gitee 高峰期"慢但仍在传"的连接误杀。
     let idle_timeout = Duration::from_secs(60);
@@ -449,6 +486,7 @@ async fn stream_download(
             Ok(None) => break,
             Err(_) => {
                 // 60 秒整未收到任何数据块：判定该源暂时失效（切换/续传）
+                log_download(&format!("[stream] 60s 无数据，切换镜像 (transferred={}B)", transferred));
                 return Err("下载长时间无数据，切换镜像".to_string());
             }
         };
@@ -468,6 +506,14 @@ async fn stream_download(
                 "total": total.max(transferred),
                 "bytesPerSecond": ((transferred - last_bytes) as f64 / elapsed) as u64,
             }));
+            // 诊断日志：按约 2% 采样记录，避免刷屏
+            if pct - last_log_pct >= 2.0 || transferred >= total {
+                log_download(&format!(
+                    "[progress] {:.1}% transferred={}B total={}B",
+                    pct, transferred, total
+                ));
+                last_log_pct = pct;
+            }
             last_report = Instant::now();
             last_bytes = transferred;
         }
@@ -477,6 +523,13 @@ async fn stream_download(
     f.sync_all().await.map_err(|e| e.to_string())?;
     drop(f);
 
+    let final_size = fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0);
+    log_download(&format!(
+        "[stream] 流结束 final={}B expected={}B 完整={}",
+        final_size,
+        expected_size,
+        final_size == expected_size
+    ));
     if total > 0 {
         emit(&app, "download-progress", &json!({
             "percent": 100.0,
@@ -516,28 +569,50 @@ async fn download_with_fallback(
 
     let mut last_err = String::new();
     for murl in build_download_sources(url) {
+        log_download(&format!("[fallback] 尝试下载源: {}", murl));
         for attempt in 0..=MAX_RETRY_PER_SOURCE {
             if attempt > 0 {
                 // 短暂让出，给网络/服务器一点恢复时间，再以断点续传重试同一源
                 tokio::time::sleep(Duration::from_millis(600)).await;
             }
+            log_download(&format!("[fallback]  源内第 {} 次尝试", attempt + 1));
             match stream_download(app, &murl, target, expected_size).await {
                 Ok(()) => {
                     if verify_file(&part, expected_size, expected_sha) {
+                        log_download(&format!("[fallback] 校验通过 size={}B，下载完成", expected_size));
                         let _ = fs::remove_file(target);
                         fs::rename(&part, target)
                             .map_err(|e| format!("下载完成但保存失败: {}", e))?;
                         return Ok(());
                     }
-                    // 数据被污染（尺寸/校验不符），无法续传，清空后转下一源
+                    // 校验失败：区分"被截断"（保留断点续传）与"数据损坏"（清空重下）
+                    let part_size = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+                    if expected_size > 0 && part_size == expected_size {
+                        log_download(&format!(
+                            "[fallback] 文件完整但校验不符 size={}B (可能是损坏)，清空断点从下一镜像重下",
+                            part_size
+                        ));
+                        let _ = fs::remove_file(&part);
+                    } else {
+                        log_download(&format!(
+                            "[fallback] 文件不完整 size={}B != expected={}B，保留断点，下一镜像续传",
+                            part_size, expected_size
+                        ));
+                    }
                     last_err = "文件校验失败，已从下一镜像重试".to_string();
                     let _ = fs::remove_file(target);
-                    let _ = fs::remove_file(&part);
                     break;
                 }
                 Err(e) => {
                     // 该源临时失败：保留 .part，稍后沿用续传继续尝试同一源
                     last_err = e;
+                    log_download(&format!("[fallback] 源失败: {}", last_err));
+                    // 源不支持 Range 时同源重试无意义（每次都全量重下导致进度回跳），
+                    // 直接切换下一镜像，断点留给支持 Range 的镜像续传
+                    if last_err.starts_with("NO_RANGE_SOURCE:") {
+                        last_err = "下载源均不支持断点续传，下载中断，请稍后重试".to_string();
+                        break;
+                    }
                 }
             }
         }
@@ -570,7 +645,17 @@ async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Resu
         .clone()
         .ok_or("未找到适用于当前平台的安装包")?;
 
+    // 并发锁：自动下载与手动点击并发时，只允许一个下载写同一 .part（否则进度乱跳/文件损坏）
+    if UPDATE_DOWNLOADING.swap(true, Ordering::SeqCst) {
+        log_download("[inner] 已有下载任务在进行，本次跳过");
+        return Err("已有下载任务正在进行中".into());
+    }
+
     emit(app, "start-download", &json!({}));
+    log_download(&format!(
+        "[inner] 开始下载 v{} size={}B url={}",
+        release.tag_ver, asset.size, asset.url
+    ));
 
     let data_dir = crate::storage::resolve_data_dir();
     let tmp_dir = data_dir.join("updates");
@@ -585,7 +670,11 @@ async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Resu
     };
     let target = tmp_dir.join(file_name);
 
-    match download_with_fallback(app, &asset.url, &target, asset.size, asset.sha256.as_deref()).await {
+    let result = download_with_fallback(app, &asset.url, &target, asset.size, asset.sha256.as_deref()).await;
+
+    UPDATE_DOWNLOADING.store(false, Ordering::SeqCst);
+
+    match result {
         Ok(()) => {
             {
                 let mut guard = UPDATE_STATE.lock().unwrap();
@@ -593,6 +682,7 @@ async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Resu
                     s.downloaded_path = Some(target);
                 }
             }
+            log_download(&format!("[inner] 下载完成 v{}", release.tag_ver));
             emit(app, "update-downloaded", &json!({
                 "version": release.tag_ver,
                 "releaseName": release.tag,
@@ -600,6 +690,7 @@ async fn download_update_inner(app: &AppHandle, release: &UpdateRelease) -> Resu
             Ok(())
         }
         Err(e) => {
+            log_download(&format!("[inner] 下载失败: {}", e));
             emit(app, "update-error", &json!({ "message": e }));
             Err(e)
         }
