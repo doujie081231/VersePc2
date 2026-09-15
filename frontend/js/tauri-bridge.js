@@ -352,6 +352,27 @@
     }
   };
 
+  // ============== 场景渲染器组件（Wallpaper Engine 场景壁纸，可选下载） ==============
+
+  var sceneRendererStub = {
+    installed: function () {
+      return invoke('scene_renderer_installed').catch(function () {
+        return { ok: false, installed: false };
+      });
+    },
+    download: function () {
+      return invoke('scene_renderer_download').catch(function (err) {
+        return { ok: false, error: String(err) };
+      });
+    },
+    onProgress: function (callback) {
+      // 订阅 scene-renderer:progress 事件，payload: { stage, percent, transferred, total, speed, message? }
+      return onTauriEvent('scene-renderer:progress', function (payload) {
+        try { callback(payload || {}); } catch (e) { console.error('[tauri-bridge] scene renderer progress cb', e); }
+      });
+    }
+  };
+
   // ============== AI / TTS（V岛功能） ==============
 
   var aiStub = {
@@ -583,6 +604,9 @@
 
     // 更新器
     updater: updater,
+
+    // 场景渲染器组件（可选下载）
+    sceneRenderer: sceneRendererStub,
 
     // AI / TTS
     tts: aiStub.tts,
