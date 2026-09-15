@@ -5,6 +5,8 @@
 
     let currentUpdateVersion = null;
     let _latestVersion = null;
+    // 下载进度防回跳：同一轮下载中百分比只增不减，避免断点/换源导致进度条乱跳
+    let _lastDownloadPct = -1;
 
     async function initUpdaterUI() {
         try {
@@ -167,6 +169,7 @@
                 break;
 
             case 'update-error':
+                _lastDownloadPct = -1;
                 const errorType = data.errorType || 'unknown';
                 const hint = data.hint || '';
                 let hintHtml = '';
@@ -184,13 +187,18 @@
                 break;
 
             case 'start-download':
+                _lastDownloadPct = -1;
                 statusArea.innerHTML = '<div class="update-status update-status--loading"><span class="update-status__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></span><span class="update-status__body">正在下载更新...</span></div>';
                 downloadBtn.disabled = true;
                 downloadBtn.textContent = '下载中...';
                 break;
 
             case 'download-progress': {
-                const pct = data.percent ? data.percent.toFixed(1) : 0;
+                let pctNum = data.percent ? Number(data.percent) : 0;
+                // 防回跳：只允许单调递增（换源/断点重算的较小百分比不显示）
+                if (pctNum < _lastDownloadPct) pctNum = _lastDownloadPct;
+                _lastDownloadPct = pctNum;
+                const pct = pctNum.toFixed(1);
                 const speed = formatBytes(data.bytesPerSecond);
                 const transferred = formatBytes(data.transferred);
                 const total = formatBytes(data.total);
@@ -203,6 +211,7 @@
             }
 
             case 'update-downloaded':
+                _lastDownloadPct = -1;
                 currentUpdateVersion = null;
                 statusArea.innerHTML = '<div class="update-status update-status--success"><span class="update-status__icon"></span><div class="update-status__body"><div class="update-status__title">更新已下载完成 (v' + data.version + ')</div><div class="update-status__desc">点击安装并重启以完成更新</div></div></div>';
                 skipBtn.style.display = 'none';
