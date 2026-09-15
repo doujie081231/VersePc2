@@ -55,6 +55,9 @@ class WallpaperEngine {
         this.customImagePath = null;
         this.customVideoPath = null;
         this.auroraVideoPath = null;
+        // 场景壁纸：离屏渲染进程的本地 MJPEG 端口 + 作品 ID（用于恢复）
+        this.scenePort = 0;
+        this._sceneWorkshopId = null;
         this.wallpaperBrightness = 0;
         this._brightnessCallback = null;
 
@@ -93,9 +96,59 @@ class WallpaperEngine {
             this.renderer.destroy();
         }
         this.renderer = null;
+        // 场景壁纸：停止离屏渲染进程
+        this._stopSceneProcess();
         window.removeEventListener('resize', this._onResize);
         window.removeEventListener('mousemove', this._onMouseMove);
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    // 停止场景壁纸离屏渲染进程（后端 scene_renderer_stop）
+    async _stopSceneProcess() {
+        this.scenePort = 0;
+        this._sceneWorkshopId = null;
+        try {
+            if (window.bridge && window.bridge.invoke) {
+                await window.bridge.invoke('scene_renderer_stop');
+            }
+        } catch (e) {
+            console.error('[Wallpaper] scene renderer stop error:', e);
+        }
+    }
+
+    // 启动场景壁纸离屏渲染进程（后端 scene_renderer_start），成功后切入 sceneWallpaper 模式
+    async _startSceneProcess(workshopId) {
+        try {
+            let res = null;
+            if (window.bridge && window.bridge.invoke) {
+                res = await window.bridge.invoke('scene_renderer_start', { workshopId: workshopId });
+            }
+            // 组件未安装：引导下载后重试一次
+            if (!res || res.missing) {
+                const installed = await ensureSceneRendererInstalled();
+                if (!installed) return false;
+                if (window.bridge && window.bridge.invoke) {
+                    res = await window.bridge.invoke('scene_renderer_start', { workshopId: workshopId });
+                }
+            }
+            if (!res || !res.ok || !res.port) {
+                if (typeof showToast === 'function') showToast('场景壁纸启动失败: ' + ((res && res.error) || '未知错误'), 'error');
+                return false;
+            }
+            this.scenePort = res.port;
+            this._sceneWorkshopId = workshopId;
+            if (this.currentMode !== 'sceneWallpaper') {
+                this.switchMode('sceneWallpaper');
+            } else if (this.renderer && this.renderer.loadStream) {
+                this.renderer.loadStream(res.port);
+            }
+            return true;
+        } catch (e) {
+            console.error('[Wallpaper] scene renderer start error:', e);
+            if (typeof showToast === 'function') showToast('场景壁纸启动失败', 'error');
+            return false;
+        }
     }
 
     // 游戏运行低调模式 - 挂起渲染循环（不销毁 WebGL 上下文，便于快速恢复）
@@ -112,6 +165,10 @@ class WallpaperEngine {
             clearInterval(this.renderer._brightnessCheckInterval);
             this.renderer._brightnessCheckInterval = null;
         }
+        // 场景壁纸：挂起时停掉离屏渲染进程释放 CPU（恢复时按保存的 ID 重新拉起）
+        if (this.currentMode === 'sceneWallpaper' && this.scenePort) {
+            this._stopSceneProcess();
+        }
         this._suspended = true;
     }
 
@@ -124,6 +181,10 @@ class WallpaperEngine {
         }
         if (this.renderer && !this.renderer._brightnessCheckInterval && typeof this.renderer._startBrightnessSampling === 'function') {
             this.renderer._startBrightnessSampling();
+        }
+        // 场景壁纸：恢复时重新启动渲染进程
+        if (this.currentMode === 'sceneWallpaper' && this._sceneWorkshopId && !this.scenePort) {
+            this._startSceneProcess(this._sceneWorkshopId);
         }
         // 仅在非 none 模式下恢复 RAF，避免无壁纸时空转
         if (this.isRunning && !this.animationId && this.currentMode !== 'none') {
@@ -141,9 +202,14 @@ class WallpaperEngine {
 
     switchMode(mode) {
         if (this.currentMode === mode) return;
-        const wasNone = this.currentMode === 'none';
+        const prevMode = this.currentMode;
+        const wasNone = prevMode === 'none';
         this.currentMode = mode;
         if (this.isRunning) {
+            // 离开场景壁纸模式：停掉离屏渲染进程
+            if (prevMode === 'sceneWallpaper' && mode !== 'sceneWallpaper') {
+                this._stopSceneProcess();
+            }
             this.transitioning = true;
             this.transitionAlpha = 0;
             this._initRenderer();
@@ -194,14 +260,24 @@ class WallpaperEngine {
         const isNone = this.currentMode === 'none';
         const isVideoMode = this.currentMode === 'customVideo' || this.currentMode === 'auroraVideo';
         const isImageMode = this.currentMode === 'customImage';
-        const isDomMode = isVideoMode || isImageMode;
+        const isWebMode = this.currentMode === 'webWallpaper';
+        const isSceneMode = this.currentMode === 'sceneWallpaper';
+        const isDomMode = isVideoMode || isImageMode || isWebMode || isSceneMode;
         // 图片/视频模式用 DOM 元素显示，不需要 Canvas
         this.canvas.style.display = (isGL || isNone || isDomMode) ? 'none' : 'block';
         if (this.glCanvas) this.glCanvas.style.display = isGL ? 'block' : 'none';
         // 显示/隐藏 DOM 容器
         const videoContainer = document.getElementById('wallpaper-video-container');
         if (videoContainer) {
-            videoContainer.style.display = isDomMode ? 'block' : 'none';
+            videoContainer.style.display = (isVideoMode || isImageMode) ? 'block' : 'none';
+        }
+        const webContainer = document.getElementById('wallpaper-web-container');
+        if (webContainer) {
+            webContainer.style.display = isWebMode ? 'block' : 'none';
+        }
+        const sceneContainer = document.getElementById('wallpaper-scene-container');
+        if (sceneContainer) {
+            sceneContainer.style.display = isSceneMode ? 'block' : 'none';
         }
 
         if (isNone) {
@@ -221,6 +297,8 @@ class WallpaperEngine {
             panorama: () => new PanoramaRenderer(this),
             customImage: () => new CustomImageRenderer(this),
             customVideo: () => new CustomVideoRenderer(this),
+            webWallpaper: () => new WebWallpaperRenderer(this),
+            sceneWallpaper: () => new SceneWallpaperRenderer(this),
             auroraVideo: async () => {
                 this.auroraVideoPath = await this._getAuroraVideoPath();
                 return new CustomVideoRenderer(this);
@@ -249,11 +327,14 @@ class WallpaperEngine {
     }
 
     _onResize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        // 按设备像素比设置内部分辨率，避免高分屏放大模糊；上限 2x 兼顾性能
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        this.canvas.width = Math.round(window.innerWidth * dpr);
+        this.canvas.height = Math.round(window.innerHeight * dpr);
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (this.glCanvas) {
-            this.glCanvas.width = window.innerWidth;
-            this.glCanvas.height = window.innerHeight;
+            this.glCanvas.width = Math.round(window.innerWidth * dpr);
+            this.glCanvas.height = Math.round(window.innerHeight * dpr);
         }
         if (this.renderer && this.renderer.onResize) {
             this.renderer.onResize();
@@ -316,7 +397,7 @@ class WallpaperEngine {
 
         if (this.transitioning && this.currentMode !== 'panorama') {
             this.ctx.fillStyle = `rgba(10, 10, 10, ${1 - this.transitionAlpha})`;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
         }
 
         this.animationId = requestAnimationFrame(this._animate);
@@ -446,8 +527,8 @@ class PanoramaRenderer {
             this.threeCamera.position.set(0, 0, 0);
 
             this.threeRenderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: false, antialias: true, powerPreference: 'low-power' });
+            this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
             this.threeRenderer.setSize(glCanvas.clientWidth, glCanvas.clientHeight, false);
-            this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
             this.threeRenderer.setClearColor(0x0a0a0a);
 
             const faceOrder = [1, 3, 4, 5, 0, 2];
@@ -885,6 +966,86 @@ class WebWallpaperRenderer {
     }
 }
 
+/** Wallpaper Engine scene 壁纸渲染器：在 #wallpaper-scene-container 中显示离屏渲染进程的 MJPEG 流 */
+class SceneWallpaperRenderer {
+    constructor(engine) {
+        this.engine = engine;
+        this.img = null;
+        this.loaded = false;
+        this._container = document.getElementById('wallpaper-scene-container');
+        if (engine.scenePort) {
+            this.loadStream(engine.scenePort);
+        }
+    }
+
+    setTheme() {}
+    onResize() {}
+
+    loadStream(port) {
+        // 清理旧 img（MJPEG 连接会被浏览器自动断开）
+        if (this.img) {
+            this.img.src = '';
+            if (this.img.parentElement) {
+                this.img.parentElement.removeChild(this.img);
+            }
+            this.img = null;
+        }
+        const img = document.createElement('img');
+        img.style.position = 'absolute';
+        img.style.top = '0';
+        img.style.left = '0';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.pointerEvents = 'none';
+        img.src = 'http://127.0.0.1:' + port + '/';
+        this.img = img;
+        this.loaded = true;
+        if (this._container) {
+            this._container.appendChild(img);
+        }
+        this._updateStyle();
+    }
+
+    _updateStyle() {
+        if (!this.img) return;
+        const opacity = this.engine.wallpaperOpacity != null ? this.engine.wallpaperOpacity : 1;
+        const blur = this.engine.wallpaperBlur || 0;
+        const fitMode = this.engine.wallpaperFitMode || 'cover';
+        this.img.style.opacity = opacity;
+        this.img.style.filter = blur > 0 ? 'blur(' + blur + 'px)' : 'none';
+        this.img.style.transform = blur > 0 ? 'scale(1.05)' : 'none';
+        const fitMap = {
+            cover: 'cover',
+            contain: 'contain',
+            stretch: 'fill',
+            center: 'none',
+            topLeft: 'none',
+            topRight: 'none',
+            bottomLeft: 'none',
+            bottomRight: 'none',
+            tile: 'none',
+            smart: 'cover'
+        };
+        this.img.style.objectFit = fitMap[fitMode] || 'cover';
+    }
+
+    render(dt, timestamp) {
+        // 流由 img 自动拉取，仅同步样式（opacity/blur/fit）
+        this._updateStyle();
+    }
+
+    destroy() {
+        if (this.img) {
+            this.img.src = '';
+            if (this.img.parentElement) {
+                this.img.parentElement.removeChild(this.img);
+            }
+            this.img = null;
+        }
+        this.loaded = false;
+    }
+}
+
 let wallpaperEngine = null;
 
 function initWallpaper() {
@@ -954,5 +1115,113 @@ function setPanoramaMouseFollow(enabled) {
     if (wallpaperEngine) wallpaperEngine._savedMouseFollow = enabled;
     if (wallpaperEngine && wallpaperEngine.renderer instanceof PanoramaRenderer) {
         wallpaperEngine.renderer.setMouseFollow(enabled);
+    }
+}
+
+/** 启动 WE scene 壁纸（workshopId → 后端启动离屏渲染进程 → 切入 sceneWallpaper 模式） */
+async function startSceneWallpaper(workshopId) {
+    if (!wallpaperEngine) return false;
+    return await wallpaperEngine._startSceneProcess(workshopId);
+}
+
+/** 停止 WE scene 壁纸（停止离屏渲染进程） */
+function stopSceneWallpaper() {
+    if (!wallpaperEngine) return;
+    if (wallpaperEngine.currentMode === 'sceneWallpaper') {
+        wallpaperEngine.switchMode('none');
+    } else {
+        wallpaperEngine._stopSceneProcess();
+    }
+}
+
+// ============== 全局下载进度条（组件下载等，替代消息气泡） ==============
+
+let _globalDlBarEl = null;
+
+function _ensureGlobalDlBar() {
+    if (_globalDlBarEl) return _globalDlBarEl;
+    const el = document.createElement('div');
+    el.id = 'global-download-progress-bar';
+    el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:99999;' +
+        'width:min(420px,80vw);background:var(--bg-card,#14171d);border:1px solid var(--border,#2a2f3a);' +
+        'border-radius:12px;padding:12px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35);display:none;';
+    el.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;font-weight:600;">' +
+        '<span id="gdlb-title">正在下载</span>' +
+        '<span id="gdlb-pct" style="color:var(--text-muted);font-weight:400;">0%</span></div>' +
+        '<div style="height:6px;background:var(--bg-secondary,#1a1d24);border-radius:3px;overflow:hidden;">' +
+        '<div id="gdlb-fill" style="height:100%;width:0%;background:var(--accent,#4c8dff);border-radius:3px;transition:width .2s;"></div></div>' +
+        '<div id="gdlb-info" style="margin-top:6px;font-size:11px;color:var(--text-muted);"></div>';
+    document.body.appendChild(el);
+    _globalDlBarEl = el;
+    return el;
+}
+
+/** 显示全局下载进度条；title=标题, percent=0-100, detail=附加说明（可选） */
+function showGlobalDownloadProgress(title, percent, detail) {
+    const el = _ensureGlobalDlBar();
+    const titleEl = el.querySelector('#gdlb-title');
+    const pctEl = el.querySelector('#gdlb-pct');
+    const fillEl = el.querySelector('#gdlb-fill');
+    const infoEl = el.querySelector('#gdlb-info');
+    if (title) titleEl.textContent = title;
+    const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+    pctEl.textContent = p + '%';
+    fillEl.style.width = p + '%';
+    if (detail) infoEl.textContent = detail;
+    el.style.display = 'block';
+}
+
+/** 隐藏全局下载进度条 */
+function hideGlobalDownloadProgress() {
+    if (_globalDlBarEl) _globalDlBarEl.style.display = 'none';
+}
+
+/**
+ * 确保场景渲染器组件已安装（约 314MB，可选下载到 <数据目录>/scene-renderer/）。
+ * 返回 true 表示已就绪；用户取消或失败返回 false。
+ */
+async function ensureSceneRendererInstalled() {
+    try {
+        const st = window.bridge && window.bridge.sceneRenderer
+            ? await window.bridge.sceneRenderer.installed()
+            : null;
+        if (st && st.installed) return true;
+    } catch (e) { /* 继续走确认下载流程 */ }
+
+    const confirmed = typeof showConfirmDialog === 'function'
+        ? await showConfirmDialog('下载场景渲染器', '场景壁纸需要额外的渲染组件（约 314MB）。是否现在下载并安装？', '下载', '取消')
+        : true;
+    if (!confirmed) return false;
+
+    let unsub = null;
+    if (window.bridge && window.bridge.sceneRenderer && window.bridge.sceneRenderer.onProgress) {
+        unsub = window.bridge.sceneRenderer.onProgress(function (p) {
+            if (!p) return;
+            if (p.stage === 'download') {
+                showGlobalDownloadProgress('正在下载场景渲染器组件', p.percent || 0);
+            } else if (p.stage === 'extract') {
+                showGlobalDownloadProgress('正在解压场景渲染器组件', 99);
+            }
+        });
+    }
+    try {
+        const res = window.bridge && window.bridge.sceneRenderer
+            ? await window.bridge.sceneRenderer.download()
+            : null;
+        hideGlobalDownloadProgress();
+        if (res && res.ok) {
+            if (typeof showToast === 'function') showToast('场景渲染器安装完成', 'success');
+            return true;
+        }
+        if (typeof showToast === 'function') showToast('场景渲染器下载失败: ' + ((res && res.error) || '未知错误'), 'error');
+        return false;
+    } catch (e) {
+        hideGlobalDownloadProgress();
+        console.error('[Wallpaper] scene renderer download error:', e);
+        if (typeof showToast === 'function') showToast('场景渲染器下载失败', 'error');
+        return false;
+    } finally {
+        if (unsub) { try { unsub(); } catch (e) {} }
     }
 }
