@@ -3,7 +3,7 @@
 // 构建产物默认放项目内（src-tauri/target 与 dist）。
 // 如需迁移到其它盘（如 E 盘省 C 盘空间），设置环境变量 VERSEPC2_BUILD_ROOT 指向目标目录即可。
 import { execSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -77,6 +77,89 @@ if (!dllSrc) {
 }
 copyFileSync(dllSrc, join(portableDir, 'WebView2Loader.dll'));
 console.log(`[build-portable] 已复制配套 DLL: ${dllSrc}`);
+
+// 6. 场景渲染器组件包（可选）：约 314MB，不进入主便携包。
+//    设置 VERSEPC2_BUILD_RENDERER_PACKAGE=1 时，把渲染器闭包打包为
+//    dist/scene-renderer-windows-x64.zip，作为独立 release 资产发布；
+//    用户在主程序内可下载该组件包到 <数据目录>/scene-renderer/。
+const rendererSrcDir = process.env.VERSEPC2_RENDERER_DIR || join(projectRoot, '.tools', 'linux-wallpaperengine', 'build-win', 'output');
+const mingwBinDir = process.env.VERSEPC2_MINGW_BIN || join(projectRoot, '.tools', 'msys64', 'mingw64', 'bin');
+const objdump = join(mingwBinDir, 'objdump.exe');
+const rendererDestDir = join(portableDir, '.renderer-staging');
+
+// Windows 系统 DLL（进程内建，无需携带）
+const SYSTEM_DLL_RE = /^(KERNEL32|KERNELBASE|msvcrt|USER32|GDI32|ADVAPI32|SHELL32|OLE32|OLEAUT32|WS2_32|WINMM|SETUPAPI|VERSION|IMM32|ole32|oleaut32|dbghelp|ntdll|RPCRT4|USP10|DWrite|USERENV|MSIMG32|bcrypt|ncrypt|CRYPT32|IPHLPAPI|WSOCK32|bcryptprimitives|SHLWAPI|DNSAPI|gdiplus)\.dll$/i;
+
+function isSystemDll(name) {
+  return SYSTEM_DLL_RE.test(name) || /^(api-ms-|ext-ms-)/i.test(name);
+}
+
+function dllImports(dllPath) {
+  try {
+    const out = execSync(`"${objdump}" -p "${dllPath}"`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
+    const names = [];
+    for (const m of out.matchAll(/DLL Name:\s*([^\r\n]+)/g)) names.push(m[1].trim());
+    return names;
+  } catch (e) {
+    return [];
+  }
+}
+
+function copyDllsClosure(entryFiles, destDir) {
+  if (!existsSync(objdump)) {
+    console.warn(`[build-portable] 警告：找不到 ${objdump}，跳过渲染器依赖闭包解析`);
+    return;
+  }
+  mkdirSync(destDir, { recursive: true });
+  // 用小写名去重（Windows 文件系统大小写不敏感）
+  const queue = [...entryFiles];
+  const copied = new Set();
+  const queued = new Set(queue.map(f => f.toLowerCase()));
+  while (queue.length) {
+    const file = queue.pop();
+    // 渲染器目录优先，其次 MinGW 运行库目录
+    let src = join(rendererSrcDir, file);
+    if (!existsSync(src)) src = join(mingwBinDir, file);
+    if (!existsSync(src)) {
+      console.warn(`[build-portable] 警告：缺少渲染器依赖文件 ${file}（场景壁纸功能将不可用）`);
+      continue;
+    }
+    copyFileSync(src, join(destDir, file));
+    copied.add(file.toLowerCase());
+    for (const imp of dllImports(src)) {
+      if (isSystemDll(imp)) continue;
+      const key = imp.toLowerCase();
+      if (copied.has(key) || queued.has(key)) continue;
+      if (existsSync(join(rendererSrcDir, imp)) || existsSync(join(mingwBinDir, imp))) {
+        queued.add(key);
+        queue.push(imp);
+      } else {
+        console.warn(`[build-portable] 警告：找不到依赖 ${imp}（${file} 需要它）`);
+      }
+    }
+  }
+  return copied;
+}
+
+if (process.env.VERSEPC2_BUILD_RENDERER_PACKAGE === '1' && existsSync(join(rendererSrcDir, 'verse-scene-renderer.exe'))) {
+  // 闭包收集到 staging 目录 → tar 打包为 zip（zip 根目录即 exe 与 DLL）
+  const staging = rendererDestDir;
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
+  copyDllsClosure(
+    ['verse-scene-renderer.exe', 'libverse-scene-renderer-lib.dll',
+     'opengl32.dll', 'libgallium_wgl.dll', 'libLLVM-22.dll', 'libkissfft-float.dll'],
+    staging
+  );
+  const zipPath = join(portableDir, 'scene-renderer-windows-x64.zip');
+  if (existsSync(zipPath)) rmSync(zipPath, { force: true });
+  run(`tar -a -cf "${zipPath}" -C "${staging}" .`);
+  rmSync(staging, { recursive: true, force: true });
+  const zipSize = existsSync(zipPath) ? (statSync(zipPath).size / 1024 / 1024).toFixed(1) : '0';
+  console.log(`[build-portable] 场景渲染器组件包已生成: dist/scene-renderer-windows-x64.zip (${zipSize} MB)`);
+} else {
+  console.log('[build-portable] 跳过场景渲染器组件包（设置 VERSEPC2_BUILD_RENDERER_PACKAGE=1 时生成，组件由用户按需下载）');
+}
 
 console.log(`\n[build-portable] 便携版打包完成！`);
 console.log(`[build-portable] 输出目录: ${portableDir}`);
