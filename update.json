@@ -1,28 +1,28 @@
 {
-  "version": "1.4.1",
-  "releaseName": "v1.4.1",
-  "releaseDate": "2026-09-13",
-  "releaseNotes": "VersePC2 v1.4.1\n\n修复:\n- 陶瓦/红石/EnderLink 联机引导动画改回首次使用才显示（陶瓦按核心是否已安装判断，红石/EnderLink 用本地标记记忆）",
+  "version": "1.4.2",
+  "releaseName": "v1.4.2",
+  "releaseDate": "2026-09-16",
+  "releaseNotes": "VersePC2 v1.4.2\n\n修复:\n- 更新下载进度条乱跳：自动下载与手动点击并发锁、断点续传优化（源不支持 Range 时保留断点切换镜像续传）、进度不回跳\n- 更新下载新增诊断日志（数据目录 logs/updater-download.log）\n\n新增:\n- Wallpaper Engine 场景壁纸渲染器：可选组件按需下载（约 314MB），下载显示进度条\n\n修复:\n- Wallpaper Engine 壁纸高分屏清晰度",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.1/VersePC2-1.4.1.exe",
-      "size": 73567232,
-      "sha256": "0B5EA237D6AFEF8B0D748C28EE061158C14BC0E035D5892CED2449736725A6DD"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-1.4.2.exe",
+      "size": 73650688,
+      "sha256": "621273BC396013B0DAD7E732C2D3F788A201FA56E3D46520AE4C9836A66BBD69"
     },
     "linux-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.1/VersePC2-linux-x86_64",
-      "size": 69751616,
-      "sha256": "654EEB8E877ECB0EEA5453C1EC1E9EE65FFC62D9B00E35BD53CAE6D66AEBAEDA"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-linux-x86_64",
+      "size": 69798176,
+      "sha256": "A2A9DDF0FE5F407846D3DF7B8DFF3E6D87AD80ED41BBF6F55610F58C0143443F"
     },
     "macos-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.1/VersePC2-macos-x86_64.zip",
-      "size": 62046507,
-      "sha256": "D9F8B4E3134389F3345A1712EAF5B64AD034B60BCC5E597AE66765418095D9C7"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-macos-x86_64.zip",
+      "size": 62059740,
+      "sha256": "91F33DCEBA3700863413313E92B37EA8E433ABE6C210F6C899DB0DD179873E5F"
     },
     "macos-aarch64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.1/VersePC2-macos-aarch64.zip",
-      "size": 62139175,
-      "sha256": "E97B9BCEAB37D477B6F5E5AC51ADE87D17EFA1239A79E123C49F37BE5C86EAEB"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-macos-aarch64.zip",
+      "size": 62160728,
+      "sha256": "88494AFA781A578E7FF038979DD2EB8D333E45A2842E831F8F7514A1A4105B5A"
     }
   }
 }
