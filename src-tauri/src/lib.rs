@@ -36,6 +36,7 @@ mod updater;
 mod utils;
 mod versions;
 mod wallpaper_engine;
+mod scene_renderer;
 
 use serde_json::{json, Value};
 use tauri::{Emitter, Manager, PhysicalPosition, Position};
@@ -935,11 +936,24 @@ pub fn run() {
             enderlink_online::enderlink_status,
             // Wallpaper Engine 壁纸扫描
             wallpaper_engine::wallpaper_engine_list,
+            // Wallpaper Engine 场景壁纸渲染进程
+            scene_renderer::scene_renderer_start,
+            scene_renderer::scene_renderer_stop,
+            scene_renderer::scene_renderer_status,
+            // 场景渲染器组件（可选下载，安装到数据目录）
+            scene_renderer::scene_renderer_installed,
+            scene_renderer::scene_renderer_download,
             // 存档管理
             saves::version_list_saves,
             saves::version_save_update,
         ])
         .on_window_event(|window, event| {
+            // 主窗口关闭时清理 Wallpaper Engine 场景壁纸渲染进程，防止残留
+            if window.label() == "main" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    crate::scene_renderer::shutdown_renderer();
+                }
+            }
             // 自动更新：主窗口被系统关闭（Alt+F4 / 任务栏关闭）时，若已有下载完成的更新包，
             // 阻止默认关闭并进入"替换+重启"流程（安装脚本负责退出进程并重启新版本）。
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
