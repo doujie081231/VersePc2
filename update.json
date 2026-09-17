@@ -1,28 +1,28 @@
 {
-  "version": "1.4.2",
-  "releaseName": "v1.4.2",
-  "releaseDate": "2026-09-16",
-  "releaseNotes": "VersePC2 v1.4.2\n\n修复:\n- 更新下载进度条乱跳：自动下载与手动点击并发锁、断点续传优化（源不支持 Range 时保留断点切换镜像续传）、进度不回跳\n- 更新下载新增诊断日志（数据目录 logs/updater-download.log）\n\n新增:\n- Wallpaper Engine 场景壁纸渲染器：可选组件按需下载（约 314MB），下载显示进度条\n\n修复:\n- Wallpaper Engine 壁纸高分屏清晰度",
+  "version": "1.4.3",
+  "releaseName": "v1.4.3",
+  "releaseDate": "2026-09-17",
+  "releaseNotes": "VersePC2 v1.4.3\n\n修复:\n- 联机各页面创建房间检测不到运行中的游戏、按钮无法点击（游戏状态轮询恢复 60 秒慢速重试 + 进入联机页主动刷新）\n- Wallpaper Engine 场景壁纸被误判为静态图片（壁纸类型改为按内容文件推断）\n\n改进:\n- 场景渲染器日志输出到数据目录 logs/scene-renderer.log，便于排查渲染失败原因",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-1.4.2.exe",
-      "size": 73650688,
-      "sha256": "621273BC396013B0DAD7E732C2D3F788A201FA56E3D46520AE4C9836A66BBD69"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.3/VersePC2-1.4.3.exe",
+      "size": 73653760,
+      "sha256": "6D66FCFF159DA17E52DA97319BF1C7626958DDE4C48651DB4C4B4E4A6194F401"
     },
     "linux-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-linux-x86_64",
-      "size": 69798176,
-      "sha256": "A2A9DDF0FE5F407846D3DF7B8DFF3E6D87AD80ED41BBF6F55610F58C0143443F"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.3/VersePC2-linux-x86_64",
+      "size": 69799392,
+      "sha256": "A011661F32A1085B475FC3E238A5B6E31B0D5328A9B3F852C853B78160BEC2C7"
     },
     "macos-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-macos-x86_64.zip",
-      "size": 62059740,
-      "sha256": "91F33DCEBA3700863413313E92B37EA8E433ABE6C210F6C899DB0DD179873E5F"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.3/VersePC2-macos-x86_64.zip",
+      "size": 62060361,
+      "sha256": "23C6A3512CE26AEAD71A01F9A303EB43789A9C28561E7715951166725770B47A"
     },
     "macos-aarch64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.2/VersePC2-macos-aarch64.zip",
-      "size": 62160728,
-      "sha256": "88494AFA781A578E7FF038979DD2EB8D333E45A2842E831F8F7514A1A4105B5A"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.4.3/VersePC2-macos-aarch64.zip",
+      "size": 62161587,
+      "sha256": "F293DCF3AC62A964D8D8BC9A2D38C0021B2446C7ECBD8C06B3B36D770FD87CF7"
     }
   }
 }
