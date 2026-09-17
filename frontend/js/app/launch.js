@@ -595,11 +595,12 @@ async function updateGameStatus() {
   } finally {
     // 动态调整轮询间隔：游戏运行时 3 秒，空闲时 15 秒
     if (_gameStatusTimer) clearTimeout(_gameStatusTimer);
-    // 连续报错超过上限时停止轮询，防止后台忙时无限刷屏
+    // 连续报错时放慢到 60 秒重试，而不是永久停止：
+    // 否则 store 不再更新，联机页"创建房间"按钮会一直保持禁用且无法恢复
     if (_gameStatusErrorCount <= MAX_STATUS_ERRORS) {
       _gameStatusTimer = setTimeout(updateGameStatus, _gameWasRunning ? 3000 : 15000);
     } else {
-      _gameStatusTimer = null;
+      _gameStatusTimer = setTimeout(updateGameStatus, 60000);
       _gameStatusErrorCount = 0;
     }
   }
