@@ -107,6 +107,34 @@ fn pick_field(proj: &Value, general: &Value, key: &str) -> Option<String> {
     None
 }
 
+/// 推断壁纸类型：WE 的 project.json 中 type 可能缺失/不规范，
+/// 以内容文件后缀为准（scene.pkg/scene.json → scene；.mp4/.webm → video；.html → web；.exe → application）。
+fn infer_we_type(declared: &str, file: &str, preview: &str) -> String {
+    let fl = file.to_lowercase();
+    if fl.ends_with(".pkg") || fl.ends_with("scene.json") {
+        return "scene".to_string();
+    }
+    if fl.ends_with(".mp4") || fl.ends_with(".webm") || fl.ends_with(".mov") {
+        return "video".to_string();
+    }
+    if fl.ends_with(".html") || fl.ends_with(".htm") {
+        return "web".to_string();
+    }
+    if fl.ends_with(".exe") {
+        return "application".to_string();
+    }
+    let d = declared.to_lowercase();
+    if matches!(d.as_str(), "scene" | "video" | "web" | "application" | "background") {
+        return d;
+    }
+    // 无内容文件、类型也识别不出：有预览图则按静态背景，否则按场景兜底
+    if !preview.is_empty() {
+        "background".to_string()
+    } else {
+        "scene".to_string()
+    }
+}
+
 // ============== Tauri 命令 ==============
 
 /// 扫描 Wallpaper Engine 创意工坊，返回全部壁纸列表
@@ -120,7 +148,8 @@ pub fn wallpaper_engine_list() -> Value {
         };
         let general = proj.get("general").cloned().unwrap_or_default();
 
-        let wtype = pick_field(&proj, &general, "type").unwrap_or_else(|| "scene".to_string());
+        let file = pick_field(&proj, &general, "file");
+        let preview = pick_field(&proj, &general, "preview");
         let title = pick_field(&proj, &general, "title").unwrap_or_else(|| {
             dir.file_name()
                 .map(|n| n.to_string_lossy().to_string())
@@ -128,8 +157,12 @@ pub fn wallpaper_engine_list() -> Value {
         });
         let author = pick_field(&proj, &general, "author").unwrap_or_default();
         let workshopid = pick_field(&proj, &general, "workshopid").unwrap_or_default();
-        let file = pick_field(&proj, &general, "file");
-        let preview = pick_field(&proj, &general, "preview");
+        // 类型：以内容文件推断为准（WE 的 type 字段可能缺失/不规范，误判会把场景壁纸当静态图显示）
+        let wtype = infer_we_type(
+            &pick_field(&proj, &general, "type").unwrap_or_default(),
+            &file.clone().unwrap_or_default(),
+            &preview.clone().unwrap_or_default(),
+        );
         let tags: Vec<String> = proj
             .get("tags")
             .or_else(|| general.get("tags"))
