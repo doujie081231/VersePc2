@@ -4,7 +4,7 @@
 //       渲染器组件约 314MB，不随主程序分发；缺失时由前端引导下载到 <数据目录>/scene-renderer/。
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU16, AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -106,6 +106,21 @@ pub fn scene_renderer_start(workshop_id: String) -> Value {
         .env("SDL_AUDIODRIVER", "dummy");
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW：隐藏子进程控制台窗口
+
+    // 渲染器 stdout/stderr 重定向到 <数据目录>/logs/scene-renderer.log，便于排查渲染失败原因
+    let data_dir = crate::storage::resolve_data_dir();
+    let log_dir = data_dir.join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    if let Ok(log_file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_dir.join("scene-renderer.log"))
+    {
+        if let Ok(o) = log_file.try_clone() {
+            cmd.stdout(Stdio::from(o));
+        }
+        cmd.stderr(Stdio::from(log_file));
+    }
 
     let child = match cmd.spawn() {
         Ok(c) => c,
