@@ -612,6 +612,12 @@ async function navigateToPage(pageName) {
     return;
   }
 
+  // 联机页：进入时刷新一次运行中游戏实例（创建房间按钮依赖共享 store，避免轮询未及时更新导致按钮禁用）
+  if ((pageName === 'lan-terracotta' || pageName === 'lan-portmap' || pageName === 'lan-enderlink')
+      && typeof updateGameStatus === 'function') {
+    setTimeout(() => { try { updateGameStatus(); } catch (e) {} }, 80);
+  }
+
   if (pageName === 'plugins' || pageName === 'private-server' || pageName === 'server-host') {
     if (currentPage) {
       currentPage.classList.remove('active');
