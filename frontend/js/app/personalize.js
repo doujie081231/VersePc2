@@ -136,10 +136,13 @@ async function _applyWeDispatch(sel) {
   } else if (type === 'scene') {
     // 场景壁纸：启动离屏渲染进程，<img> 显示本地 MJPEG 流
     if (typeof startSceneWallpaper === 'function') {
-      await startSceneWallpaper(sel.id);
+      const ok = await startSceneWallpaper(sel.id);
+      if (!ok && typeof showToast === 'function') {
+        showToast('场景壁纸渲染失败，请查看数据目录 logs/scene-renderer.log', 'error');
+      }
     }
   } else {
-    // application / 未知类型：用预览图静态占位
+    // application / 未知类型：用预览图静态占位，并明确提示限制
     if (sel.previewPath) {
       wallpaperEngine.customImagePath = sel.previewPath;
       if (wallpaperEngine.currentMode === 'customImage' && wallpaperEngine.renderer && wallpaperEngine.renderer.loadImage) {
@@ -147,6 +150,10 @@ async function _applyWeDispatch(sel) {
       } else if (typeof switchWallpaperMode === 'function') {
         switchWallpaperMode('customImage');
       }
+    }
+    if (typeof showToast === 'function' && type !== 'background') {
+      const typeName = type === 'application' ? '应用' : '该';
+      showToast(`${typeName}型壁纸暂不支持动态渲染，已显示静态预览`, 'info');
     }
   }
 }
