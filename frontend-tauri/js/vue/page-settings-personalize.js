@@ -1,12 +1,7 @@
 /* page-settings-personalize.js - 个性化设置页 Vue 组件（卡片组件化 + 数据驱动）
- * 结构：
- *   1. 共享响应式状态 window.VersePC.personalizeState（Vue.reactive），供三个卡片组件渲染
- *   2. ThemeAppearanceCard / BackgroundCard / VisualEffectsCard 三个卡片子组件
- *   3. 壳组件 PageSettingsPersonalize：组合卡片 + 保存/重置
- * 原则：
- *   1. CSS 一行不动（class 名保留原样）
- *   2. DOM 结构/id/data-* 属性保留原样（全局选择器依赖 data-theme/data-wallpaper/data-color）
- *   3. 副作用与持久化复用 js/app/*.js 的值参数核心函数（applyXxxByName/applyXxxValue）
+ * 结构：共享响应式状态 window.VersePC.personalizeState（Vue.reactive），
+ * 供 ThemeAppearanceCard / BackgroundCard / VisualEffectsCard 三个卡片子组件
+ * 与壳组件 PageSettingsPersonalize 使用。
  */
 (function () {
   'use strict';
