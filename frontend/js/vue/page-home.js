@@ -1,17 +1,6 @@
 /* page-home.js - 首页 Vue 组件（页面结构层）
- * ============================================================================
- * 前端三层架构（详见 index.html 顶部注释）：
- *   - 本文件只负责 HTML 模板（Vue template 字符串）
- *   - 交互逻辑全部调用 js/app/*.js 里的函数
- *   - 全局状态变量在 js/app.js
- *
- * 改动原则：
- *   1. CSS 一行不动（class 名保留原样）
- *   2. HTML 结构原样搬运（标签、层级、id 全部不变）
- *   3. JS 函数全部复用（navigateToPage 等仍来自 js/app/*.js）
- *   4. 仅 onclick → @click 这类最小改动
- *   5. 新增页面交互逻辑请写到 js/app/ 对应文件，不要堆在本文件
- *
+ * 本文件只负责 HTML 模板，交互逻辑调用 js/app/*.js 的全局函数，
+ * 全局状态变量在 js/app.js；新增页面交互请写到 js/app/ 对应文件。
  * 「启动任务 / 运行中游戏」卡片：由 launch.js 的 updateGameInstanceList 写入
  * 共享响应式 store（window.VersePCGameStore），本组件读取并渲染。
  */
