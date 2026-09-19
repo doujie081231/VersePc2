@@ -1,9 +1,4 @@
-/* page-settings-other.js - 其他设置页 Vue 组件（渐进式改造）
- * 原则：
- *   1. CSS 一行不动（class 名保留原样）
- *   2. HTML 结构原样搬运（标签、层级、id 全部不变）
- *   3. JS 函数全部复用（来自 js/app/*.js 的全局函数）
- */
+/* page-settings-other - 其他设置页 Vue 组件 */
 const PageSettingsOther = {
   template: `
           <div class="page-header">
