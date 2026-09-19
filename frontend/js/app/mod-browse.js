@@ -127,11 +127,9 @@ async function loadMods() {
     const sourceFilter = getCustomSelectValue('mod-filter-source') || 'any';
 
     const translatedQuery = modSearchQuery;
-    console.warn('[mod-search] 原始关键词=', modSearchQuery, 'loader=', loader, 'version=', version);
 
     try {
         const data = await API.searchMods(translatedQuery, sourceFilter, loader, version, category, sort, 15, modSearchOffset);
-        console.warn('[mod-search] 后端返回 hits=', (data.hits || []).length, 'total=', data.total, 'debug=', JSON.stringify(data.debug || null));
         const hits = data.hits || [];
         modSearchTotal = data.total || 0;
         modSearchResults = hits;
