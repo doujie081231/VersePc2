@@ -1,5 +1,5 @@
 // prepare-frontend.mjs — Tauri 构建前准备前端资源目录
-// 把 verse框架替换项目/frontend 下的静态资源复制到 frontend-tauri 目录，排除 node_modules
+// 把 frontend 下的静态资源复制到 frontend-tauri 目录，排除 node_modules
 // 使用 robocopy 避免 Node.js cpSync 在 Junction + 中文路径下的 bug
 import { execSync } from 'node:child_process';
 import { rmSync, existsSync, mkdirSync, copyFileSync, statSync, readdirSync, cpSync } from 'node:fs';
