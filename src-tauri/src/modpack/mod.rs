@@ -2,7 +2,7 @@
 //
 // 模块结构：
 //   mod.rs              — 入口 + 格式识别分发
-//   theseus/             — 完整的 theseus 整合包下载引擎（从 modrinth/code 搬运改造）
+//   theseus/             — theseus 整合包下载引擎（含 mrpack 下载核心）
 //   theseus_adapter.rs   — 适配层：把 theseus 的任务制 API 包装为同步返回 JSON
 //
 // 路由：由 api/modpacks.rs 调用 import_modpack() 入口
