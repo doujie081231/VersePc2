@@ -1,10 +1,5 @@
 /**
  * app.js - VersePC 前端总装入口
- * ============================================================================
- * 前端三层架构（详见 index.html 顶部注释）：
- *   1. js/utils.js + js/api.js     底层工具
- *   2. js/app/*.js                 页面交互逻辑（本文件所在目录）
- *   3. js/vue/*.js                 页面结构层（Vue template 字符串）
  *
  * 本文件职责：
  *   - 集中存放全局状态变量（currentVersionTab / allVersions / _favorites 等）
@@ -18,14 +13,8 @@
  *   - 通用工具  → js/app/utils.js / ui-components.js / custom-select.js
  *
  * VersePC - Minecraft Launcher
- * Copyright (c) 2026 豆杰. All Rights Reserved.
- *
- * AI TRAINING PROHIBITED: This code is protected by copyright law.
- * Unauthorized use for AI model training, machine learning datasets,
- * or any form of artificial intelligence training is strictly prohibited.
- *
- * This software is proprietary and confidential.
- * Any unauthorized reproduction or distribution is prohibited.
+ * Copyright (c) 2026 豆杰
+ * SPDX-License-Identifier: GPL-3.0-only
  */
 
 /* 全局状态变量 - 应用数据状态中心 */
