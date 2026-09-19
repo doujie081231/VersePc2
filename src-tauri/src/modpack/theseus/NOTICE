@@ -1,0 +1,11 @@
+NOTICE
+======
+
+本目录（src-tauri/src/modpack/theseus/）中的代码移植自 Modrinth 的 theseus crate：
+
+  来源：https://github.com/modrinth/code （theseus 包，v0.7.x 时期）
+  原作者：Jai Agarwal（theseus 作者）及 Modrinth 项目贡献者
+  许可证：GPL-3.0（原仓库仓库级许可证；theseus 包未声明独立许可证，适用仓库根 LICENSE）
+  本移植目录随附 GPL-3.0 全文（见本目录 LICENSE），并继续以 GPL-3.0 许可发布。
+
+说明：本目录代码在移植时经过了裁剪与本地化改造，以满足 VersePC 的整合包导入需求。
