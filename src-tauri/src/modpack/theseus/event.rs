@@ -172,7 +172,7 @@ pub async fn loading_try_for_each_concurrent<S, F, Fut, T>(
     f: F,
 ) -> Result<Vec<T>>
 where
-    // 修复 E0277：buffer_unordered + next().await 要求 S 实现 Unpin
+    // 流需实现 Unpin：buffer_unordered + next().await 的要求
     S: futures::Stream<Item = Result<T>> + std::marker::Unpin,
     F: FnMut(T) -> Fut + Send,
     Fut: std::future::Future<Output = Result<()>> + Send,
@@ -181,12 +181,8 @@ where
     use futures::StreamExt;
     let _concurrency = limit.unwrap_or(4).max(1);
 
-    // 修复 E0382 + 闭包逃逸：f 消费 T 后无法返回 item，
-    // 且 FnMut 闭包不能在 async block 中跨 await 持有。
-    // 实际调用方（install_mrpack.rs）不使用返回的 Vec<T>，
-    // 这里采用顺序处理简化实现，保证正确性优先。
-    // 注意：由于 f 消费 item，返回的 Vec 永远为空。
-    // 如需返回 item，调用方应自行收集或在 f 内部处理。
+    // f 会消费 item，无法收集进返回的 Vec；实际调用方不使用返回值，
+    // 因此顺序处理并返回空 Vec。如需返回 item，调用方应自行收集。
     let results: Vec<T> = Vec::new();
     let mut stream = stream;
     let mut f = f;
@@ -247,7 +243,7 @@ pub mod emit {
         f: F,
     ) -> Result<Vec<T>>
     where
-        // 修复 E0277：与父函数保持一致的 Unpin 约束
+        // 与父函数保持一致的 Unpin 约束
         S: futures::Stream<Item = Result<T>> + std::marker::Unpin,
         F: FnMut(T) -> Fut + Send,
         Fut: std::future::Future<Output = Result<()>> + Send,
