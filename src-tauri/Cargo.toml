@@ -1,7 +1,8 @@
 [package]
 name = "verse-tauri"
 version = "1.4.3"
-description = "VersePC Tauri 框架替换项目"
+description = "VersePC - Minecraft 启动器"
+license = "GPL-3.0"
 edition = "2024"
 # 通过 rust-version 说明需要较新的编译器；let-chains 语法在 2024 edition 下可用
 rust-version = "1.95"
