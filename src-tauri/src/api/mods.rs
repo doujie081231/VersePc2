@@ -390,13 +390,10 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
 
     let mut all_hits: Vec<Value> = Vec::new();
     let mut total_hits: u64 = 0;
-    let mut mr_hits = 0usize;
-    let mut cf_hits = 0usize;
 
     // Modrinth 源
     if source == "any" || source == "modrinth" {
         if let Ok((hits, total)) = search_modrinth_mods(&client, &mr_query, &loader, &mc_version, &category, &sort, limit, offset).await {
-            mr_hits = hits.len();
             all_hits.extend(hits);
             total_hits = total_hits.max(total);
         }
@@ -405,7 +402,6 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
     // CurseForge 源
     if source == "any" || source == "curseforge" {
         if let Ok((hits, total)) = search_curseforge_mods(&client, &cf_query, &loader, &mc_version, &sort, limit, offset).await {
-            cf_hits = hits.len();
             all_hits.extend(hits);
             total_hits = total_hits.max(total);
         }
@@ -421,27 +417,10 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
         all_hits.truncate(limit);
     }
 
-    let (plan_is_chinese, plan_cf_alt, plan_mr_alt, plan_mr_slugs, plan_err) = match &plan_debug {
-        Ok(p) => (p.is_chinese, p.cf_alt.clone(), p.mr_alt.clone(), p.mr_slugs.clone(), None::<String>),
-        Err(e) => (false, None, None, Vec::new(), Some(e.clone())),
-    };
-
     ApiResult::ok(json!({
         "hits": all_hits,
         "total": total_hits,
-        "offset": offset,
-        "debug": {
-            "raw": query,
-            "isChine": plan_is_chinese,
-            "cfAlt": plan_cf_alt,
-            "mrAlt": plan_mr_alt,
-            "mrSlugs": plan_mr_slugs,
-            "planErr": plan_err,
-            "cfQuery": cf_query,
-            "mrQuery": mr_query,
-            "cfHits": cf_hits,
-            "mrHits": mr_hits
-        }
+        "offset": offset
     }))
 }
 
