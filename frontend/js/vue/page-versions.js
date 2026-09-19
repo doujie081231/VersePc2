@@ -1,10 +1,4 @@
-/* page-versions.js - 版本管理页 Vue 组件（渐进式改造第二步）
- * 原则：
- *   1. CSS 一行不动（class 名保留原样）
- *   2. HTML 结构原样搬运（标签、层级、id 全部不变）
- *   3. JS 函数全部复用（addExternalFolder 等仍来自 js/app/*.js）
- *   4. 仅 onclick → @click 这类最小改动
- */
+/* page-versions - 版本管理页 Vue 组件 */
 const PageVersions = {
   mounted() {
     // 组件挂载可能晚于列表渲染，挂载后同步"卡片样式"开关状态
