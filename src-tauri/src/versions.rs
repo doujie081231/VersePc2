@@ -15,12 +15,10 @@
 //   GET  /api/version-details                 远程版本详情
 //   POST /api/version/repair                  同步修复缺失库文件与客户端 jar
 //   GET  /api/version/diagnose                诊断版本完整性（返回缺失文件列表）
-//   POST /api/version/repair-start            启动异步修复会话（返回 sessionId）— TODO
-//   GET  /api/version/repair-progress         查询修复进度 — TODO
-//   GET  /api/version/repair-cancel            取消修复会话 — TODO
-//   POST /api/install-start                   安装新版本（占位）
-//   GET  /api/install-progress                安装进度（占位）
-//   POST /api/version/export-script           导出启动脚本（.bat/.sh）
+//   POST /api/version/repair-start            启动异步修复会话（返回 sessionId）
+//   GET  /api/version/repair-progress         查询修复进度
+//   GET  /api/version/repair-cancel            取消修复会话
+//   GET  /api/version/export-script           导出启动脚本（.bat/.sh）
 //   POST /api/version/export-modpack          导出整合包（ZIP）
 //   GET  /api/version-icon                    读取版本图标（base64 data URL）
 
