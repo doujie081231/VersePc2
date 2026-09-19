@@ -268,24 +268,23 @@ impl From<tauri::Error> for Error {
     }
 }
 
-// 修复 E0277：补充 theseus 代码用到的 ? 转换 From impl
-// 这些 impl 让 ? 操作符能将对应错误自动转换为 theseus::error::Error
+// 这些 From impl 让 ? 操作符能将对应错误自动转换为 theseus::error::Error
 
-/// 信号量获取错误转换（修复 install_mrpack.rs / runner.rs 中 acquire().await? 调用）
+/// 信号量获取错误转换（供 install_mrpack.rs / runner.rs 的 acquire().await? 使用）
 impl From<tokio::sync::AcquireError> for Error {
     fn from(e: tokio::sync::AcquireError) -> Self {
         Self::from(ErrorKind::AcquireError(e.to_string()))
     }
 }
 
-/// 路径前缀剥离错误转换（修复 recovery.rs 中 strip_prefix().await? 调用）
+/// 路径前缀剥离错误转换（供 recovery.rs 的 strip_prefix().await? 使用）
 impl From<std::path::StripPrefixError> for Error {
     fn from(e: std::path::StripPrefixError) -> Self {
         Self::from(ErrorKind::StripPrefixError(e.to_string()))
     }
 }
 
-/// 任务 join 错误转换（修复 shared_instance.rs 中 spawn_blocking().await?? 调用）
+/// 任务 join 错误转换（供 shared_instance.rs 的 spawn_blocking().await?? 使用）
 impl From<tokio::task::JoinError> for Error {
     fn from(e: tokio::task::JoinError) -> Self {
         Self::from(ErrorKind::JoinError(e.to_string()))
