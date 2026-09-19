@@ -1,10 +1,4 @@
-/* page-installed-versions.js - 已安装版本页 Vue 组件（渐进式改造第三步）
- * 原则：
- *   1. CSS 一行不动（class 名保留原样）
- *   2. HTML 结构原样搬运（标签、层级、id 全部不变）
- *   3. JS 函数全部复用（navigateToPage / addExternalFolder / refreshInstalledVersions
- *      / renderInstalledVersionsInto 仍来自 js/app/*.js）
- */
+/* page-installed-versions - 已安装版本页 Vue 组件 */
 const PageInstalledVersions = {
   name: 'PageInstalledVersions',
   data() {
