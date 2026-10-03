@@ -540,7 +540,11 @@ pub async fn download_chunked_with_mirror(
             }
         }
         // 多次仍失败，清理并换源
-        super::mirror::mark_bad_host(url);
+        // 仅传输层错误（连接失败/超时）才拉黑 host；HTTP 4xx/5xx、429 限流等
+        // 是文件级或限流问题，源本身仍可用（否则单文件的 404 会让整个源后续被跳过）
+        if super::mirror::is_transport_error(&last_err) {
+            super::mirror::mark_bad_host(url);
+        }
         let _ = tokio::fs::remove_file(dest).await;
         for i in 0..MAX_CHUNKS {
             let _ = tokio::fs::remove_file(chunk_path(dest, i)).await;
