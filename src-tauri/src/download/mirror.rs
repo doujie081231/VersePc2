@@ -43,6 +43,19 @@ pub fn is_bad_host(url: &str) -> bool {
     }
 }
 
+/// 判断下载错误是否为传输层错误（连接失败 / 超时 / DNS / TLS / 重置等）。
+/// 这类错误表示源本身不可用，值得拉黑；而 HTTP 4xx/5xx、429 限流、
+/// SHA1 大小校验失败都是"服务器已响应"的情况，属于文件级或限流问题，
+/// 不代表整个源不可用，不应拉黑（否则一个文件的 404 会让整个源后续全部被跳过）。
+pub fn is_transport_error(err: &str) -> bool {
+    !(err.contains("HTTP 4")
+        || err.contains("HTTP 5")
+        || err.contains("HTTP 3")
+        || err.contains("429")
+        || err.contains("SHA1")
+        || err.contains("大小不匹配"))
+}
+
 /// 从 URL 提取 host（小写）
 fn host_of(url: &str) -> Option<String> {
     let rest = url.split("://").nth(1)?;
@@ -179,6 +192,20 @@ pub fn get_mirror_urls(original: &str, download_source: &str) -> Vec<String> {
         );
         if forge_mirror != original && !urls.contains(&forge_mirror) {
             urls.push(forge_mirror);
+        }
+    }
+
+    // BMCLAPI 后端存储直连镜像（中科大 CERNET 镜像）：
+    // BMCLAPI 对 /maven 与 /libraries 下的文件返回 302 到该镜像，且对短时间内的
+    // 大量请求限流（403）。镜像树省略 maven/libraries 前缀，文件直接位于
+    // https://mirrors.cernet.edu.cn/bmclapi/<相对路径>，内容与 BMCLAPI 同源。
+    if let Some(rest) = original
+        .strip_prefix("https://maven.minecraftforge.net/")
+        .or_else(|| original.strip_prefix("https://libraries.minecraft.net/"))
+    {
+        let ustc = format!("https://mirrors.cernet.edu.cn/bmclapi/{}", rest);
+        if !urls.contains(&ustc) {
+            urls.push(ustc);
         }
     }
 
