@@ -16,11 +16,29 @@ use std::path::PathBuf;
 use crate::storage;
 use crate::utils;
 
+/// 归一化 Windows verbatim 前缀：canonicalize() 在 Windows 上返回
+/// 带 `\\?\` 前缀的路径（如 `\\?\D:\...`），与白名单前缀（普通路径）直接
+/// starts_with 永远不匹配，导致所有路径被误判为无权访问。
+/// 这里统一去掉 `\\?\` 前缀后再比较（UNC 的 `\\?\UNC\` 还原为 `\\`）。
+fn normalize_path_for_allowlist(path: &std::path::Path) -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let s = path.to_string_lossy();
+        if let Some(rest) = s.strip_prefix("\\\\?\\UNC\\") {
+            return std::path::PathBuf::from(format!("\\\\{}", rest));
+        }
+        if let Some(rest) = s.strip_prefix("\\\\?\\") {
+            return std::path::PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
 /// 路径白名单校验
 /// 只允许访问：DATA_DIR、用户主目录、桌面、文档、下载、.minecraft
 fn is_path_allowed(path: &std::path::Path) -> bool {
     let path = match path.canonicalize() {
-        Ok(p) => p,
+        Ok(p) => normalize_path_for_allowlist(&p),
         Err(_) => return false,
     };
 
@@ -32,9 +50,14 @@ fn is_path_allowed(path: &std::path::Path) -> bool {
         dirs::document_dir().unwrap_or_else(|| PathBuf::from(".")),
         dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")),
         dirs::home_dir().map(|h| h.join(".minecraft")).unwrap_or_else(|| PathBuf::from(".")),
-    ];
+    ]
+    .into_iter()
+    .map(|p| normalize_path_for_allowlist(&p))
+    .collect::<Vec<PathBuf>>();
 
-    allowed_prefixes.iter().any(|prefix| path.starts_with(prefix))
+    let allowed = allowed_prefixes.iter().any(|prefix| path.starts_with(prefix));
+    eprintln!("[fs-browse] path={:?} allowed={} prefixes={:?}", path, allowed, allowed_prefixes);
+    allowed
 }
 
 /// 列目录，返回 items 数组
@@ -482,11 +505,14 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
         }
 
         // ===== POST 方式浏览文件夹（复用 GET /api/fs/browse 逻辑） =====
-        // body: { startPath, filters }
-        // 简化版：把 startPath 转为 path 参数，复用 GET /api/fs/browse 的列目录逻辑
+        // body: { startPath, filters }  或  { path, showHidden }
+        // 兼容两种字段约定：前端 browseDirectory(path, showHidden) 传 path，旧调用传 startPath
         "POST /api/filesystem/browse" => {
             let data = body.clone().unwrap_or(Value::Null);
-            let start_path = utils::get_str(&data, "startPath");
+            let mut start_path = utils::get_str(&data, "startPath");
+            if start_path.is_empty() {
+                start_path = utils::get_str(&data, "path");
+            }
             let filters = utils::get_str(&data, "filters");
 
             // 构造与 GET /api/fs/browse 一致的 params
