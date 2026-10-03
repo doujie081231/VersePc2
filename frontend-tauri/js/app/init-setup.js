@@ -113,7 +113,6 @@ async function init() {
       }
     } catch(e) {}
 
-    safeSetup('console', setupConsole);
     setProgress(40, '正在准备主页...');
     _mark('setup');
 
@@ -143,6 +142,7 @@ async function init() {
   safeSetup('versionListClicks', setupVersionListClicks);
   safeSetup('favSearch', setupFavSearchListeners);
   safeSetup('settingsPage', setupSettingsPage);
+  safeSetup('feedback', setupFeedback);
   // Vue 挂载完成后再绑定 Java 页面事件，避免元素不存在
   try { setupJavaPage(); } catch (e) { console.error('Setup failed: javaPage', e); }
 
@@ -456,6 +456,11 @@ function loadWallpaperSettings() {
 }
 
 function setupNavigation() {
+  // 完成导航后收起悬浮胶囊（安卓抽屉式：选中即收起）
+  const collapseSidebar = () => {
+    if (typeof window.closeSidebarPanel === 'function') window.closeSidebarPanel();
+  };
+
   document.querySelectorAll('.nav-btn:not(.nav-submenu-toggle)').forEach(btn => {
     btn.addEventListener('click', () => {
       const page = btn.dataset.page;
@@ -466,6 +471,7 @@ function setupNavigation() {
       }
 
       navigateToPage(page);
+      collapseSidebar();
     });
   });
 
@@ -474,15 +480,9 @@ function setupNavigation() {
     if (!toggle) return;
 
     toggle.addEventListener('click', (e) => {
+      // 父级按钮只负责展开/收起子菜单，不触发跳转（与安卓悬浮导航一致）
       e.stopPropagation();
-      document.querySelectorAll('.nav-submenu-group').forEach(g => g.classList.remove('open'));
-      group.classList.add('open');
-
-      const firstSubBtn = group.querySelector('.nav-sub-btn[data-page]');
-      const firstPage = firstSubBtn?.dataset.page;
-      if (firstPage) {
-        navigateToPage(firstPage);
-      }
+      group.classList.toggle('open');
     });
 
     group.querySelectorAll('.nav-sub-btn').forEach(btn => {
@@ -490,6 +490,7 @@ function setupNavigation() {
         const page = btn.dataset.page;
         if (!page) return;
         navigateToPage(page);
+        collapseSidebar();
       });
     });
   });
