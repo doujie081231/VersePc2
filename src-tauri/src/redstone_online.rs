@@ -1,7 +1,6 @@
 // redstone_online.rs — 红石联机 Tauri 命令模块
-// 职责：节点列表、拉起外部内核 hongshi.exe、读取 tunnel.ini 状态、处理退出码
-// 依据新版《RedStone 内核接入文档》：外壳只负责选定中转服务器并启动内核，
-// 通过 启动参数 + 状态文件 + 退出码 对接，不解析内核协议/日志。
+// 职责：拉取节点列表、下载并拉起外部内核 hongshic、
+// 解析内核 stdout 的 endpoint 联机地址、按退出码处理隧道生命周期
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -9,18 +8,18 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::Mutex;
 use std::sync::OnceLock;
 
 // ============== 常量 ==============
 
-const REGISTRY_URL: &str = "https://hongshi.site/newserver.json";
-const DEFAULT_KERNEL_NAME: &str = "hongshi.exe";
+const REGISTRY_URL: &str = "https://hongshi.site/api/server/list";
 const DEFAULT_MAX_PLAYERS: u64 = 8;
-// 等待内核写入 status=open 的超时
+// 等待内核输出 endpoint= 的超时
 const STATUS_OPEN_TIMEOUT: Duration = Duration::from_secs(30);
-// 状态文件轮询间隔
-const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(400);
+// 内核输出轮询间隔
+const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 // ============== 运行时状态 ==============
 
@@ -106,55 +105,100 @@ fn http_client(timeout_secs: u64) -> reqwest::Client {
         .unwrap_or_else(|_| reqwest::Client::new())
 }
 
-// 定位内核 hongshi.exe：优先 exe 同目录，其次用户数据目录 redstone-online/
+// ============== 平台 / 内核命名（对齐红石2.0接入文档） ==============
+
+/// 下载接口的 platform 参数：windows / linux / macos
+fn kernel_platform() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        "macos"
+    }
+}
+
+/// 下载接口的 arch 参数：amd64 / arm64
+fn kernel_arch() -> &'static str {
+    if cfg!(target_arch = "x86_64") {
+        "amd64"
+    } else {
+        "arm64"
+    }
+}
+
+/// 内核文件名：{binary}-{platform}-{arch}，仅 windows 追加 .exe
+fn kernel_file_name() -> String {
+    let exe = if cfg!(target_os = "windows") { ".exe" } else { "" };
+    format!("hongshic-{}-{}{}", kernel_platform(), kernel_arch(), exe)
+}
+
+// 定位内核 hongshic：优先 exe 同目录，其次用户数据目录 redstone-online/
 fn find_kernel() -> Option<PathBuf> {
+    let name = kernel_file_name();
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            candidates.push(dir.join(DEFAULT_KERNEL_NAME));
+            candidates.push(dir.join(&name));
         }
     }
-    candidates.push(redstone_dir().join(DEFAULT_KERNEL_NAME));
+    candidates.push(redstone_dir().join(name));
     candidates.into_iter().find(|p| p.exists())
 }
 
+/// 下载内核：GET /api/download/client?platform=&arch= 直接返回二进制文件
 async fn download_kernel() -> Result<PathBuf, String> {
-    let api_client = http_client(15);
-    let resp = api_client
-        .get("https://hongshi.site/api/download/windows")
-        .send()
-        .await
-        .map_err(|e| format!("请求内核下载地址失败: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("内核下载接口返回 HTTP {}", resp.status()));
-    }
-    let obj: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析内核下载地址失败: {}", e))?;
-    let url = obj
-        .get("url")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| "内核下载地址为空".to_string())?
-        .to_string();
-
-    let dest = redstone_dir().join(DEFAULT_KERNEL_NAME);
+    let dest = redstone_dir().join(kernel_file_name());
     std::fs::create_dir_all(redstone_dir()).map_err(|e| format!("创建目录失败: {}", e))?;
-    let tmp = dest.with_extension("exe.downloading");
+    let tmp = dest.with_extension("downloading");
     let _ = std::fs::remove_file(&tmp);
 
+    let url = format!(
+        "https://hongshi.site/api/download/client?platform={}&arch={}",
+        kernel_platform(),
+        kernel_arch()
+    );
     let dl_client = http_client(300);
-    let body = dl_client
+    let resp = dl_client
         .get(&url)
         .send()
         .await
         .map_err(|e| format!("下载内核失败: {}", e))?;
-    let status = body.status();
+    let status = resp.status();
     if !status.is_success() {
-        return Err(format!("下载内核返回 HTTP {}", status));
+        let reason = match status.as_u16() {
+            400 => "未知平台或架构".to_string(),
+            404 => {
+                let body = resp.text().await.unwrap_or_default();
+                if let Ok(obj) = serde_json::from_str::<Value>(&body) {
+                    obj.get("expected_file")
+                        .and_then(|v| v.as_str())
+                        .map(|s| format!("该构建未发布（期望文件 {}）", s))
+                        .unwrap_or_else(|| "该构建未发布".to_string())
+                } else {
+                    "该构建未发布".to_string()
+                }
+            }
+            422 => "下载请求缺少必要参数".to_string(),
+            429 => {
+                let retry = resp
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                if retry.is_empty() {
+                    "下载过于频繁，请稍后再试".to_string()
+                } else {
+                    format!("下载过于频繁，请 {} 秒后再试", retry)
+                }
+            }
+            c => format!("下载内核返回 HTTP {}", c),
+        };
+        return Err(format!("内核下载失败：{}", reason));
     }
-    let bytes = body
+
+    let bytes = resp
         .bytes()
         .await
         .map_err(|e| format!("读取内核数据失败: {}", e))?;
@@ -166,47 +210,9 @@ async fn download_kernel() -> Result<PathBuf, String> {
     Ok(dest)
 }
 
-// 读取 tunnel.ini，若 status=open 返回 (server, port)
-fn read_open_tunnel(status_file: &PathBuf) -> Option<(String, u16)> {
-    let content = std::fs::read_to_string(status_file).ok()?;
-    let mut section = String::new();
-    let mut status = String::new();
-    let mut server = String::new();
-    let mut port = String::new();
-    for raw in content.lines() {
-        let line = raw.split(';').next().unwrap_or(raw).trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            section = line.trim_matches(['[', ']']).trim().to_string();
-            continue;
-        }
-        if section != "tunnel" {
-            continue;
-        }
-        if let Some(eq) = line.find('=') {
-            let key = line[..eq].trim().to_lowercase();
-            let val = line[eq + 1..].trim().to_string();
-            match key.as_str() {
-                "status" => status = val,
-                "server" => server = val,
-                "port" => port = val,
-                _ => {}
-            }
-        }
-    }
-    if status.eq_ignore_ascii_case("open") {
-        let p = port.trim().parse::<u16>().ok()?;
-        let s = if server.is_empty() { return None } else { server };
-        return Some((s, p));
-    }
-    None
-}
-
 // ============== HTTP API 函数 ==============
 
-// 拉取服务器节点列表，失败回退默认节点
+// 拉取服务器节点列表（GET /api/server/list → {地区: 地址}），失败返回空列表
 async fn fetch_server_list() -> Vec<Value> {
     let client = http_client(6);
     match client.get(REGISTRY_URL).send().await {
@@ -232,12 +238,14 @@ async fn fetch_server_list() -> Vec<Value> {
         }
         _ => {}
     }
-    vec![json!({ "name": "南京", "address": "nanjing.hongshi.site" })]
+    Vec::new()
 }
 
 // ============== 隧道启动 / 关闭 ==============
 
 /// 尝试在指定节点上启动一次隧道。
+/// 按红石2.0接入文档：拉起 `hongshic -t <relay> [-p <game-port>]`，
+/// 从 stdout 读取 `endpoint=` 字段取得联机地址。
 /// 成功返回 (address, listen_port, child)，失败返回 Err。
 async fn try_start_node(
     app: &AppHandle,
@@ -250,21 +258,16 @@ async fn try_start_node(
         emit_log(app, msg);
     };
 
-    // 准备状态文件（清掉旧数据，避免读到上一次的隧道）
-    let status_file = redstone_dir().join("tunnel.ini");
-    let _ = std::fs::create_dir_all(redstone_dir());
-    let _ = std::fs::remove_file(&status_file);
-
     log(&format!("中转服务器: {}  本地端口: {}", server_address, game_port));
 
-    // 启动内核
+    // 启动内核：hongshic -t <relay> -p <game-port>
     let mut cmd = tokio::process::Command::new(kernel);
-    cmd.arg("-server")
+    cmd.arg("-t")
         .arg(server_address)
-        .arg("-port")
-        .arg(game_port.to_string())
-        .arg("-status-file")
-        .arg(&status_file);
+        .arg("-p")
+        .arg(game_port.to_string());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::null());
     #[cfg(target_os = "windows")]
     {
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
@@ -275,35 +278,54 @@ async fn try_start_node(
             return Err(format!("启动内核失败: {}", e));
         }
     };
-    let pid = child.id();
-    let status_file_lookup = status_file.clone();
 
-    // 轮询状态文件，等待 status=open
+    // 捕获 stdout，逐行匹配 endpoint=；若进程先退出则按退出码判定失败
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "无法获取内核输出".to_string())?;
+    let mut lines = tokio::io::BufReader::new(stdout).lines();
+
     let deadline = Instant::now() + STATUS_OPEN_TIMEOUT;
     loop {
-        // 内核提前退出 → 启动失败，换下一个节点
-        if let Ok(Some(status)) = child.try_wait() {
-            let code = status.code().unwrap_or(-1);
-            let msg = match code {
-                0 => "内核已退出：隧道被回收或服务器关闭".to_string(),
-                1 => "隧道创建失败（服务器不可达/拒绝/无空闲端口）".to_string(),
-                2 => "参数错误".to_string(),
-                c => format!("内核异常退出，退出码 {}", c),
-            };
-            return Err(msg);
-        }
-        if let Some(info) = read_open_tunnel(&status_file_lookup) {
-            let (tunnel_server, listen_port) = info;
-            let address = format!("{}:{}", tunnel_server, listen_port);
-            log(&format!("隧道已就绪，地址: {}", address));
-            let _ = pid;
-            return Ok((address, listen_port, child));
+        tokio::select! {
+            line = lines.next_line() => {
+                match line {
+                    Ok(Some(text)) => {
+                        if let Some(pos) = text.find("endpoint=") {
+                            let rest = text[pos + "endpoint=".len()..].trim();
+                            let addr = rest.split_whitespace().next().unwrap_or("").trim().to_string();
+                            if !addr.is_empty() {
+                                let listen_port = addr
+                                    .rsplit(':')
+                                    .next()
+                                    .and_then(|s| s.parse::<u16>().ok())
+                                    .unwrap_or(game_port);
+                                log(&format!("隧道已就绪，地址: {}", addr));
+                                return Ok((addr, listen_port, child));
+                            }
+                        }
+                    }
+                    Ok(None) | Err(_) => {
+                        // stdout 已关闭：进程必然退出，交由 child.wait() 分支处理
+                    }
+                }
+            }
+            status = child.wait() => {
+                let code = status.ok().and_then(|st| st.code());
+                let msg = match code {
+                    Some(0) => "隧道已结束（房间已关闭或空闲回收）".to_string(),
+                    Some(1) => "隧道创建失败（服务器不可达/拒绝请求）".to_string(),
+                    c => format!("内核异常退出，退出码 {}", c.map(|x| x.to_string()).unwrap_or_default()),
+                };
+                return Err(msg);
+            }
+            _ = tokio::time::sleep(STATUS_POLL_INTERVAL) => {}
         }
         if Instant::now() >= deadline {
             let _ = child.kill().await;
             return Err("等待隧道开启超时".to_string());
         }
-        tokio::time::sleep(STATUS_POLL_INTERVAL).await;
     }
 }
 
@@ -445,10 +467,9 @@ async fn start_tunnel_inner(app: &AppHandle, params: Value) -> Value {
                                 "reconnect max attempts reached".to_string()
                             } else {
                                 match code {
-                                    Some(0) => "tunnel closed (exit 0)".to_string(),
-                                    Some(1) => "tunnel create failed (exit 1)".to_string(),
-                                    Some(2) => "parameter error (exit 2)".to_string(),
-                                    c => format!("kernel exited (code {})", c.map(|x| x.to_string()).unwrap_or_default()),
+                                    Some(0) => "隧道已结束（房间已关闭或空闲回收）".to_string(),
+                                    Some(1) => "隧道创建失败（服务器不可达/拒绝请求）".to_string(),
+                                    c => format!("内核退出（退出码 {}）", c.map(|x| x.to_string()).unwrap_or_default()),
                                 }
                             };
                             {
