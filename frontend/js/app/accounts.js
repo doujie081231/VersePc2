@@ -89,6 +89,76 @@ async function _reloadSkinViewer() {
   } catch (e) {}
 }
 
+/* ==================== 皮肤全身形象 ====================
+ * 账户详情页的皮肤网格以「全身正视图」呈现：交给 VerseSkinFigure 离屏渲染，
+ * 同一张皮肤（含模型类型）只渲染一遍，结果缓存在内存里复用。
+ */
+const _skinFigureCache = new Map();
+let _skinFigureQueue = Promise.resolve();
+
+/** 取得某张皮肤纹理的全身正视图；命中缓存直接返回，否则排队渲染 */
+function getSkinFigureImage(textureUrl, model) {
+  if (!textureUrl) return Promise.resolve('');
+  const key = (model || 'default') + '|' + textureUrl;
+  const cached = _skinFigureCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  const run = () => _renderSkinFigure(textureUrl, model, key);
+  const task = _skinFigureQueue.then(run, run);
+  _skinFigureQueue = task.then(() => {}, () => {});
+  return task;
+}
+
+/** 离屏渲染一张皮肤全身正视图，返回 dataURL */
+async function _renderSkinFigure(textureUrl, model, key) {
+  const cached = _skinFigureCache.get(key);
+  if (cached) return cached;
+  if (!window.VerseSkinFigure) throw new Error('VerseSkinFigure unavailable');
+  const dataUrl = await window.VerseSkinFigure.render(textureUrl, model || 'default');
+  _skinFigureCache.set(key, dataUrl);
+  return dataUrl;
+}
+
+/** 取账户当前皮肤的整张纹理（Tauri 下走 invoke 命令，浏览器回退到 HTTP 接口） */
+async function _fetchAccountSkinTexture(acc) {
+  const accUuid = (acc.uuid || '').replace(/-/g, '');
+  if (!accUuid) return '';
+  if (window.__TAURI__ && window.__TAURI__.core) {
+    try {
+      const r = await window.__TAURI__.core.invoke('get_skin_texture', {
+        uuid: accUuid,
+        serverUrl: acc.serverUrl || undefined,
+        username: acc.username || undefined
+      });
+      if (r && r.success && r.data_url) return r.data_url;
+    } catch (e) {}
+  }
+  return `/api/skin-texture?uuid=${accUuid}`
+    + (acc.serverUrl ? '&serverUrl=' + encodeURIComponent(acc.serverUrl) : '')
+    + (acc.username ? '&username=' + encodeURIComponent(acc.username) : '')
+    + `&_=${Date.now()}`;
+}
+
+// 皮肤卡片进入可视区域后才渲染，避免一次性创建大量 WebGL 上下文
+let _skinCardObserver = null;
+const _skinCardTasks = new WeakMap();
+
+function _whenSkinCardVisible(card, run) {
+  if (!('IntersectionObserver' in window)) { run(); return; }
+  if (!_skinCardObserver) {
+    _skinCardObserver = new IntersectionObserver((entries, obs) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        obs.unobserve(entry.target);
+        const task = _skinCardTasks.get(entry.target);
+        _skinCardTasks.delete(entry.target);
+        if (task) task();
+      });
+    }, { rootMargin: '140px' });
+  }
+  _skinCardTasks.set(card, run);
+  _skinCardObserver.observe(card);
+}
+
 /** 让账号的头像缓存失效，强制按最新皮肤重新拉取头像 */
 function _invalidateAvatarCache(acc) {
   if (!acc) return;
@@ -1346,6 +1416,43 @@ function setSkinBg(color) {
   });
 }
 
+/** 创建一张皮肤形象卡片：先占位，进入可视区域后再渲染全身正视图 */
+function _createSkinCard(opts) {
+  const card = document.createElement('div');
+  card.className = 'acct-skin-item is-loading' + (opts.active ? ' active' : '');
+  card.title = opts.title || '';
+  if (opts.onClick) card.onclick = opts.onClick;
+  if (opts.onContextMenu) card.oncontextmenu = opts.onContextMenu;
+
+  const img = document.createElement('img');
+  img.alt = opts.title || '';
+  img.decoding = 'async';
+  card.appendChild(img);
+
+  if (opts.active) {
+    const check = document.createElement('span');
+    check.className = 'acct-skin-check';
+    check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    card.appendChild(check);
+  }
+
+  _whenSkinCardVisible(card, () => {
+    Promise.resolve()
+      .then(opts.resolveTexture)
+      .then(textureUrl => {
+        if (!textureUrl) return '';
+        return getSkinFigureImage(textureUrl, opts.model);
+      })
+      .then(dataUrl => {
+        if (dataUrl) img.src = dataUrl;
+        card.classList.remove('is-loading');
+      })
+      .catch(() => { card.classList.remove('is-loading'); });
+  });
+
+  return card;
+}
+
 async function loadSkinSelector(acc) {
   const container = document.getElementById('acct-skin-grid');
   const section = document.getElementById('acct-detail-skins');
@@ -1364,29 +1471,16 @@ async function loadSkinSelector(acc) {
       const data = await resp.json();
       if (data.success && data.skins && data.skins.length > 0) {
         data.skins.forEach(skin => {
-          const div = document.createElement('div');
-          div.className = 'acct-skin-item';
-          div.title = `${skin.name}（点击应用到账户）`;
-          div.onclick = () => applyMsSkin(skin.id);
-          const canvas = document.createElement('canvas');
-          canvas.width = 8;
-          canvas.height = 8;
-          canvas.style.width = '100%';
-          canvas.style.height = '100%';
-          canvas.style.imageRendering = 'pixelated';
-          div.appendChild(canvas);
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = function() {
-            const ctx = canvas.getContext('2d');
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8);
-          };
-          const msFileUrl = `/api/ms-skins/file?accountId=${encodeURIComponent(acc.id)}&skinId=${encodeURIComponent(skin.id)}&_=${Date.now()}`;
-          _fetchDataUrl(msFileUrl).then(dUrl => { img.src = dUrl; });
-          // 长按或右键删除
-          div.oncontextmenu = (e) => { e.preventDefault(); deleteMsSkin(skin.id, skin.name); };
-          container.appendChild(div);
+          container.appendChild(_createSkinCard({
+            title: `${skin.name}（点击应用到账户）`,
+            model: skin.model || 'default',
+            onClick: () => applyMsSkin(skin.id),
+            // 长按或右键删除
+            onContextMenu: (e) => { e.preventDefault(); deleteMsSkin(skin.id, skin.name); },
+            resolveTexture: () => _fetchDataUrl(
+              `/api/ms-skins/file?accountId=${encodeURIComponent(acc.id)}&skinId=${encodeURIComponent(skin.id)}&_=${Date.now()}`
+            )
+          }));
         });
       } else {
         const empty = document.createElement('div');
@@ -1410,33 +1504,17 @@ async function loadSkinSelector(acc) {
       allSkins.push({ id: 'custom', name: '自定义', file: currentSkinFile, model: acc.skinModel || 'default' });
     }
     allSkins.forEach(skin => {
-      const div = document.createElement('div');
-      div.className = 'acct-skin-item' + (skin.file === currentSkinFile ? ' active' : '');
-      div.title = skin.name;
-      div.onclick = () => selectSkin(skin.id, skin.file);
-      const canvas = document.createElement('canvas');
-      canvas.width = 8;
-      canvas.height = 8;
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      canvas.style.imageRendering = 'pixelated';
-      div.appendChild(canvas);
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = function() {
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8);
-      };
-      let thumbUrl;
-      if (skin.id === 'custom') {
-        const accUuid = (acc.uuid || '').replace(/-/g, '');
-        thumbUrl = accUuid ? `/api/skin-head?uuid=${accUuid}&file=${encodeURIComponent(skin.file)}` : `/api/skin-head?id=steve`;
-      } else {
-        thumbUrl = `/api/skin-head?id=${skin.id}`;
-      }
-      _fetchDataUrl(thumbUrl).then(dUrl => { img.src = dUrl; });
-      container.appendChild(div);
+      const isCustom = skin.id === 'custom';
+      container.appendChild(_createSkinCard({
+        title: skin.name,
+        model: skin.model || 'default',
+        active: skin.file === currentSkinFile,
+        onClick: () => selectSkin(skin.id, skin.file),
+        // 内置皮肤直接读打包资源，自定义皮肤取账户当前纹理
+        resolveTexture: () => isCustom
+          ? _fetchAccountSkinTexture(acc)
+          : Promise.resolve(`img/${skin.file}`)
+      }));
     });
   } catch (e) {}
 }
