@@ -72,7 +72,8 @@
 .launch-overlay {
     position: fixed;
     inset: 0;
-    z-index: 10000;
+    /* 高于悬浮侧边栏胶囊（100000），启动全屏遮罩必须完整覆盖导航 */
+    z-index: 100002;
     background: var(--launch-bg, #ffffff);
     display: flex;
     align-items: center;
@@ -717,6 +718,11 @@
     max-width: 640px;
     margin: 0 auto;
 }
+/* 陶瓦 / EnderLink 联机页：内容区放宽以容纳放大的流程模块 */
+#page-lan-terracotta .lan-container,
+#page-lan-enderlink .lan-container {
+    max-width: 900px;
+}
 .lan-status-card {
     display: flex;
     align-items: center;
@@ -989,28 +995,33 @@
   margin-bottom: 8px;
 }
 .terracotta-ob-logo {
-  width: 56px;
-  height: 56px;
+  width: 112px;
+  height: 112px;
   object-fit: contain;
+}
+.terracotta-ob-icon svg {
+  width: 112px;
+  height: 112px;
+  color: var(--accent);
 }
 
 .terracotta-ob-title {
   margin: 4px 0 0;
-  font-size: 20px;
+  font-size: 30px;
   font-weight: 700;
   color: var(--text-primary);
 }
 .terracotta-ob-desc {
   margin: 0;
-  font-size: 13px;
+  font-size: 18px;
   color: var(--text-muted);
 }
 
 /* 下载图标按钮：圆形 + 呼吸光晕引导点击 */
 .terracotta-ob-dl {
-  margin-top: 22px;
-  width: 64px;
-  height: 64px;
+  margin-top: 30px;
+  width: 96px;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1033,7 +1044,7 @@
 .terracotta-ob-dl::before {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -8px;
   border-radius: 50%;
   border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
   animation: terracotta-dl-ring 1.8s ease-out infinite;
@@ -1043,25 +1054,25 @@
   100% { transform: scale(1.35); opacity: 0; }
 }
 .terracotta-ob-dl svg {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
 }
 
 /* 下载核心：转圈加载动画（与页面加载动画一致） */
 .terracotta-ob-spinner {
-  margin-top: 22px;
+  margin-top: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 .terracotta-ob-spinner .spinner {
-  width: 44px;
-  height: 44px;
+  width: 88px;
+  height: 88px;
   color: var(--accent);
 }
 .terracotta-ob-progress-text {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-muted);
 }
 
@@ -1078,16 +1089,16 @@
 .terracotta-instance-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 520px;
-  margin: 8px auto 0;
+  gap: 20px;
+  max-width: 820px;
+  margin: 16px auto 0;
 }
 .terracotta-instance-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  gap: 28px;
+  padding: 28px 32px;
+  border-radius: 32px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
@@ -1098,29 +1109,29 @@
   transform: translateY(-1px);
 }
 .terracotta-instance-icon {
-  width: 44px;
-  height: 44px;
+  width: 88px;
+  height: 88px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 24px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   flex-shrink: 0;
 }
 .terracotta-instance-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 48px;
+  height: 48px;
 }
 .terracotta-instance-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
 }
 .terracotta-instance-name {
-  font-size: 14px;
+  font-size: 28px;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1128,12 +1139,12 @@
   text-overflow: ellipsis;
 }
 .terracotta-instance-meta {
-  font-size: 12px;
+  font-size: 24px;
   color: var(--text-muted);
 }
 .terracotta-instance-dot {
-  width: 9px;
-  height: 9px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #22c55e;
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
@@ -1142,14 +1153,14 @@
 
 /* 无实例提示 */
 .terracotta-empty {
-  max-width: 520px;
-  margin: 10px auto 0;
-  padding: 26px 20px;
-  border-radius: 16px;
+  max-width: 820px;
+  margin: 20px auto 0;
+  padding: 52px 40px;
+  border-radius: 32px;
   border: 1px dashed var(--border-color);
   text-align: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 26px;
 }
 .terracotta-empty p {
   margin: 0;
@@ -1160,21 +1171,23 @@
 .terracotta-actions {
   display: flex;
   justify-content: center;
-  gap: 14px;
-  margin-top: 24px;
+  gap: 28px;
+  margin-top: 48px;
   flex-wrap: wrap;
 }
 .terracotta-actions .btn-lg {
-  min-width: 180px;
+  min-width: 360px;
+  padding: 24px 48px;
+  font-size: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 16px;
 }
 .terracotta-join-hint {
   width: 100%;
-  margin: 2px 0 0;
-  font-size: 12px;
+  margin: 4px 0 0;
+  font-size: 24px;
   color: var(--text-muted);
   text-align: center;
 }
@@ -1224,15 +1237,15 @@
 
 /* 分步流程面板 */
 .terracotta-flow {
-  max-width: 460px;
-  margin: 12px auto;
+  max-width: 820px;
+  margin: 16px auto;
 }
 .terracotta-step {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 28px 24px;
+  gap: 20px;
+  padding: 44px 36px;
   text-align: center;
   opacity: 0;
 }
@@ -1244,56 +1257,109 @@
   to { opacity: 1; transform: translateY(0); }
 }
 .terracotta-step-bigicon {
-  width: 84px;
-  height: 84px;
+  width: 168px;
+  height: 168px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 24px;
+  border-radius: 44px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .terracotta-step-bigicon svg {
-  width: 44px;
-  height: 44px;
+  width: 88px;
+  height: 88px;
 }
 .terracotta-step h3 {
   margin: 2px 0 0;
-  font-size: 17px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text-primary);
 }
 .terracotta-step-desc {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.8;
+  font-size: 17px;
+  line-height: 1.9;
   color: var(--text-muted);
 }
 .terracotta-step-text {
   margin: 0;
-  font-size: 13px;
+  font-size: 17px;
   color: var(--text-muted);
 }
 .terracotta-step .spinner {
-  width: 44px;
-  height: 44px;
+  width: 88px;
+  height: 88px;
   color: var(--accent);
 }
 .terracotta-port-hint {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  padding: 6px 16px;
+  padding: 10px 26px;
   border-radius: 999px;
+}
+
+/* 节点选择卡片（红石 / EnderLink 创建流程） */
+.terracotta-node-select {
+  width: 100%;
+  max-width: 640px;
+  text-align: left;
+}
+.terracotta-node-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  text-align: left;
+}
+.terracotta-node-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.terracotta-node-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.terracotta-node-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.terracotta-node-card.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.terracotta-node-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.terracotta-node-addr {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: monospace;
+  margin-top: 3px;
+  word-break: break-all;
+}
+.terracotta-node-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 10px 0;
+  text-align: center;
 }
 
 /* 下一步 / 关闭 圆形 SVG 按钮 */
 .terracotta-next-btn,
 .terracotta-close-btn {
-  margin-top: 10px;
-  width: 52px;
-  height: 52px;
+  margin-top: 16px;
+  width: 88px;
+  height: 88px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1304,12 +1370,12 @@
   cursor: pointer;
   padding: 0;
   transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.2s ease;
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .terracotta-next-btn svg,
 .terracotta-close-btn svg {
-  width: 22px;
-  height: 22px;
+  width: 38px;
+  height: 38px;
 }
 .terracotta-next-btn:hover,
 .terracotta-close-btn:hover {
@@ -1329,13 +1395,13 @@
 /* 房间码输入 */
 .terracotta-join-textarea {
   width: 100%;
-  min-height: 84px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  min-height: 128px;
+  padding: 18px 22px;
+  border-radius: 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 17px;
   font-family: inherit;
   resize: vertical;
   outline: none;
@@ -1349,21 +1415,21 @@
 .terracotta-info-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   width: 100%;
-  padding: 10px 14px;
-  border-radius: 12px;
+  padding: 16px 22px;
+  border-radius: 16px;
   background: var(--bg-hover);
 }
 .terracotta-info-label {
-  font-size: 12px;
+  font-size: 16px;
   color: var(--text-muted);
   flex-shrink: 0;
 }
 .terracotta-info-value {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
   word-break: break-all;
@@ -1371,9 +1437,9 @@
 }
 .terracotta-copy-btn {
   flex-shrink: 0;
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 8px;
+  font-size: 15px;
+  padding: 8px 18px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
   border: none;
@@ -1389,20 +1455,20 @@
   transform: translateY(8px);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
 }
 .terracotta-ob-done--show {
   animation: terracotta-done-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .terracotta-ob-done h2 {
   margin: 0;
-  font-size: 19px;
+  font-size: 30px;
   font-weight: 700;
   color: var(--accent);
 }
 .terracotta-ob-check {
-  width: 26px;
-  height: 26px;
+  width: 52px;
+  height: 52px;
   color: var(--accent);
   flex-shrink: 0;
 }
