@@ -1,16 +1,7 @@
 /**
  * @file console-log.js
- * @description 控制台日志 - 游戏日志展示、清空、导出
+ * @description 游戏日志导出（启动失败提示与反馈页共用）
  */
-function setupConsole() {
-  const clearBtn = document.getElementById('clear-log-btn');
-  const consoleOutput = document.getElementById('console-output');
-  if (!clearBtn || !consoleOutput) return;
-  clearBtn.addEventListener('click', () => {
-    consoleOutput.innerHTML = '<p class="console-wait">日志已清空</p>';
-  });
-}
-
 async function exportGameLog() {
   try {
     const versionId = typeof currentSettingsVersionId !== 'undefined' ? currentSettingsVersionId
