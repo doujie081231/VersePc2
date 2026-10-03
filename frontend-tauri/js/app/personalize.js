@@ -243,9 +243,25 @@ function applyLiquidGlassEffectValue(enabled) {
   } else {
     document.documentElement.removeAttribute('data-liquid-glass');
   }
+  syncLiquidGlassSurfaces(enabled);
   window.electronAPI.store.set('versepc_liquid_glass', enabled ? '1' : '0').catch(() => {});
   const st = getPersonalizeState();
   if (st) st.liquidGlass = !!enabled;
+}
+
+/** 侧边栏胶囊与左上角圆形开关按钮：开启时挂上 SDF 折射，关闭时摘除 */
+function syncLiquidGlassSurfaces(enabled) {
+  const engine = window.LiquidGlass;
+  if (!engine || !engine.supported) return;
+  const targets = [
+    [document.querySelector('.sidebar'), { depth: 0.5, strength: 0.34, blur: 1.5 }],
+    [document.getElementById('sidebar-toggle-btn'), { depth: 0.5, strength: 0.3, blur: 1.2 }]
+  ];
+  targets.forEach(([element, options]) => {
+    if (!element) return;
+    if (enabled) engine.apply(element, options);
+    else engine.remove(element);
+  });
 }
 
 // ============== 壁纸：DOM 兼容层（保留给启动恢复等非 Vue 调用） ==============
