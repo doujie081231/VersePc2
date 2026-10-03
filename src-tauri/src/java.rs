@@ -1557,6 +1557,7 @@ async fn install_java_async(session_id: String, major_version: u64) {
                 obj.insert("message".to_string(), json!($msg));
                 obj.insert("completedAt".to_string(), json!(utils::now_iso()));
             }
+            eprintln!("[java-install] 失败 (session={}): {}", session_id, $msg);
             write_java_status(&session_id, &err);
             clear_cancelled_session(&session_id);
             return;
@@ -1927,13 +1928,20 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
                 .and_then(|v| v.as_u64())
                 .or_else(|| data.get("majorVersion").and_then(|v| v.as_u64()))
                 .unwrap_or(17);
+            // 版本上限：1.12.2 等旧版本（launchwrapper）只允许 Java 8，
+            // 本地已有更高版本 Java 时不能当作"已满足"，否则自动下载会被跳过
+            let max_version = data
+                .get("maxVersion")
+                .and_then(|v| v.as_u64())
+                .filter(|v| *v < 999)
+                .unwrap_or(999);
 
-            // 1. 先扫描本地已有 Java，满足要求直接返回，不重复下载
+            // 1. 先扫描本地已有 Java，满足要求（在需求范围内）直接返回，不重复下载
             let java_list = detect_all();
-            if let Some(j) = java_list
-                .iter()
-                .find(|j| j.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0) >= required_version)
-            {
+            if let Some(j) = java_list.iter().find(|j| {
+                let mv = j.get("majorVersion").and_then(|v| v.as_u64()).unwrap_or(0);
+                mv >= required_version && mv <= max_version
+            }) {
                 return Some(ApiResult::ok(json!({
                     "success": true,
                     "installed": false,
