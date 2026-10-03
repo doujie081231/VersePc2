@@ -9,7 +9,11 @@
 const PageLanEnderlink = {
   name: 'PageLanEnderlink',
   data() {
-    return {};
+    return {
+      enderlinkNodes: [],
+      enderlinkSelectedIdx: 0,
+      enderlinkLoading: true
+    };
   },
   computed: {
     // 运行中的游戏实例（与首页共用共享响应式 store）
@@ -17,12 +21,33 @@ const PageLanEnderlink = {
       return window.VersePCGameStore ? window.VersePCGameStore.instances : [];
     }
   },
+  mounted() {
+    this.loadEnderlinkNodes();
+  },
   methods: {
     formatElapsed(inst) {
       const elapsed = Math.floor(((window.VersePCGameStore.now || Date.now()) - inst.startTime) / 1000);
       const mins = Math.floor(elapsed / 60);
       const secs = elapsed % 60;
       return mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`;
+    },
+    async loadEnderlinkNodes() {
+      try {
+        const r = await window.electronAPI.enderlinkOnline.getNodes();
+        const nodes = (r && r.ok && r.nodes) ? r.nodes : [];
+        this.enderlinkNodes = nodes;
+        window.VersePC.enderlinkNodes = nodes;
+      } catch (e) {
+        this.enderlinkNodes = [];
+        window.VersePC.enderlinkNodes = [];
+      } finally {
+        this.enderlinkLoading = false;
+      }
+    },
+    enderlinkSelectNode(i) {
+      if (i < 0 || i >= this.enderlinkNodes.length) return;
+      this.enderlinkSelectedIdx = i;
+      window.VersePC.enderlinkSelectedNode = this.enderlinkNodes[i];
     },
     host() {
       if (typeof enderlinkHostStep1 === 'function') enderlinkHostStep1();
@@ -79,7 +104,7 @@ const PageLanEnderlink = {
 
               <div class="terracotta-actions">
                 <button class="btn btn-primary btn-lg" @click="host()" :disabled="gameInstances.length === 0" title="创建房间">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>
                   创建房间
                 </button>
                 <p class="terracotta-join-hint">朋友在游戏内直接输入你分享的联机地址即可加入</p>
@@ -92,6 +117,17 @@ const PageLanEnderlink = {
                 <h3>启动游戏并开放局域网</h3>
                 <p class="terracotta-step-desc">1. 请先启动游戏并进入存档<br>2. 按 Esc 打开菜单，点击「对局域网开放」<br>3. 将端口设置为 <b>25565</b></p>
                 <div class="terracotta-port-hint">端口号：25565</div>
+                <div class="terracotta-node-select">
+                  <div class="terracotta-node-title">选择中转节点</div>
+                  <div v-if="enderlinkNodes.length" class="terracotta-node-grid">
+                    <div v-for="(n, i) in enderlinkNodes" :key="n.id" class="terracotta-node-card"
+                         :class="{ active: i === enderlinkSelectedIdx }" @click="enderlinkSelectNode(i)">
+                      <div class="terracotta-node-name">{{ n.name }}</div>
+                      <div class="terracotta-node-addr">{{ n.frpIp }}:{{ n.frpPort }}</div>
+                    </div>
+                  </div>
+                  <div v-else class="terracotta-node-empty">{{ enderlinkLoading ? '正在加载节点列表...' : '暂无可用节点' }}</div>
+                </div>
                 <button class="terracotta-next-btn" id="enderlink-host-next" onclick="enderlinkHostNext()" disabled title="请先启动游戏并开放局域网">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
