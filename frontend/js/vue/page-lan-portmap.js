@@ -9,7 +9,11 @@
 const PageLanPortmap = {
   name: 'PageLanPortmap',
   data() {
-    return {};
+    return {
+      redstoneNodes: [],
+      redstoneSelectedIdx: 0,
+      redstoneLoading: true
+    };
   },
   computed: {
     // 运行中的游戏实例（与首页共用共享响应式 store）
@@ -17,12 +21,33 @@ const PageLanPortmap = {
       return window.VersePCGameStore ? window.VersePCGameStore.instances : [];
     }
   },
+  mounted() {
+    this.loadRedstoneNodes();
+  },
   methods: {
     formatElapsed(inst) {
       const elapsed = Math.floor(((window.VersePCGameStore.now || Date.now()) - inst.startTime) / 1000);
       const mins = Math.floor(elapsed / 60);
       const secs = elapsed % 60;
       return mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`;
+    },
+    async loadRedstoneNodes() {
+      try {
+        const r = await window.electronAPI.redstoneOnline.getServers();
+        const nodes = (r && r.ok && r.servers) ? r.servers : [];
+        this.redstoneNodes = nodes;
+        window.VersePC.redstoneNodes = nodes;
+      } catch (e) {
+        this.redstoneNodes = [];
+        window.VersePC.redstoneNodes = [];
+      } finally {
+        this.redstoneLoading = false;
+      }
+    },
+    redstoneSelectNode(i) {
+      if (i < 0 || i >= this.redstoneNodes.length) return;
+      this.redstoneSelectedIdx = i;
+      window.VersePC.redstoneSelectedNode = this.redstoneNodes[i];
     },
     host() {
       if (typeof redstoneHostStep1 === 'function') redstoneHostStep1();
@@ -92,6 +117,17 @@ const PageLanPortmap = {
                 <h3>启动游戏并开放局域网</h3>
                 <p class="terracotta-step-desc">1. 请先启动游戏并进入存档<br>2. 按 Esc 打开菜单，点击「对局域网开放」<br>3. 将端口设置为 <b>25565</b></p>
                 <div class="terracotta-port-hint">端口号：25565</div>
+                <div class="terracotta-node-select">
+                  <div class="terracotta-node-title">选择中转节点</div>
+                  <div v-if="redstoneNodes.length" class="terracotta-node-grid">
+                    <div v-for="(n, i) in redstoneNodes" :key="n.address" class="terracotta-node-card"
+                         :class="{ active: i === redstoneSelectedIdx }" @click="redstoneSelectNode(i)">
+                      <div class="terracotta-node-name">{{ n.name }}</div>
+                      <div class="terracotta-node-addr">{{ n.address }}</div>
+                    </div>
+                  </div>
+                  <div v-else class="terracotta-node-empty">{{ redstoneLoading ? '正在加载节点列表...' : '暂无可用节点' }}</div>
+                </div>
                 <button class="terracotta-next-btn" id="redstone-host-next" onclick="redstoneHostNext()" disabled title="请先启动游戏并开放局域网">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
