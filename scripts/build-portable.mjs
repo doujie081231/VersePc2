@@ -3,7 +3,7 @@
 // 构建产物默认放项目内（src-tauri/target 与 dist）。
 // 如需迁移到其它盘（如 E 盘省 C 盘空间），设置环境变量 VERSEPC2_BUILD_ROOT 指向目标目录即可。
 import { execSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, existsSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, mkdirSync, existsSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,21 +62,85 @@ mkdirSync(portableDir, { recursive: true });
 // 升级时更新器把新包覆盖到正在运行的 exe 文件名上，使安装后的 exe 始终是 VersePC2.exe。
 copyFileSync(exeSrc, join(portableDir, 'VersePC2.exe'));
 
-// 5. 复制运行所需的配套 DLL（GNU/MinGW 构建动态链接 WebView2Loader.dll，缺失会导致无法启动）
-//    优先使用仓库权威副本（src-tauri/WebView2Loader.dll），再依次回退 cargo target、项目 target、旧便携目录；
-//    全部找不到则中止打包，避免产出缺 DLL 的坏包
-const dllSrc = firstExisting([
-  join(projectRoot, 'src-tauri', 'WebView2Loader.dll'),
-  join(cargoTargetDir, 'release', 'WebView2Loader.dll'),
-  join(projectRoot, 'src-tauri', 'target', 'release', 'WebView2Loader.dll'),
-  join(portableDir, 'WebView2Loader.dll'),
-]);
-if (!dllSrc) {
-  console.error('[build-portable] 错误：未找到 WebView2Loader.dll（GNU 构建必需），已中止打包。请将 WebView2Loader.dll 放到 src-tauri/ 后重试');
-  process.exit(1);
+// 5. 配套 WebView2Loader.dll（可选）
+//    - MSVC 构建会把 WebView2Loader 静态链接进 exe（import 表不含 WebView2Loader.dll），便携包只需单个 exe；
+//    - GNU/MinGW 构建是动态链接，必须随包附带 WebView2Loader.dll，否则无法启动。
+//    下面探测 exe 是否真的依赖该 DLL：依赖则要求并复制副本，不依赖（已静态内嵌）则跳过，实现单文件便携包。
+function exeImports(file, dllName) {
+  try {
+    // 定位导入表检测工具：优先 PATH 上的 dumpbin，其次 VSBuildTools/Visual Studio 下的 dumpbin，再次 MinGW objdump
+    function findDumpbin() {
+      try {
+        const fromPath = execSync('where.exe dumpbin', { encoding: 'utf8', shell: true })
+          .split(/\r?\n/).find(l => l.trim() && l.includes('dumpbin.exe'));
+        if (fromPath) return fromPath.trim();
+      } catch { /* PATH 上无 dumpbin */ }
+      // 在常见 VS 安装根里递归查找 dumpbin.exe（Hostx64\x64 优先即最新版本之一）
+      const roots = [
+        process.env.VSINSTALLDIR,
+        'D:\\VerseTools\\VSBuildTools',
+        'C:\\Program Files\\Microsoft Visual Studio',
+        'C:\\Program Files (x86)\\Microsoft Visual Studio',
+      ].filter(Boolean);
+      for (const root of roots) {
+        const results = [];
+        (function walk(dir, depth) {
+          if (depth > 12) return;
+          let entries;
+          try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+          for (const e of entries) {
+            if (e.name.toLowerCase() === 'dumpbin.exe') results.push(join(dir, e.name));
+            if (e.isDirectory()) walk(join(dir, e.name), depth + 1);
+          }
+        })(root, 0);
+        results.sort((a, b) => (b.includes('Hostx64\\x64') ? 1 : 0) - (a.includes('Hostx64\\x64') ? 1 : 0));
+        if (results.length) return results[0];
+      }
+      return null;
+    }
+    const dumpbin = findDumpbin();
+    const mingwObjdump = join(
+      process.env.VERSEPC2_MINGW_BIN || join(projectRoot, '.tools', 'msys64', 'mingw64', 'bin'),
+      'objdump.exe'
+    );
+    let out = null;
+    if (dumpbin) {
+      out = execSync(`"${dumpbin}" /dependents "${file}"`, {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024,
+      });
+    } else if (existsSync(mingwObjdump)) {
+      out = execSync(`"${mingwObjdump}" -p "${file}"`, {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024,
+      });
+    } else {
+      // 无可用的导入表检测工具时不硬判；由调用方决定如何处理（此处视为未依赖）。
+      return false;
+    }
+    return new RegExp(`\\b${dllName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(out || '');
+  } catch {
+    return false;
+  }
 }
-copyFileSync(dllSrc, join(portableDir, 'WebView2Loader.dll'));
-console.log(`[build-portable] 已复制配套 DLL: ${dllSrc}`);
+
+const exeNeedsLoader = exeImports(exeSrc, 'WebView2Loader.dll');
+if (exeNeedsLoader) {
+  // 动态链接构建：优先仓库权威副本（src-tauri/WebView2Loader.dll），再回退 cargo target、项目 target、旧便携目录；
+  // 找不到则中止打包，避免产出缺 DLL 的坏包
+  const dllSrc = firstExisting([
+    join(projectRoot, 'src-tauri', 'WebView2Loader.dll'),
+    join(cargoTargetDir, 'release', 'WebView2Loader.dll'),
+    join(projectRoot, 'src-tauri', 'target', 'release', 'WebView2Loader.dll'),
+    join(portableDir, 'WebView2Loader.dll'),
+  ]);
+  if (!dllSrc) {
+    console.error('[build-portable] 错误：exe 依赖 WebView2Loader.dll 但未找到该 DLL，已中止打包。请将 WebView2Loader.dll 放到 src-tauri/ 后重试');
+    process.exit(1);
+  }
+  copyFileSync(dllSrc, join(portableDir, 'WebView2Loader.dll'));
+  console.log(`[build-portable] 已复制配套 DLL: ${dllSrc}`);
+} else {
+  console.log('[build-portable] WebView2Loader 已静态内嵌于 exe，便携包输出单文件（不含配套 DLL）');
+}
 
 // 6. 场景渲染器组件包（可选）：约 314MB，不进入主便携包。
 //    设置 VERSEPC2_BUILD_RENDERER_PACKAGE=1 时，把渲染器闭包打包为
