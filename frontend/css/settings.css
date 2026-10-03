@@ -21,6 +21,8 @@
     flex-direction: column;
     gap: 16px;
     max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .form-group {
@@ -139,55 +141,387 @@
     border-color: var(--accent);
 }
 
-/* 控制台 - 日志输出区域、日志行配色 */
-.console-output {
-    background: var(--bg-primary);
-    border-radius: var(--radius);
-    padding: 16px;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
-    line-height: 1.6;
-    height: calc(100vh - var(--titlebar-height) - var(--launchbar-height) - 140px);
-    overflow-y: auto;
+/* 问题反馈页 - 类型选择、附件、环境信息、提交区 */
+.feedback-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.fb-inline-icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    vertical-align: -2px;
+}
+
+/* 反馈类型 - 三选一卡片 */
+.fb-type-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.fb-type-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 14px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border);
-}
-
-.console-output::-webkit-scrollbar {
-    width: 6px;
-}
-
-.console-output::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.console-output::-webkit-scrollbar-thumb {
-    background: var(--bg-active);
-    border-radius: 3px;
-}
-
-.console-wait {
-    color: var(--text-muted);
-}
-
-.console-line {
+    background: var(--bg-tertiary);
     color: var(--text-secondary);
-    word-break: break-all;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition), color var(--transition);
 }
 
-.console-line.error {
-    color: var(--red);
+.fb-type-btn svg {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+    transition: color var(--transition);
 }
 
-.console-line.warn {
-    color: var(--orange);
+.fb-type-btn:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
-.console-line.info {
+.fb-type-btn.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-tertiary));
+    color: var(--text-primary);
+}
+
+.fb-type-btn.active svg {
     color: var(--accent);
 }
 
-.console-line.success {
-    color: var(--green);
+.fb-type-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.fb-type-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.fb-required {
+    color: var(--red);
+    margin-left: 2px;
+}
+
+/* 问题分类 - 三选一卡片（启动/下载/其他） */
+.fb-category-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.fb-category-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+
+.fb-category-btn svg {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+    transition: color var(--transition);
+}
+
+.fb-category-btn:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.fb-category-btn.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-tertiary));
+    color: var(--text-primary);
+}
+
+.fb-category-btn.active svg {
+    color: var(--accent);
+}
+
+.fb-category-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.fb-category-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* 日志附件 - 自动收集 */
+.fb-auto-log-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+}
+
+.fb-auto-log-tip {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-radius: var(--radius);
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border);
+}
+
+.fb-auto-log-tip.loading {
+    color: var(--accent);
+}
+
+.fb-auto-log-tip.empty {
+    color: var(--text-muted);
+}
+
+.fb-warn {
+    color: var(--red);
+}
+
+.fb-log-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    font-size: 10px;
+    line-height: 16px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+}
+
+.fb-log-tag.is-auto {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+}
+
+/* 反馈内容 */
+.fb-textarea {
+    resize: vertical;
+    min-height: 140px;
+    line-height: 1.6;
+    font-family: inherit;
+}
+
+.fb-counter {
+    text-align: right;
+}
+
+/* 附件 */
+.fb-drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 24px 16px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+}
+
+.fb-drop:hover,
+.fb-drop.drag-over {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-tertiary));
+}
+
+.fb-drop-icon {
+    width: 26px;
+    height: 26px;
+    color: var(--text-muted);
+}
+
+.fb-drop-title {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.fb-drop-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.fb-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.fb-file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+}
+
+.fb-file-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.fb-file-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fb-file-size {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.fb-file-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+
+.fb-file-remove svg {
+    width: 14px;
+    height: 14px;
+}
+
+.fb-file-remove:hover {
+    background: color-mix(in srgb, var(--red) 18%, transparent);
+    color: var(--red);
+}
+
+/* 环境信息 */
+.fb-env-list {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.fb-env-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    font-size: 12px;
+}
+
+.fb-env-row + .fb-env-row {
+    border-top: 1px solid var(--border);
+}
+
+.fb-env-key {
+    width: 96px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.fb-env-value {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fb-env-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 人机验证 */
+.fb-captcha-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fb-captcha-input {
+    flex: 1;
+    letter-spacing: 4px;
+}
+
+.fb-captcha-image {
+    width: 120px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    overflow: hidden;
+}
+
+/* 提交区 */
+.fb-submit-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.fb-submit-hint {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fb-submit-hint.is-error {
+    color: var(--red);
 }
 
 /* Toast 通知 - 顶部通知条 */
