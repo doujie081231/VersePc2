@@ -280,8 +280,11 @@ async fn download_with_mirror_inner(
                 if url != original_url {
                     mirror::mirror_failed();
                 }
-                // 记录坏源，后续下载跳过该 host
-                mirror::mark_bad_host(url);
+                // 仅传输层错误（连接失败/超时）才记录坏源；HTTP 4xx/5xx、429 限流、
+                // 校验失败等是文件级或限流问题，源本身仍可用，不拉黑
+                if mirror::is_transport_error(&last_err) {
+                    mirror::mark_bad_host(url);
+                }
                 // 清理半成品
                 let _ = tokio::fs::remove_file(dest).await;
                 let _ = tokio::fs::remove_file(dest.with_extension("downloading")).await;
