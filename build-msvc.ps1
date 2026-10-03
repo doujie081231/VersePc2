@@ -1,17 +1,51 @@
-# build-msvc.ps1 — 导入 MSVC 环境并执行便携版打包（MSVC 单文件便携包）
-$vcvars = 'F:\vs\VC\Auxiliary\Build\vcvars64.bat'
-$raw = & cmd /c "call `"$vcvars`" >nul 2>&1 && set" 2>$null
-foreach ($line in $raw) {
-  if ($line -match '^(.*?)=(.*)$') {
-    Set-Item -Path "Env:$($matches[1])" -Value $matches[2]
-  }
-}
-$env:RUSTUP_HOME = 'F:\versepc2\.tools\rustup'
-$env:CARGO_HOME = 'F:\versepc2\.tools\cargo'
-$env:PATH = 'F:\tools\node\node-v20.19.6-win-x64;F:\versepc2\.tools\rustup\toolchains\stable-x86_64-pc-windows-msvc\bin;F:\versepc2\.tools\cargo\bin;' + $env:PATH
-$env:CARGO_TARGET_DIR = 'F:\versepc2\.target-msvc'
-$env:VERSEPC2_TARGET_DIR = 'F:\versepc2\.target-msvc'
-$env:VERSEPC2_BUILD_ROOT = 'F:\versepc2'
-Write-Host '[build-msvc] MSVC 环境已导入，开始打包...'
-node 'F:\versepc2\scripts\build-portable.mjs'
+$MSVC = 'D:\VerseTools\VSBuildTools\VC\Tools\MSVC\14.44.35207'
+$SDK  = 'C:\Program Files (x86)\Windows Kits\10'
+$SDKV = '10.0.26100.0'
+
+$env:VCINSTALLDIR = 'D:\VerseTools\VSBuildTools\VC'
+$env:WindowsSdkDir = "$SDK\"
+$env:WindowsSdkVersion = "$SDKV\"
+$env:UniversalCRTSdkDir = "$SDK\"
+
+$bins = @(
+  "$MSVC\bin\Hostx64\x64",
+  "$SDK\bin\$SDKV\x64",
+  'D:\VerseTools\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin',
+  'D:\VerseTools\.cargo\bin',
+  'D:\VerseTools\node-v22.23.2-win-x64'
+)
+$env:PATH = ($bins + $env:PATH) -join ';'
+
+$inc = @(
+  "$MSVC\include",
+  "$MSVC\atlmfc\include",
+  "$SDK\Include\$SDKV\ucrt",
+  "$SDK\Include\$SDKV\um",
+  "$SDK\Include\$SDKV\shared",
+  "$SDK\Include\$SDKV\winrt"
+)
+$env:INCLUDE = $inc -join ';'
+
+$lib = @(
+  "$MSVC\lib\x64",
+  "$MSVC\atlmfc\lib\x64",
+  "$SDK\Lib\$SDKV\ucrt\x64",
+  "$SDK\Lib\$SDKV\um\x64"
+)
+$env:LIB = $lib -join ';'
+$env:LIBPATH = $lib -join ';'
+
+$env:RUSTUP_HOME = 'D:\VerseTools\.rustup'
+$env:CARGO_HOME  = 'D:\VerseTools\.cargo'
+$env:CARGO_TARGET_DIR = 'E:\VerseTools\.verse-target'
+$env:VERSEPC2_TARGET_DIR = 'E:\VerseTools\.verse-target'
+$env:VERSEPC2_BUILD_ROOT = 'D:\Verse Explorer X\versepc2'
+
+Write-Host '[build-msvc] MSVC env imported'
+if (Get-Command cl.exe -ErrorAction SilentlyContinue) { Write-Host "cl: OK" } else { Write-Host "cl: MISSING" }
+if (Get-Command cargo.exe -ErrorAction SilentlyContinue) { Write-Host "cargo: OK" } else { Write-Host "cargo: MISSING" }
+if (Get-Command node.exe -ErrorAction SilentlyContinue) { Write-Host "node: OK" } else { Write-Host "node: MISSING" }
+
+Set-Location 'D:\Verse Explorer X\versepc2'
+node 'D:\Verse Explorer X\versepc2\scripts\build-portable.mjs'
 exit $LASTEXITCODE
