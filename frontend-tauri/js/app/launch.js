@@ -1178,7 +1178,7 @@ function startGameLogStream() {
   if (window._versepcGameExitUnlisten) { try { window._versepcGameExitUnlisten(); } catch(_) {} window._versepcGameExitUnlisten = null; }
 
   const consoleOutput = document.getElementById('console-output');
-  consoleOutput.innerHTML = '';
+  if (consoleOutput) consoleOutput.innerHTML = '';
 
   // 处理单行日志的通用函数
   function handleLogLine(line) {
@@ -1292,6 +1292,7 @@ function startGameLogStream() {
 
 function appendConsoleLine(text, type = '') {
   const consoleOutput = document.getElementById('console-output');
+  if (!consoleOutput) return;
   const line = document.createElement('div');
   line.className = `console-line ${type}`;
   line.textContent = text;
