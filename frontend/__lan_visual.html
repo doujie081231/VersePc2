@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>lan-visual-loading</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/themes.css">
+<link rel="stylesheet" href="css/launch.css">
+<link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/redstone.css">
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .harness { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+  .shot { background: #fff; border: 1px solid #d0d3d8; border-radius: 10px; padding: 12px; }
+  .shot > .cap { font: 600 12px system-ui; color: #444; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #ccc; }
+  .shot .page { display: block !important; }
+  .shot .terracotta-ob, .shot .terracotta-step { opacity: 1 !important; transform: none !important; }
+  #report { font: 12px/1.6 Consolas, monospace; background: #111; color: #b6f7c1; padding: 14px; border-radius: 10px; white-space: pre-wrap; }
+  #report b { color: #fff; }
+</style>
+</head>
+<body>
+<div id="report">measuring...</div>
+<div class="harness" id="h"></div>
+
+<script src="js/vue.global.prod.js"></script>
+<script src="js/rose-loader.js"></script>
+<script src="js/vue/page-lan-terracotta.js"></script>
+<script src="js/vue/page-lan-enderlink.js"></script>
+<script>
+window.VersePCGameStore = { instances: [], now: Date.now() };
+window.__RESULT__ = null;
+
+const CASES = [
+  { name: 'terracotta-onboarding', comp: 'PageLanTerracotta', show: ['terracotta-onboarding'], probe: '#terracotta-onboarding' },
+  { name: 'terracotta-host-step1',  comp: 'PageLanTerracotta', show: ['terracotta-main', 'terracotta-host-panel', 'terracotta-host-step1'], probe: '#terracotta-host-step1' },
+  { name: 'terracotta-host-step2',  comp: 'PageLanTerracotta', show: ['terracotta-main', 'terracotta-host-panel', 'terracotta-host-step2'], probe: '#terracotta-host-step2' },
+  { name: 'terracotta-host-step3',  comp: 'PageLanTerracotta', show: ['terracotta-main', 'terracotta-host-panel', 'terracotta-host-step3', 'terracotta-hint'], probe: '#terracotta-host-step3' },
+  { name: 'enderlink-onboarding',   comp: 'PageLanEnderlink',  show: ['enderlink-onboarding'], probe: '#enderlink-onboarding' },
+  { name: 'enderlink-host-step1',   comp: 'PageLanEnderlink',  show: ['enderlink-main', 'enderlink-host-panel', 'enderlink-host-step1'], probe: '#enderlink-host-step1' },
+  { name: 'enderlink-host-step2',   comp: 'PageLanEnderlink',  show: ['enderlink-main', 'enderlink-host-panel', 'enderlink-host-step2'], probe: '#enderlink-host-step2' },
+  { name: 'enderlink-host-step3',   comp: 'PageLanEnderlink',  show: ['enderlink-main', 'enderlink-host-panel', 'enderlink-host-step3', 'enderlink-hint'], probe: '#enderlink-host-step3' }
+];
+
+function measure(el) {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  return {
+    tag: el.tagName.toLowerCase(),
+    w: Math.round(r.width), h: Math.round(r.height),
+    border: cs.borderTopWidth + '/' + cs.borderLeftWidth + ' ' + cs.borderTopColor,
+    radius: cs.borderRadius,
+    bg: cs.backgroundColor,
+    color: cs.color
+  };
+}
+
+const out = [];
+const host = document.getElementById('h');
+
+for (const c of CASES) {
+  const box = document.createElement('div');
+  box.className = 'shot';
+  const cap = document.createElement('div');
+  cap.className = 'cap';
+  cap.textContent = c.name;
+  const mount = document.createElement('div');
+  mount.className = 'page';
+  box.appendChild(cap); box.appendChild(mount); host.appendChild(box);
+
+  const rec = { name: c.name };
+  try {
+    const Comp = window.VersePC[c.comp];
+    Vue.createApp(Comp).mount(mount);
+
+    mount.querySelectorAll('#terracotta-onboarding,#terracotta-main,#enderlink-onboarding,#enderlink-main').forEach(e => e.style.display = 'none');
+    c.show.forEach(id => { const e = mount.querySelector('#' + id); if (e) e.style.display = ''; });
+
+    const root = mount.querySelector(c.probe) || mount;
+    rec.root = measure(root);
+    rec.flow = measure(mount.querySelector('.terracotta-flow'));
+    rec.obBlock = measure(mount.querySelector('.terracotta-ob'));
+    rec.obIcon = measure(mount.querySelector('.terracotta-ob-icon'));
+    rec.obIconSvg = measure(mount.querySelector('.terracotta-ob-icon > svg'));
+    rec.obIconImg = measure(mount.querySelector('.terracotta-ob-icon > img'));
+    rec.bigicon = measure(root.querySelector('.terracotta-step-bigicon'));
+    rec.spinner = measure(root.querySelector('.spinner'));
+    rec.spinnerSvg = measure(root.querySelector('.spinner > svg'));
+    rec.spinnerSizeVar = (() => {
+      const s = root.querySelector('.spinner');
+      if (!s) return null;
+      const cs = getComputedStyle(s);
+      return { width: cs.width, height: cs.height, display: cs.display, offsetW: s.offsetWidth };
+    })();
+    rec.closeBtn = measure(root.querySelector('.terracotta-close-btn'));
+    rec.nextBtn = measure(root.querySelector('.terracotta-next-btn'));
+    rec.hint = measure(mount.querySelector('.lan-hint-bar'));
+    rec.hintBorderLeft = (() => {
+      const e = mount.querySelector('.lan-hint-bar');
+      if (!e) return null;
+      const cs = getComputedStyle(e);
+      return { width: cs.borderLeftWidth, style: cs.borderLeftStyle, color: cs.borderLeftColor };
+    })();
+  } catch (e) {
+    rec.error = String(e && e.message || e);
+  }
+  out.push(rec);
+}
+
+window.__RESULT__ = out;
+
+// 把测量结果渲染成可见文本，便于截图核对
+const lines = [];
+for (const r of out) {
+  lines.push('<b>' + r.name + '</b>');
+  if (r.error) { lines.push('  ERROR ' + r.error); continue; }
+  const f = (m) => m ? (m.w + 'x' + m.h) : 'null';
+  lines.push('  step/root      : ' + f(r.root));
+  lines.push('  flow(模块)     : ' + f(r.flow));
+  lines.push('  ob block       : ' + f(r.obBlock));
+  lines.push('  ob icon        : ' + f(r.obIcon) + '  svg=' + f(r.obIconSvg) + '  img=' + f(r.obIconImg));
+  lines.push('  bigicon        : ' + f(r.bigicon));
+  lines.push('  spinner(div)   : ' + f(r.spinner) + '  ' + JSON.stringify(r.spinnerSizeVar));
+  lines.push('  spinner(svg)   : ' + f(r.spinnerSvg));
+  lines.push('  next/close btn : ' + f(r.nextBtn) + ' / ' + f(r.closeBtn));
+  lines.push('  hint bar       : ' + f(r.hint) + '  borderLeft=' + JSON.stringify(r.hintBorderLeft));
+  lines.push('');
+}
+document.getElementById('report').innerHTML = lines.join('\n');
+document.title = 'lan-visual-done';
+</script>
+</body>
+</html>
