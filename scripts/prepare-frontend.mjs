@@ -66,6 +66,7 @@ const resources = [
   'assets',
   'img',
   'images',
+  'models',
   'fonts',
   'v-island',
   'resources',
