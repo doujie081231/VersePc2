@@ -1484,6 +1484,46 @@ fn collect_jvm_args_from_json(
         }
         i += 1;
     }
+
+    // 修复 Forge JSON 中常见的参数排列缺陷：
+    // --add-opens/--add-exports 后面可能跟多个 value，但第二个 value 缺少前缀，
+    // 导致 JVM 把它误识别为主类。这里自动为裸的 module/package=target 参数补充前缀。
+    normalize_module_flags(jvm_args);
+}
+
+/// 判断字符串是否像 module/package=target 格式的 JPMS 值
+fn looks_like_module_value(s: &str) -> bool {
+    !s.starts_with('-') && s.contains('/') && s.contains('=')
+}
+
+/// 规范化 JPMS 模块标志：为缺少前缀的 module/package=target 参数
+/// 自动补充前面最近出现的 --add-opens 或 --add-exports
+fn normalize_module_flags(jvm_args: &mut Vec<String>) {
+    let mut last_flag: Option<String> = None;
+    let mut i = 0;
+    while i < jvm_args.len() {
+        let arg = &jvm_args[i];
+        if arg == "--add-opens" || arg == "--add-exports" {
+            last_flag = Some(arg.clone());
+            // 正常情况下 flag 后面跟 value，跳过两个
+            if i + 1 < jvm_args.len() {
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+        // 检测裸的 module value（不是 flag，且格式像 module/package=target）
+        if looks_like_module_value(arg) {
+            if let Some(flag) = &last_flag {
+                let value = arg.clone();
+                jvm_args.insert(i, flag.clone());
+                i += 2;
+                continue;
+            }
+        }
+        i += 1;
+    }
 }
 
 fn is_multi_value_flag_str(s: &str) -> bool {
