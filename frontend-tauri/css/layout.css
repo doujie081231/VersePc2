@@ -14,21 +14,98 @@
  * 7. 游戏运行态 - 运行时动画抑制
  */
 
-/* 侧边栏 - 左侧导航栏容器 */
+/* ============================================================================
+   侧边栏 - 安卓风格悬浮胶囊导航
+   ----------------------------------------------------------------------------
+   形态：内容区左上角常驻一枚圆形按钮（汉堡 / 关闭），点击后从按钮下方浮出
+   一枚竖向胶囊；胶囊内为圆形图标导航按钮。胶囊脱离文档流、浮于内容之上，
+   点击遮罩 / 按 Esc / 完成导航后自动收起，内容区始终占满整行并居中。
+   ============================================================================ */
+
+/* 遮罩：透明点击层（不暗化背景，保留玻璃对内容的折射），点击空白处收起胶囊 */
+.sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99990;
+    background: transparent;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s;
+}
+
+body.sidebar-open .sidebar-overlay {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+/* 胶囊容器：宽 72、按钮 48，两侧各留 12 保证不显单薄；
+   左偏移 8 使胶囊中心（8+36=44）与圆形按钮中心（20+24=44）同处一条竖轴，
+   从圆形按钮下方竖向展开，圆角 999px 即两端半圆，内容裁切在胶囊形状内 */
 .sidebar {
-    width: var(--sidebar-width);
-    background: var(--bg-glass);
-    backdrop-filter: blur(8px) saturate(1.4);
-    -webkit-backdrop-filter: blur(8px) saturate(1.4);
+    position: fixed;
+    left: 8px;
+    top: 68px;
+    width: 72px;
+    max-height: 0;
+    padding: 12px 0;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border);
-    flex-shrink: 0;
-    padding: 10px 8px;
-    animation: slideRight 0.4s var(--ease-out-expo) backwards;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(249, 250, 253, 0.94), rgba(243, 245, 249, 0.92));
+    backdrop-filter: blur(28px) saturate(1.9) brightness(1.03);
+    -webkit-backdrop-filter: blur(28px) saturate(1.9) brightness(1.03);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.85) inset,
+        0 -1px 0 rgba(255, 255, 255, 0.12) inset,
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+        0 18px 40px rgba(0, 0, 0, 0.14),
+        0 6px 16px rgba(0, 0, 0, 0.08);
+    z-index: 100000;
     overflow: hidden;
-    contain: layout style;
-    will-change: transform;
+    contain: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 0.26s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+body.sidebar-open .sidebar {
+    max-height: min(calc(100vh - 80px), 640px);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 折射层：叠加高光渐变，经 SVG feDisplacementMap 产生有机折射（苹果液态玻璃） */
+.sidebar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 44%);
+}
+
+/* 高光边缘：强化玻璃厚度与上下边缘亮度 */
+.sidebar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.55) 0%,
+        rgba(255, 255, 255, 0) 16%,
+        rgba(255, 255, 255, 0) 84%,
+        rgba(255, 255, 255, 0.2) 100%);
+    mix-blend-mode: screen;
+    opacity: 0.75;
 }
 
 body.game-running .sidebar {
@@ -37,44 +114,37 @@ body.game-running .sidebar {
     background: var(--sidebar-bg-solid, rgba(30, 30, 35, 0.95)) !important;
 }
 
-/* 侧边栏收起状态：隐藏侧边栏，内容区自动占满（点击标题栏左上角按钮切换）
-   收起时整体向左滑出（translateX）并同步收窄宽度，形成丝滑的侧边滑入滑出动画 */
-.sidebar {
-    transition:
-        transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-        width 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-        opacity 0.3s ease,
-        padding 0.45s cubic-bezier(0.16, 1, 0.3, 1);
-    transform: translateX(0);
+/* 弹窗打开时让位：胶囊层级最高，若不退场会盖住弹窗遮罩并拦截点击 */
+body:has(.modal.modal-visible) .sidebar,
+body:has(.modal[data-state="open"]) .sidebar {
+    max-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
-body.sidebar-collapsed .sidebar {
-    transform: translateX(-100%);
-    width: 0;
-    padding-left: 0;
-    padding-right: 0;
-    border-right: none;
-    opacity: 0;
-    pointer-events: none;
-}
-body.sidebar-collapsed .sidebar .sidebar-nav,
-body.sidebar-collapsed .sidebar .sidebar-footer {
-    display: none;
+
+body:has(.modal.modal-visible) .sidebar-overlay,
+body:has(.modal[data-state="open"]) .sidebar-overlay {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 .sidebar-nav, .sidebar-footer {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 8px;
+    width: 100%;
     position: relative;
     z-index: 1;
 }
 
 .sidebar-nav {
-    flex: 1;
+    flex: 0 1 auto;
     overflow-y: auto;
     overflow-x: hidden;
     min-height: 0;
+    padding: 0;
     scrollbar-width: none;
 }
 
@@ -82,86 +152,63 @@ body.sidebar-collapsed .sidebar .sidebar-footer {
     display: none;
 }
 
+/* 底部分隔线：与胶囊左右各留 8px，不顶到胶囊边缘 */
 .sidebar-footer {
     flex-shrink: 0;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.06);
-    padding-top: 6px;
-    margin-top: 4px;
+    padding-top: 12px;
 }
 
-/* 导航按钮 - 侧边栏主按钮（图标+文字），铺满侧边栏宽度以扩大可点击区域 */
+.sidebar-footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background: var(--border, rgba(0, 0, 0, 0.1));
+}
+
+/* 导航按钮 - 圆形图标按钮（安卓胶囊风格：未选中为浅灰圆底，选中为强调色实心圆 + 反色图标） */
 .nav-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 11px 4px 9px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 12px;
-    transition: color 0.25s var(--ease-out-expo), transform 0.2s var(--ease-out-expo);
-    width: 100%;
-    font-size: 11px;
-    letter-spacing: 0.02em;
-    font-weight: 500;
     position: relative;
-    overflow: visible;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: none;
+    background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 0.22s var(--ease-out-expo), color 0.22s var(--ease-out-expo), transform 0.18s var(--ease-out-expo);
     flex-shrink: 0;
-}
-
-.nav-btn::before {
-    content: '';
-    position: absolute;
-    left: -4px;
-    top: 50%;
-    transform: translateY(-50%) scaleY(0);
-    width: 3px;
-    height: 0;
-    background: var(--accent);
-    border-radius: 0 3px 3px 0;
-    transition: height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.nav-btn.active::before {
-    transform: translateY(-50%) scaleY(1);
-    height: 20px;
-}
-
-.nav-btn::after {
-    content: '';
-    position: absolute;
-    inset: 2px 4px;
-    background: var(--accent);
-    opacity: 0;
-    border-radius: 10px;
-    transition: opacity 0.3s var(--ease-out-expo);
-    pointer-events: none;
-}
-
-.nav-btn:hover::after {
-    opacity: 0.06;
-}
-
-.nav-btn.active::after {
-    opacity: 0.1;
+    overflow: visible;
 }
 
 .nav-btn svg {
     width: 24px;
     height: 24px;
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s var(--ease-out-expo), opacity 0.25s var(--ease-out-expo);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s var(--ease-out-expo);
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+}
+
+/* 隐藏主按钮文字标签，仅保留图标（保留「实验」角标） */
+.nav-btn > span:not(.nav-btn-experimental-badge) {
+    display: none;
 }
 
 .nav-btn:hover {
-    color: var(--text-secondary);
-    transform: scale(1.05);
+    background: color-mix(in srgb, var(--bg-tertiary) 90%, transparent);
+    color: var(--text-primary);
+    transform: scale(1.06);
 }
 
 .nav-btn:hover svg {
-    transform: scale(1.1);
+    transform: scale(1.06);
 }
 
 .nav-btn:active {
@@ -173,96 +220,43 @@ body.sidebar-collapsed .sidebar .sidebar-footer {
 }
 
 .nav-btn.active {
-    color: var(--text-primary);
-}
-
-.nav-btn.active svg {
-    filter: drop-shadow(0 0 8px var(--accent-glow));
+    background: color-mix(in srgb, var(--accent) 85%, transparent);
+    color: var(--accent-text);
 }
 
 /* 简约线条导航图标 */
 .nav-icon-svg {
     width: 24px;
     height: 24px;
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s var(--ease-out-expo), opacity 0.25s var(--ease-out-expo);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s var(--ease-out-expo);
     flex-shrink: 0;
     display: block;
-    color: var(--text-primary);
+    color: inherit;
 }
 
 .nav-btn:hover .nav-icon-svg {
-    transform: scale(1.1);
+    transform: scale(1.06);
 }
 .nav-btn:active .nav-icon-svg {
     transform: scale(0.88);
-}
-.nav-btn.active .nav-icon-svg {
-    filter: drop-shadow(0 0 8px var(--accent-glow));
-}
-
-.nav-globe-icon {
-    display: block;
-    width: 18px;
-    height: 18px;
-    border: 1.5px solid currentColor;
-    border-radius: 50%;
-    position: relative;
-    opacity: 0.5;
-    transition: opacity 0.25s var(--ease-out-expo), border-color 0.25s var(--ease-out-expo), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    margin: 0 auto 2px;
-}
-.nav-btn:hover .nav-globe-icon,
-.nav-btn.active .nav-globe-icon {
-    opacity: 1;
-}
-.nav-globe-icon::before {
-    content: '';
-    position: absolute;
-    top: 2px; left: 2px;
-    right: 2px; bottom: 2px;
-    border: 1px solid currentColor;
-    border-radius: 50%;
-    opacity: 0.4;
-}
-.nav-globe-icon::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: -2px;
-    right: -2px;
-    border-top: 1.5px solid currentColor;
-    transform: translateY(-50%);
-    opacity: 0.4;
 }
 
 /* 实验性功能导航按钮 - 紫色高亮标识实验功能 */
 .nav-btn-experimental {
     color: var(--purple);
 }
-.nav-btn-experimental::after {
-    background: var(--purple);
-    opacity: 0;
-}
 .nav-btn-experimental:hover {
+    background: color-mix(in srgb, var(--purple) 16%, transparent);
     color: var(--purple);
-    opacity: 0.85;
-}
-.nav-btn-experimental:hover::after {
-    opacity: 0.08;
 }
 .nav-btn-experimental.active {
-    color: var(--purple);
-}
-.nav-btn-experimental.active::after {
-    opacity: 0.12;
-}
-.nav-btn-experimental.active svg {
-    filter: drop-shadow(0 0 6px var(--purple));
+    background: color-mix(in srgb, var(--purple) 85%, transparent);
+    color: #fff;
 }
 .nav-btn-experimental-badge {
     position: absolute;
-    top: -1px;
-    right: -2px;
+    top: -2px;
+    right: -4px;
     z-index: 2;
     font-size: 7px;
     font-weight: 600;
@@ -280,7 +274,7 @@ body.sidebar-collapsed .sidebar .sidebar-footer {
     opacity: 1;
 }
 
-/* 导航子菜单 - 可折叠的二级导航 */
+/* 导航子菜单 - 在胶囊内竖向展开的圆形小按钮 */
 .nav-submenu-group {
     display: flex;
     flex-direction: column;
@@ -289,114 +283,105 @@ body.sidebar-collapsed .sidebar .sidebar-footer {
 }
 
 .nav-submenu-toggle {
-    width: 60px;
+    width: 48px;
     overflow: visible;
 }
 
 .nav-submenu-toggle .submenu-arrow {
-    width: 10px;
-    height: 10px;
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s var(--ease-out-expo);
+    width: 9px;
+    height: 9px;
+    transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s var(--ease-out-expo);
     position: absolute;
-    bottom: 2px;
+    bottom: 3px;
     left: 50%;
     transform: translateX(-50%);
-    opacity: 0.4;
+    opacity: 0.45;
+    z-index: 2;
 }
 
-.nav-submenu-group.open .submenu-arrow {
+.nav-submenu-group.open .nav-submenu-toggle .submenu-arrow {
     transform: translateX(-50%) rotate(180deg);
-    opacity: 0.6;
+    opacity: 0.85;
 }
 
 .nav-btn:hover .submenu-arrow {
-    opacity: 0.6;
+    opacity: 0.65;
 }
 
 .nav-btn.active .submenu-arrow {
-    opacity: 0.8;
+    opacity: 0.85;
 }
 
 .nav-submenu {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1px;
+    gap: 6px;
     width: 100%;
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s var(--ease-out-expo);
+    transition: max-height 0.36s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.26s var(--ease-out-expo);
     opacity: 0;
 }
 
 .nav-submenu-group.open .nav-submenu {
-    max-height: 300px;
+    max-height: 340px;
     opacity: 1;
 }
 
+/* 子菜单小按钮：40 圆底，选中同样用强调色实心圆 */
 .nav-sub-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    padding: 5px 6px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
     border: none;
-    background: transparent;
-    color: var(--text-muted);
+    background: color-mix(in srgb, var(--bg-tertiary) 45%, transparent);
+    color: var(--text-secondary);
     cursor: pointer;
-    border-radius: 8px;
-    transition: color 0.25s var(--ease-out-expo), transform 0.2s var(--ease-out-expo);
-    font-size: 10px;
-    letter-spacing: 0.01em;
-    font-weight: 500;
-    width: 58px;
-    white-space: nowrap;
-    position: relative;
-}
-
-.nav-sub-btn::after {
-    content: '';
-    position: absolute;
-    inset: 1px 3px;
-    background: var(--accent);
-    opacity: 0;
-    border-radius: 7px;
-    transition: opacity 0.25s var(--ease-out-expo);
-    pointer-events: none;
-}
-
-.nav-sub-btn:hover::after {
-    opacity: 0.05;
-}
-
-.nav-sub-btn.active::after {
-    opacity: 0.08;
+    border-radius: 50%;
+    flex-shrink: 0;
+    /* 仅保留图标，文字改用 title 提示 */
+    font-size: 0;
+    transition: background 0.22s var(--ease-out-expo), color 0.22s var(--ease-out-expo), transform 0.18s var(--ease-out-expo);
 }
 
 .nav-sub-btn svg {
-    width: 13px;
-    height: 13px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
 }
 
 .nav-sub-btn:hover {
-    color: var(--text-secondary);
-    transform: scale(1.06);
+    background: color-mix(in srgb, var(--bg-tertiary) 85%, transparent);
+    color: var(--text-primary);
+    transform: scale(1.08);
 }
 
 .nav-sub-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.92);
 }
 
 .nav-sub-btn.active {
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent) 85%, transparent);
+    color: var(--accent-text);
 }
 
-/* 内容区 - 主内容滚动容器 */
+/* 内容区 - 主内容滚动容器
+   - 侧边栏悬浮不占位，左右留白对称；宽度上限 + 自动外边距让内容整体居中 */
 .content-area {
     flex: 1;
     overflow: hidden;
-    padding: 24px;
+    padding: 72px 30px 30px 30px;
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     animation: pageIn 0.4s var(--ease-out-expo) 0.15s both;
@@ -908,31 +893,18 @@ body {
 }
 
 /* 全局拖拽条（Tauri 模式下用于拖动窗口）
-   - 默认 left 从侧边栏右边缘开始，不覆盖侧边栏顶部区域（保证侧边栏最上面的"主页"等按钮可点击）
-   - body.sidebar-collapsed 时，侧边栏被收起（width 0），此时拖拽条延伸到最左
+   - 侧边栏改为悬浮胶囊后不再占据布局宽度，拖拽条从最左延伸到最右
    - 高度 48px，与右上角窗口控制条、左上角圆形侧边栏按钮的垂直范围一致 */
 .global-drag-strip {
     position: fixed;
     top: 0;
-    left: var(--sidebar-width);
+    left: 0;
     right: 0;
     height: 48px;
     z-index: 99997;
     -webkit-app-region: drag;
     pointer-events: none;
-    transition: left 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
-body.sidebar-collapsed .global-drag-strip {
-    left: 0;
-}
-
-/* 侧边栏：顶部留出 56px 安全边距，让第一枚导航按钮（主页）与左侧圆形侧边栏按钮、右上角窗口控制条垂直对齐，
-   同时避开顶部拖拽条的区域，保证点击正常 */
-.sidebar {
-    padding-top: 56px !important;
-    box-sizing: border-box;
-}
-/* 拖拽条收起时，侧边栏虽然被 translateX(-100%) 隐藏，但保留 padding 不影响视觉 */
 
 /* 浮动窗口控制栏（右上角，最小化/最大化/关闭） */
 .floating-window-bar {
@@ -971,7 +943,6 @@ body.sidebar-collapsed .global-drag-strip {
     border-radius: inherit;
     pointer-events: none;
     z-index: 0;
-    filter: url(#liquid-lens);
     background: linear-gradient(145deg, rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0) 45%);
 }
 .floating-window-controls .win-btn {
@@ -1000,14 +971,15 @@ body.sidebar-collapsed .global-drag-strip {
     color: #fff;
 }
 
-/* 浮动圆形侧边栏展开按钮（页面内容区左上角） */
+/* 浮动圆形侧边栏按钮（左上角常驻，汉堡 / 关闭二态切换）
+   中心 x = 20 + 24 = 44，与下方胶囊中心同轴 */
 .sidebar-toggle-fab {
     position: fixed;
     top: 12px;
-    left: 12px;
-    z-index: 99998;
-    width: 40px;
-    height: 40px;
+    left: 20px;
+    z-index: 100001;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1037,12 +1009,15 @@ body.sidebar-collapsed .global-drag-strip {
     border-radius: inherit;
     pointer-events: none;
     z-index: 0;
-    filter: url(#liquid-lens);
     background: linear-gradient(145deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0) 45%);
 }
 .sidebar-toggle-fab > * {
     position: relative;
     z-index: 1;
+}
+.sidebar-toggle-fab svg {
+    width: 20px;
+    height: 20px;
 }
 .sidebar-toggle-fab:hover {
     background: rgba(250, 251, 252, 0.98);
@@ -1055,52 +1030,14 @@ body.sidebar-collapsed .global-drag-strip {
 .sidebar-toggle-fab:active {
     transform: translateY(0) scale(0.94);
 }
-body.sidebar-collapsed .sidebar-toggle-fab {
-    left: 12px;
-}
-
-/* 侧边栏收起时内容区不留缩进：按钮仍悬浮在新位置 */
-body:not(.sidebar-collapsed) .sidebar-toggle-fab {
-    left: calc(var(--sidebar-width) + 12px);
-}
-
-/* 页面内容区：去掉标题栏后占满窗口，顶部留白避开右上角控件与左上角圆形按钮 */
-.content-area {
-    padding: 56px 30px 30px 30px;
-}
-/* 侧边栏收起：内容区占满整行，仅左侧给圆形按钮留位 */
-body.sidebar-collapsed .content-area {
-    padding-left: 56px;
-}
-
-/* 侧边栏（液态玻璃：磨砂模糊 + 高光边缘 + 折射层）
-   注意：backdrop-filter 不支持 url() 滤镜引用，混用会导致整条模糊失效；
-   折射改用 ::before 伪元素叠加 SVG 位移滤镜实现 */
-.sidebar {
-    position: relative;
-    height: 100vh;
-    min-height: 100vh;
-    align-self: stretch;
-    background: linear-gradient(180deg, rgba(249, 250, 253, 0.94), rgba(243, 245, 249, 0.92));
-    backdrop-filter: blur(28px) saturate(1.9) brightness(1.03);
-    -webkit-backdrop-filter: blur(28px) saturate(1.9) brightness(1.03);
-    border-right: 1px solid rgba(255, 255, 255, 0.55);
-    box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.85) inset,
-        0 -1px 0 rgba(255, 255, 255, 0.12) inset,
-        0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-        0 18px 40px rgba(0, 0, 0, 0.10),
-        12px 0 32px rgba(0, 0, 0, 0.06);
-}
-/* 折射层：叠加在玻璃上的高光渐变，经 SVG feDisplacementMap 产生轻微有机变形 */
-.sidebar::before {
-    content: '';
-    position: absolute;
-    inset: 0;
+/* 图标二态：收起显示汉堡，展开显示关闭 */
+.sidebar-toggle-fab .fab-icon-close { display: none; }
+body.sidebar-open .sidebar-toggle-fab .fab-icon-menu { display: none; }
+body.sidebar-open .sidebar-toggle-fab .fab-icon-close { display: block; }
+/* 启动全屏遮罩显示时，悬浮按钮一并退场（按钮在 #app 之外，层级高于遮罩） */
+body:has(#game-launch-overlay[style*="flex"]) .sidebar-toggle-fab {
+    opacity: 0;
     pointer-events: none;
-    z-index: 0;
-    filter: url(#liquid-lens);
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 42%);
 }
 
 /* 暗色主题适配：液态玻璃整体加深，保证文字清晰 */
@@ -1125,6 +1062,15 @@ body.sidebar-collapsed .content-area {
 }
 [data-theme="dark"] .sidebar-toggle-fab:hover {
     background: rgba(255, 255, 255, 0.18);
+}
+/* 暗色主题：胶囊上下高光收敛，避免玻璃边缘过曝 */
+[data-theme="dark"] .sidebar::after {
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0) 16%,
+        rgba(255, 255, 255, 0) 84%,
+        rgba(255, 255, 255, 0.08) 100%);
+    opacity: 0.6;
 }
 
 /* ============================================================
@@ -1172,9 +1118,9 @@ body.sidebar-collapsed .content-area {
 /* 卡片保持原有毛玻璃（不强制覆盖为液态玻璃），保证内容清晰可读 */
 /* 液态玻璃仅用于侧边栏、浮动圆形按钮与右上角窗口控制条 */
 
-/* 所有页面的滚动容器：统一避让右上角浮动控件，并让 Vue 内容随侧边栏收起而重新适配 */
+/* 所有页面的滚动容器：左右留白交由 .content-area 统一控制，保持对称居中 */
 .page.active {
-    padding-right: 16px;
+    padding-right: 0;
     padding-top: 4px;
     width: 100%;
 }
