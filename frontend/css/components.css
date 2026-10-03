@@ -532,35 +532,120 @@
     animation: detailFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
 }
 .acct-skin-grid {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
 }
+/* 皮肤项：竖版形象卡片，形象底部对齐、贴住卡片下沿 */
 .acct-skin-item {
-    width: 52px;
-    height: 52px;
-    border-radius: 10px;
-    border: 2px solid #e8e8e8;
+    position: relative;
+    aspect-ratio: 31 / 40;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
     overflow: hidden;
     cursor: pointer;
-    transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+    isolation: isolate;
+    border: 1px solid #e4e4e8;
+    border-radius: 20px;
+    background: #f0f0f2;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.15);
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+/* 卡片底部渐隐，让形象与卡片底色自然衔接 */
+.acct-skin-item::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(37, 39, 45, 0.2) 100%);
+}
+.acct-skin-item:hover,
+.acct-skin-item:focus-within {
+    border-color: #d2d2d8;
+    background: #e8e8ec;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.acct-skin-item:active {
+    transform: scale(0.985);
+}
+.acct-skin-item:focus-visible {
+    outline: 2px solid #4a9eff;
+    outline-offset: 2px;
+}
+/* 形象图：占卡片高度 95%，底对齐，带投影 */
+.acct-skin-item img {
     position: relative;
-}
-.acct-skin-item:hover {
-    border-color: #aaa;
-    transform: scale(1.08);
-}
-.acct-skin-item.active {
-    border-color: #4a9eff;
-    box-shadow: 0 0 0 2px rgba(74,158,255,0.3);
-}
-.acct-skin-item img,
-.acct-skin-item canvas {
+    z-index: 0;
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    image-rendering: pixelated;
+    height: 95%;
+    margin-bottom: 1.5px;
+    object-fit: contain;
     display: block;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+    transition: filter 0.2s ease-in-out;
+}
+.acct-skin-item:hover img {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+/* 形象渲染完成前用骨架占位 */
+.acct-skin-item.is-loading::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(145deg, #f4f5f7, #e7e9ee);
+    animation: acctSkinLoadingPulse 2700ms ease-in-out infinite;
+}
+@keyframes acctSkinLoadingPulse {
+    0%, 100% { filter: brightness(0.95); }
+    50% { filter: brightness(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .acct-skin-item.is-loading::before {
+        animation: none;
+    }
+}
+/* 当前正在使用的皮肤：整体提亮 + 边框描边 */
+.acct-skin-item.active {
+    border-color: rgba(26, 26, 26, 0.4);
+    filter: brightness(1.1);
+}
+/* 选中标记：右上角圆形徽标 */
+.acct-skin-check {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--text-primary, #1a1a1a);
+    color: var(--bg-primary, #fff);
+    pointer-events: none;
+}
+.acct-skin-check svg {
+    width: 16px;
+    height: 16px;
+}
+.dark-theme .acct-skin-item {
+    border-color: var(--border);
+    background: var(--bg-tertiary);
+}
+.dark-theme .acct-skin-item:hover,
+.dark-theme .acct-skin-item:focus-within {
+    border-color: var(--text-muted);
+    background: var(--bg-hover);
+}
+.dark-theme .acct-skin-item.is-loading::before {
+    background: linear-gradient(145deg, var(--bg-secondary), var(--bg-tertiary));
+}
+.dark-theme .acct-skin-item.active {
+    border-color: rgba(255, 255, 255, 0.4);
 }
 .acct-skin-import-btn {
     display: inline-flex;
@@ -1582,7 +1667,6 @@
     border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
-#app .sidebar,
 #app .card,
 #app .title-bar {
     transition: background 0.4s ease;
@@ -1727,8 +1811,9 @@ html[data-no-glass]:not([data-liquid-glass]) .sidebar {
  * 性能：只覆盖少量大元素，避免大量小元素叠加合成层；开启该模式时关闭动画循环。
  * ========================================================================== */
 /* 卡片 / 弹窗 / 提示的液态玻璃：通透底（低透明度让背景透出）+
-   背景折射弯曲（backdrop-filter 内联 url(#liquid-lens)）+ 细腻高光边缘，
-   模拟苹果 Liquid Glass：玻璃本身几乎透明，靠折射与描边体现质感 */
+   背景模糊 + 细腻高光边缘，模拟苹果 Liquid Glass：玻璃本身几乎透明，
+   靠折射与描边体现质感。侧边栏与圆形开关按钮的"真折射"由
+   js/app/liquid-glass.js 以 SDF 位移贴图动态注入 backdrop-filter。 */
 [data-liquid-glass] .title-bar,
 [data-liquid-glass] .card,
 [data-liquid-glass] .stat-card,
@@ -1740,8 +1825,8 @@ html[data-no-glass]:not([data-liquid-glass]) .sidebar {
         rgba(255, 255, 255, 0.16) 0%,
         rgba(240, 243, 249, 0.10) 100%
     );
-    backdrop-filter: blur(10px) url(#liquid-lens) saturate(1.6) brightness(1.05);
-    -webkit-backdrop-filter: blur(10px) url(#liquid-lens) saturate(1.6) brightness(1.05);
+    backdrop-filter: blur(10px) saturate(1.6) brightness(1.05);
+    -webkit-backdrop-filter: blur(10px) saturate(1.6) brightness(1.05);
     border: 1px solid rgba(255, 255, 255, 0.5);
     box-shadow:
         inset 0 0 0 1px rgba(255, 255, 255, 0.18),
@@ -1752,33 +1837,29 @@ html[data-no-glass]:not([data-liquid-glass]) .sidebar {
     contain: paint;
 }
 
-/* 侧边栏专属液态玻璃：通透半透明底（背景透出）+ 背景折射弯曲 + 亮白边缘高光，
-   顶部斜向镜面反光由 ::before 叠加 */
+/* 侧边栏专属液态玻璃：通透半透明底（背景透出）+ 亮白边缘高光，
+   顶部斜向镜面反光由 ::before 叠加。胶囊的定位/形状由 layout.css 统一控制，
+   此处只调整玻璃质感，不得覆盖 position / 圆角 */
 [data-liquid-glass] .sidebar {
-    position: relative;
     background: linear-gradient(
         180deg,
         rgba(255, 255, 255, 0.20) 0%,
         rgba(240, 243, 249, 0.12) 100%
     );
-    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.8) brightness(1.06);
-    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.8) brightness(1.06);
-    border-right: 1px solid rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(28px) saturate(1.9) brightness(1.03);
+    -webkit-backdrop-filter: blur(28px) saturate(1.9) brightness(1.03);
+    border: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.9),
         inset 0 -1px 0 rgba(255, 255, 255, 0.25),
         inset 1px 0 0 rgba(255, 255, 255, 0.35),
         inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-        0 18px 40px rgba(0, 0, 0, 0.12),
-        12px 0 32px rgba(0, 0, 0, 0.08);
+        0 18px 40px rgba(0, 0, 0, 0.14),
+        0 6px 16px rgba(0, 0, 0, 0.08);
 }
-/* 玻璃表面镜面高光：斜向白光渐变，模拟苹果玻璃的高光质感（在冷灰蓝底上清晰可见） */
+/* 玻璃表面镜面高光：斜向白光渐变，模拟苹果玻璃的高光质感（在冷灰蓝底上清晰可见）
+   折射层形状与定位由 layout.css 统一控制，此处只增强高光强度 */
 [data-liquid-glass] .sidebar::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
     background: linear-gradient(
         155deg,
         rgba(255, 255, 255, 0.95) 0%,
@@ -1797,8 +1878,8 @@ html[data-no-glass]:not([data-liquid-glass]) .sidebar {
         rgba(24, 24, 28, 0.42),
         rgba(24, 24, 28, 0.30)
     );
-    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.6) brightness(1.02);
-    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.6) brightness(1.02);
+    backdrop-filter: blur(12px) saturate(1.6) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) saturate(1.6) brightness(1.02);
     border: 1px solid rgba(255, 255, 255, 0.18);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
@@ -1813,8 +1894,8 @@ html[data-no-glass]:not([data-liquid-glass]) .sidebar {
         rgba(30, 31, 36, 0.55) 0%,
         rgba(24, 25, 30, 0.42) 100%
     );
-    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
-    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    backdrop-filter: blur(12px) saturate(1.5) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) saturate(1.5) brightness(1.02);
     border: 1px solid rgba(255, 255, 255, 0.18);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
@@ -1830,8 +1911,8 @@ html[data-theme="dark"][data-liquid-glass] .title-bar {
         rgba(18, 18, 22, 0.45),
         rgba(18, 18, 22, 0.32)
     );
-    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
-    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    backdrop-filter: blur(12px) saturate(1.5) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) saturate(1.5) brightness(1.02);
     border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
@@ -1846,8 +1927,8 @@ html[data-theme="dark"][data-liquid-glass] .modal-content {
         rgba(28, 29, 34, 0.6) 0%,
         rgba(20, 21, 26, 0.46) 100%
     );
-    backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
-    -webkit-backdrop-filter: blur(12px) url(#liquid-lens) saturate(1.5) brightness(1.02);
+    backdrop-filter: blur(12px) saturate(1.5) brightness(1.02);
+    -webkit-backdrop-filter: blur(12px) saturate(1.5) brightness(1.02);
     border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
@@ -3035,7 +3116,6 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     border-radius: 8px;
     font-size: 12px;
     color: #666;
-    border-left: 2px solid #111;
 }
 .lan-room-steps {
     background: #fff;
@@ -3380,7 +3460,6 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
 }
 .dark-theme .lan-hint-bar {
     background: #000;
-    border-left-color: #fff;
     color: #999;
 }
 .dark-theme .lan-room-steps {
