@@ -19,13 +19,30 @@ let _terracottaPollRefresher = null;
 let terracottaState = { mode: null, connected: false };
 
 function updateTerracottaStatus(title, desc, state) {
-    document.getElementById('terracotta-status-title').textContent = title;
-    document.getElementById('terracotta-status-desc').textContent = desc;
+    const titleEl = document.getElementById('terracotta-status-title');
+    const descEl = document.getElementById('terracotta-status-desc');
     const dot = document.getElementById('terracotta-status-dot');
-    dot.className = 'lan-status-dot';
-    if (state === 'connected') dot.classList.add('connected');
-    else if (state === 'connecting') dot.classList.add('connecting');
-    else dot.classList.add('disconnected');
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = desc;
+    if (dot) {
+        dot.className = 'lan-status-dot';
+        if (state === 'connected') dot.classList.add('connected');
+        else if (state === 'connecting') dot.classList.add('connecting');
+        else dot.classList.add('disconnected');
+    }
+}
+
+/** 检测局域网端口：优先用启动器追踪到的 lanPort，其次扫描 java 进程监听端口 */
+async function detectLanPort() {
+    try {
+        const gs = await API.getGameStatus();
+        if (gs && gs.running && gs.lanPort) return gs.lanPort;
+    } catch (e) {}
+    try {
+        const scanResult = await window.electronAPI.redstoneOnline.scanPort();
+        if (scanResult && scanResult.ok && scanResult.port) return scanResult.port;
+    } catch (e) {}
+    return null;
 }
 
 async function terracottaHostStep1() {
@@ -36,8 +53,10 @@ async function terracottaHostStep1() {
     panel.style.display = '';
     showTerracottaStep('host', 1);
     updateTerracottaStatus('陶瓦联机 - 创建房间', '请先启动游戏并开放局域网', 'disconnected');
-    // 启动游戏状态监听：游戏运行后启用"下一步"
+    // 启动游戏状态监听：游戏运行后启用"下一步"，并探测已开放的局域网端口
     const nextBtn = document.getElementById('terracotta-host-next');
+    const portHint = document.getElementById('terracotta-port-hint');
+    let detectedPort = null;
     const doCheck = async () => {
         try {
             const gs = await API.getGameStatus();
@@ -45,6 +64,10 @@ async function terracottaHostStep1() {
             if (nextBtn) {
                 nextBtn.disabled = !running;
                 nextBtn.title = running ? '下一步' : '请先启动游戏并开放局域网';
+            }
+            if (running && !detectedPort) {
+                detectedPort = await detectLanPort();
+                if (portHint && detectedPort) portHint.textContent = '已检测到端口：' + detectedPort;
             }
         } catch (e) {}
     };
@@ -65,7 +88,9 @@ async function terracottaHostNext() {
     const agreed = await terracottaShowAgreement();
     if (!agreed) return;
 
-    let gamePort = gs.lanPort || 25565;
+    let gamePort = gs.lanPort;
+    if (!gamePort) gamePort = await detectLanPort();
+    if (!gamePort) gamePort = 25565;
     const playerName = localStorage.getItem('cachedPlayerName') || 'Player';
     // 进入"正在创建隧道连接中"
     showTerracottaStep('host', 2);
@@ -495,11 +520,11 @@ async function redstoneRefreshServers() {
             if (info) info.textContent = '共 ' + r.servers.length + ' 个节点';
         } else {
             if (info) info.textContent = '节点列表为空（使用默认节点）';
-            _redstoneServers = [{ name: '上海', address: '122.51.108.96' }];
+            _redstoneServers = [{ name: '南京', address: 'nj.hongshi.site' }];
         }
     } catch (e) {
         if (info) info.textContent = '加载失败: ' + e.message;
-        _redstoneServers = [{ name: '上海', address: '122.51.108.96' }];
+        _redstoneServers = [{ name: '南京', address: 'nj.hongshi.site' }];
     }
     _redstoneServerIdx = 0;
     updateServerBtn();
@@ -821,7 +846,8 @@ function showLanStep(prefix, flow, step) {
 async function redstoneHostStep1() {
     redstoneHide();
     document.getElementById('redstone-home').style.display = 'none';
-    document.getElementById('redstone-join-panel').style.display = 'none';
+    const rjPanel = document.getElementById('redstone-join-panel');
+    if (rjPanel) rjPanel.style.display = 'none';
     document.getElementById('redstone-host-panel').style.display = '';
     showLanStep('redstone', 'host', 1);
     const nextBtn = document.getElementById('redstone-host-next');
@@ -850,8 +876,16 @@ async function redstoneHostNext() {
     if (window._redstoneGamePoll) { clearInterval(window._redstoneGamePoll); window._redstoneGamePoll = null; }
     showLanStep('redstone', 'host', 2);
     try {
-        if (_redstoneServers.length === 0) await redstoneRefreshServers();
-        const server = _redstoneServers[_redstoneServerIdx % _redstoneServers.length];
+        let server = null;
+        const vs = window.VersePC;
+        if (vs && vs.redstoneSelectedNode) {
+          server = vs.redstoneSelectedNode;
+        } else if (vs && vs.redstoneNodes && vs.redstoneNodes.length) {
+          server = vs.redstoneNodes[0];
+        } else {
+          if (_redstoneServers.length === 0) await redstoneRefreshServers();
+          server = _redstoneServers[_redstoneServerIdx % _redstoneServers.length];
+        }
         if (!server) throw new Error('服务器节点不可用');
         let gamePort = gs.lanPort;
         if (!gamePort) {
@@ -1213,7 +1247,8 @@ function enderlinkBackToHome() {
 async function enderlinkHostStep1() {
     enderlinkHide();
     document.getElementById('enderlink-home').style.display = 'none';
-    document.getElementById('enderlink-join-panel').style.display = 'none';
+    const ejPanel = document.getElementById('enderlink-join-panel');
+    if (ejPanel) ejPanel.style.display = 'none';
     document.getElementById('enderlink-host-panel').style.display = '';
     showLanStep('enderlink', 'host', 1);
     const nextBtn = document.getElementById('enderlink-host-next');
@@ -1242,8 +1277,16 @@ async function enderlinkHostNext() {
     if (window._enderlinkGamePoll) { clearInterval(window._enderlinkGamePoll); window._enderlinkGamePoll = null; }
     showLanStep('enderlink', 'host', 2);
     try {
-        if (_enderlinkNodes.length === 0) await enderlinkRefreshNodes();
-        const node = _enderlinkNodes[_enderlinkNodeIdx % _enderlinkNodes.length];
+        let node = null;
+        const vs = window.VersePC;
+        if (vs && vs.enderlinkSelectedNode) {
+          node = vs.enderlinkSelectedNode;
+        } else if (vs && vs.enderlinkNodes && vs.enderlinkNodes.length) {
+          node = vs.enderlinkNodes[0];
+        } else {
+          if (_enderlinkNodes.length === 0) await enderlinkRefreshNodes();
+          node = _enderlinkNodes[_enderlinkNodeIdx % _enderlinkNodes.length];
+        }
         if (!node) throw new Error('联机节点不可用');
         let gamePort = gs.lanPort;
         if (!gamePort) {
