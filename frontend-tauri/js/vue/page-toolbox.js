@@ -131,6 +131,13 @@ const PageToolbox = {
           <div class="toolbox-section">
             <h3 class="toolbox-category">地图与建筑</h3>
             <div class="toolbox-grid">
+              <div class="toolbox-card" onclick="window.electronAPI.openExternal('http://mc-test.xbjstd.cn:91/#/')">
+                <img src="" data-domain="mc-test.xbjstd.cn" alt="" class="toolbox-icon" loading="lazy">
+                <div class="toolbox-info">
+                  <span class="toolbox-name">投影工坊</span>
+                  <span class="toolbox-desc">投影文件分享与下载</span>
+                </div>
+              </div>
               <div class="toolbox-card" onclick="window.electronAPI.openExternal('https://www.plotz.co.uk')">
                 <img src="" data-domain="plotz.co.uk" alt="" class="toolbox-icon" loading="lazy">
                 <div class="toolbox-info">
