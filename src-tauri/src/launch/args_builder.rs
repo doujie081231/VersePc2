@@ -177,6 +177,11 @@ pub fn build_launch_arguments(
     variables.insert("assets_index_name".to_string(), asset_index.clone());
     variables.insert("auth_uuid".to_string(), uuid.clone());
     variables.insert("auth_access_token".to_string(), access_token.clone());
+    // 旧版模板占位符：1.7.x 的 --userProperties 需要一个 JSON 对象，
+    // 旧版本（1.6 及更早）还会用 auth_session / access_token 传递令牌
+    variables.insert("user_properties".to_string(), "{}".to_string());
+    variables.insert("auth_session".to_string(), access_token.clone());
+    variables.insert("access_token".to_string(), access_token.clone());
     variables.insert("user_type".to_string(), user_type.clone());
     variables.insert(
         "version_type".to_string(),

@@ -224,6 +224,36 @@ body:has(.modal[data-state="open"]) .sidebar-overlay {
     color: var(--accent-text);
 }
 
+/* 侧边栏按钮显示名称：按钮变为竖向圆角矩形，图标下方展示小号文字标签 */
+body.show-nav-labels .nav-btn {
+    flex-direction: column;
+    gap: 3px;
+    height: 54px;
+    border-radius: 18px;
+}
+body.show-nav-labels .nav-btn > span:not(.nav-btn-experimental-badge) {
+    display: block;
+    position: relative;
+    z-index: 1;
+    max-width: 46px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.2px;
+}
+body.show-nav-labels .nav-btn .nav-icon-svg {
+    width: 20px;
+    height: 20px;
+}
+body.show-nav-labels .nav-submenu-toggle .submenu-arrow {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+}
+
 /* 简约线条导航图标 */
 .nav-icon-svg {
     width: 24px;

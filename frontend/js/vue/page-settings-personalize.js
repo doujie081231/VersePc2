@@ -18,6 +18,7 @@
       customColorGroupVisible: false,
       glassEffect: false,
       liquidGlass: false,
+      sidebarLabels: false,
       panoramaTheme: 'overworld',
       panoramaSpeed: 5,
       panoramaFollow: false,
@@ -457,6 +458,9 @@
       },
       onLiquidChange(enabled) {
         if (typeof applyLiquidGlassEffectValue === 'function') applyLiquidGlassEffectValue(enabled);
+      },
+      onSidebarLabelsChange(enabled) {
+        if (typeof applySidebarLabelsValue === 'function') applySidebarLabelsValue(enabled);
       }
     },
     template: `
@@ -475,6 +479,13 @@
                 <span>液态玻璃效果</span>
               </label>
               <span class="form-hint">更通透鲜艳的水晶质感，仅作用于标题栏、侧边栏、卡片、弹窗等重要区域</span>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-sidebar-labels" :checked="state.sidebarLabels" @change="onSidebarLabelsChange($event.target.checked)">
+                <span>侧边栏按钮显示名称</span>
+              </label>
+              <span class="form-hint">在侧边栏导航按钮底部显示页面名称，默认关闭</span>
             </div>
           </div>
   `
