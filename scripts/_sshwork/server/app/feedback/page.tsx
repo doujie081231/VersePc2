@@ -73,10 +73,14 @@ export default function FeedbackPage() {
     if (submitting) return;
     setMsg(null);
 
+    // 服务器用 trim 后的 title/description 校验签名，签名与提交必须使用同一份 trim 后内容
+    const submitTitle = title.trim();
+    const submitDescription = description.trim();
+
     const formData = new FormData();
-    formData.append("title", title);
+    formData.append("title", submitTitle);
     formData.append("client", client);
-    formData.append("description", description);
+    formData.append("description", submitDescription);
     formData.append("email", email);
     formData.append("phone", phone);
     formData.append("captchaId", captchaId);
@@ -94,7 +98,7 @@ export default function FeedbackPage() {
       }
       const nonce = randomNonce();
       const ts = String(Date.now());
-      const parts = ["verse-feedback-v1", captchaId, nonce, ts, client, "", title, description];
+      const parts = ["verse-feedback-v1", captchaId, nonce, ts, client, "", submitTitle, submitDescription];
       const sig = await hmacSha256Hex(signKey, parts.join("|"));
       formData.append("nonce", nonce);
       formData.append("ts", ts);
