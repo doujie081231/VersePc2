@@ -179,6 +179,7 @@ pub async fn api_proxy(
         || path == "/api/skin-texture"
         || path == "/api/save-avatar"
         || path == "/api/clear-avatar"
+        || path.starts_with("/api/capes")
     {
         if let Some(r) = skins::handle(&app, &method, &path, &params, &body).await {
             return r;

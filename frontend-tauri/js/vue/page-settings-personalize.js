@@ -19,6 +19,7 @@
       glassEffect: false,
       liquidGlass: false,
       sidebarLabels: false,
+      sidebarPin: false,
       panoramaTheme: 'overworld',
       panoramaSpeed: 5,
       panoramaFollow: false,
@@ -461,6 +462,9 @@
       },
       onSidebarLabelsChange(enabled) {
         if (typeof applySidebarLabelsValue === 'function') applySidebarLabelsValue(enabled);
+      },
+      onSidebarPinChange(enabled) {
+        if (typeof applySidebarPinValue === 'function') applySidebarPinValue(enabled);
       }
     },
     template: `
@@ -486,6 +490,13 @@
                 <span>侧边栏按钮显示名称</span>
               </label>
               <span class="form-hint">在侧边栏导航按钮底部显示页面名称，默认关闭</span>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-sidebar-pin" :checked="state.sidebarPin" @change="onSidebarPinChange($event.target.checked)">
+                <span>侧边栏单点不自动回收</span>
+              </label>
+              <span class="form-hint">开启后点击侧边栏导航不会自动收起，可手动点关闭按钮或遮罩收起，默认关闭</span>
             </div>
           </div>
   `

@@ -647,6 +647,14 @@
 .dark-theme .acct-skin-item.active {
     border-color: rgba(255, 255, 255, 0.4);
 }
+/* 披风操作按钮行（导入 / 获取官方 / 卸下） */
+.acct-cape-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 .acct-skin-import-btn {
     display: inline-flex;
     align-items: center;
@@ -2829,7 +2837,8 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 16px 24px;
+    /* 顶部 56px：避开全局窗口拖拽带(0-48px)与左上角悬浮球，否则返回键被遮无法点击 */
+    padding: 56px 24px 16px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     background: var(--bg-glass);

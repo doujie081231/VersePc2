@@ -457,7 +457,9 @@ function loadWallpaperSettings() {
 
 function setupNavigation() {
   // 完成导航后收起悬浮胶囊（安卓抽屉式：选中即收起）
+  // 「侧边栏单点不自动回收」开启时（body.sidebar-keep-open）跳过自动收起，保留遮罩/Esc/关闭按钮手动收起
   const collapseSidebar = () => {
+    if (document.body.classList.contains('sidebar-keep-open')) return;
     if (typeof window.closeSidebarPanel === 'function') window.closeSidebarPanel();
   };
 
