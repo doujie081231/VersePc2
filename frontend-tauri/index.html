@@ -226,6 +226,10 @@
   <div id="global-drag-strip" data-tauri-drag-region class="global-drag-strip"></div>
   <!-- 浮动窗口控制栏：最顶层，不占空间，右上角 -->
   <div class="floating-window-bar">
+    <div id="window-update-pill" class="window-update-pill" style="display:none" role="button" onclick="handleWindowUpdatePillClick()">
+      <span class="window-update-pill__spinner" id="window-update-pill-spinner"></span>
+      <span id="window-update-pill-text"></span>
+    </div>
     <div class="floating-window-controls" id="window-controls" style="display:none">
       <button class="win-btn win-btn-minimize" id="win-btn-minimize" title="最小化">
         <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>

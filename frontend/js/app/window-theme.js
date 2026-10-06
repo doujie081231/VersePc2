@@ -111,7 +111,11 @@ function setupWindowControls() {
     });
 
     if (overlay) {
-      overlay.addEventListener('click', () => setSidebarOpen(false));
+      overlay.addEventListener('click', () => {
+        // 「侧边栏单点不自动回收」开启时，点击遮罩/页面区域不收起，保持常驻展开
+        if (document.body.classList.contains('sidebar-keep-open')) return;
+        setSidebarOpen(false);
+      });
     }
 
     document.addEventListener('keydown', (e) => {

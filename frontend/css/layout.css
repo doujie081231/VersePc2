@@ -23,6 +23,12 @@
    ============================================================================ */
 
 /* 遮罩：透明点击层（不暗化背景，保留玻璃对内容的折射），点击空白处收起胶囊 */
+/* 「侧边栏单点不自动回收」开启时：遮罩透明且不拦截点击，用户可直接操作页面，侧边栏保持常驻展开 */
+body.sidebar-keep-open .sidebar-overlay {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 .sidebar-overlay {
     position: fixed;
     inset: 0;
@@ -944,6 +950,53 @@ body {
     z-index: 99999;
     -webkit-app-region: drag;
     pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 顶栏更新胶囊（最小化按钮左侧，Trae/VS Code 同款）：下载中显示进度，就绪后点击重启安装 */
+.window-update-pill {
+    -webkit-app-region: no-drag;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: #1f1f1f;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: default;
+    user-select: none;
+    white-space: nowrap;
+    transition: background 0.15s, transform 0.1s;
+}
+.window-update-pill.is-ready {
+    cursor: pointer;
+}
+.window-update-pill.is-ready:hover {
+    background: #343434;
+}
+.window-update-pill.is-ready:active {
+    transform: scale(0.96);
+}
+.window-update-pill__spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #ffffff;
+    animation: window-update-pill-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes window-update-pill-spin {
+    to { transform: rotate(360deg); }
 }
 .floating-window-controls {
     -webkit-app-region: no-drag;
