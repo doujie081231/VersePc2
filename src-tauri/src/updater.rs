@@ -27,6 +27,7 @@ use tokio::io::AsyncWriteExt;
 // ============== 常量 ==============
 
 const UPDATE_JSON_SOURCES: &[&str] = &[
+    "https://www.verselauncher.cn/update.json",
     "https://ghfast.top/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
     "https://ghproxy.net/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
     "https://gh-proxy.com/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
@@ -59,6 +60,10 @@ pub(crate) fn build_download_sources(url: &str) -> Vec<String> {
         ("", "")
     };
     let mut v: Vec<String> = Vec::new();
+    // 自建源优先：verselauncher.cn 国内直连最稳，更新包统一托管在本服务器（nginx 静态直出，支持断点续传）
+    if !file.is_empty() {
+        v.push(format!("https://www.verselauncher.cn/downloads/{}/{}", tag, file));
+    }
     if url.starts_with("https://gitee.com/") {
         v.push(url.to_string());
     } else if !file.is_empty() {

@@ -5,7 +5,7 @@
   "releaseNotes": "VersePC2 v1.5.0\n\n新功能:\n- 工具箱新增「投影工坊」入口，一键打开投影文件分享站\n\n改进:\n- 红石联机 / EnderLink 创建房间流程新增「中转节点选择」卡片，可手动挑选节点\n- 红石联机内核接入更新至红石 2.0：节点列表 API、内核下载接口、启动参数与日志解析全部对齐新版接入文档\n- 问题反馈页支持按分类自动收集日志附件\n\n修复:\n- Windows 路径校验在部分场景下将合法路径误判为无权访问（日志检测不到的问题）",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.5.0/VersePC2-1.5.0.exe",
+      "url": "https://www.verselauncher.cn/downloads/v1.5.0/VersePC2-1.5.0.exe",
       "size": 73916416,
       "sha256": "5F13A14210666E1E08D88ADDA569F3C412632FE00E2BF9B038CC79E21F41B195"
     },
