@@ -27,7 +27,6 @@ use tokio::io::AsyncWriteExt;
 // ============== 常量 ==============
 
 const UPDATE_JSON_SOURCES: &[&str] = &[
-    "https://www.verselauncher.cn/update.json",
     "https://ghfast.top/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
     "https://ghproxy.net/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
     "https://gh-proxy.com/https://raw.githubusercontent.com/doujie081231/VersePc2/main/update.json",
@@ -60,10 +59,6 @@ pub(crate) fn build_download_sources(url: &str) -> Vec<String> {
         ("", "")
     };
     let mut v: Vec<String> = Vec::new();
-    // 自建源优先：verselauncher.cn 国内直连最稳，更新包统一托管在本服务器（nginx 静态直出，支持断点续传）
-    if !file.is_empty() {
-        v.push(format!("https://www.verselauncher.cn/downloads/{}/{}", tag, file));
-    }
     if url.starts_with("https://gitee.com/") {
         v.push(url.to_string());
     } else if !file.is_empty() {
@@ -546,6 +541,12 @@ async fn stream_download(
     Ok(())
 }
 
+/// 连接建立/TTFB 阶段失败：源当前基本不通（被墙/宕机/节点失效），多耗重试只会拖慢换源；
+/// 与"传输中途断流"（源能出数据，只是链路抖动，值得续传重试）区分开。
+fn is_dead_source_error(e: &str) -> bool {
+    e.contains("TTFB 超时") || e.contains("连接失败")
+}
+
 async fn download_with_fallback(
     app: &AppHandle,
     url: &str,
@@ -569,54 +570,66 @@ async fn download_with_fallback(
 
     // 基准源波动多是瞬时性的（Gitee 高峰期偶发丢包），直接换源会丢掉续传进度且可能更慢。
     // 因此：同一源最多重试 MAX_RETRY_PER_SOURCE 次，每次都沿用 .part 断点续传；
-    // 多次仍失败，才切换到下一个镜像（部分文件保留，跨源请求 Range 继续下载）。
+    // 连接/TTFB 失败（源基本不通）只重试 MAX_RETRY_DEAD_SOURCE 次，快速换下一源；
+    // 所有源第一轮仍全部失败时，断点已保留，再完整扫描一轮（断点续传继续），仍失败才放弃。
     const MAX_RETRY_PER_SOURCE: u32 = 3;
+    const MAX_RETRY_DEAD_SOURCE: u32 = 1;
 
+    let sources = build_download_sources(url);
     let mut last_err = String::new();
-    for murl in build_download_sources(url) {
-        log_download(&format!("[fallback] 尝试下载源: {}", murl));
-        for attempt in 0..=MAX_RETRY_PER_SOURCE {
-            if attempt > 0 {
-                // 短暂让出，给网络/服务器一点恢复时间，再以断点续传重试同一源
-                tokio::time::sleep(Duration::from_millis(600)).await;
-            }
-            log_download(&format!("[fallback]  源内第 {} 次尝试", attempt + 1));
-            match stream_download(app, &murl, target, expected_size).await {
-                Ok(()) => {
-                    if verify_file(&part, expected_size, expected_sha) {
-                        log_download(&format!("[fallback] 校验通过 size={}B，下载完成", expected_size));
-                        let _ = fs::remove_file(target);
-                        fs::rename(&part, target)
-                            .map_err(|e| format!("下载完成但保存失败: {}", e))?;
-                        return Ok(());
-                    }
-                    // 校验失败：区分"被截断"（保留断点续传）与"数据损坏"（清空重下）
-                    let part_size = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
-                    if expected_size > 0 && part_size == expected_size {
-                        log_download(&format!(
-                            "[fallback] 文件完整但校验不符 size={}B (可能是损坏)，清空断点从下一镜像重下",
-                            part_size
-                        ));
-                        let _ = fs::remove_file(&part);
-                    } else {
-                        log_download(&format!(
-                            "[fallback] 文件不完整 size={}B != expected={}B，保留断点，下一镜像续传",
-                            part_size, expected_size
-                        ));
-                    }
-                    last_err = "文件校验失败，已从下一镜像重试".to_string();
-                    let _ = fs::remove_file(target);
-                    break;
+    for pass in 0..2 {
+        if pass > 0 {
+            log_download("[fallback] 所有下载源第一轮均失败，断点已保留，开始第二轮扫描");
+        }
+        for murl in &sources {
+            log_download(&format!("[fallback] 尝试下载源: {}", murl));
+            for attempt in 0..=MAX_RETRY_PER_SOURCE {
+                if attempt > 0 {
+                    // 短暂让出，给网络/服务器一点恢复时间，再以断点续传重试同一源
+                    tokio::time::sleep(Duration::from_millis(600)).await;
                 }
-                Err(e) => {
-                    // 该源临时失败：保留 .part，稍后沿用续传继续尝试同一源
-                    last_err = e;
-                    log_download(&format!("[fallback] 源失败: {}", last_err));
-                    // 源不支持 Range 时同源重试无意义（每次都全量重下导致进度回跳），
-                    // 直接切换下一镜像，断点留给支持 Range 的镜像续传
-                    if last_err.starts_with("NO_RANGE_SOURCE:") {
-                        last_err = "下载源均不支持断点续传，下载中断，请稍后重试".to_string();
+                log_download(&format!("[fallback]  源内第 {} 次尝试", attempt + 1));
+                match stream_download(app, murl, target, expected_size).await {
+                    Ok(()) => {
+                        if verify_file(&part, expected_size, expected_sha) {
+                            log_download(&format!("[fallback] 校验通过 size={}B，下载完成", expected_size));
+                            let _ = fs::remove_file(target);
+                            fs::rename(&part, target)
+                                .map_err(|e| format!("下载完成但保存失败: {}", e))?;
+                            return Ok(());
+                        }
+                        // 校验失败：区分"被截断"（保留断点续传）与"数据损坏"（清空重下）
+                        let part_size = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+                        if expected_size > 0 && part_size == expected_size {
+                            log_download(&format!(
+                                "[fallback] 文件完整但校验不符 size={}B (可能是损坏)，清空断点从下一镜像重下",
+                                part_size
+                            ));
+                            let _ = fs::remove_file(&part);
+                        } else {
+                            log_download(&format!(
+                                "[fallback] 文件不完整 size={}B != expected={}B，保留断点，下一镜像续传",
+                                part_size, expected_size
+                            ));
+                        }
+                        last_err = "文件校验失败，已从下一镜像重试".to_string();
+                        let _ = fs::remove_file(target);
                         break;
+                    }
+                    Err(e) => {
+                        // 该源临时失败：保留 .part，稍后沿用续传继续尝试同一源
+                        last_err = e;
+                        log_download(&format!("[fallback] 源失败: {}", last_err));
+                        // 源不支持 Range 时同源重试无意义（每次都全量重下导致进度回跳），
+                        // 直接切换下一镜像，断点留给支持 Range 的镜像续传
+                        if last_err.starts_with("NO_RANGE_SOURCE:") {
+                            last_err = "下载源均不支持断点续传，下载中断，请稍后重试".to_string();
+                            break;
+                        }
+                        // 死源快速换源：连接/TTFB 失败仅重试 2 次即换下一源；断流类失败（源能出数据）仍按原次数重试
+                        if is_dead_source_error(&last_err) && attempt >= MAX_RETRY_DEAD_SOURCE {
+                            break;
+                        }
                     }
                 }
             }
