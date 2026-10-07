@@ -72,6 +72,18 @@ jobs:
           cp winstubs/libkernel32.a winstubs/libshell32.a
           echo "RUSTFLAGS=-L $(pwd)/winstubs" >> "$GITHUB_ENV"
 
+      # sponsor-orders.json is not in the repo (kept out to avoid leaking sponsor ids), but sponsor.rs embeds it at compile time via include_str!.
+      # If missing in CI, write an empty whitelist placeholder so the build passes.
+      - name: Ensure sponsor-orders.json exists
+        run: |
+          if [ ! -f src-tauri/data/sponsor-orders.json ]; then
+            mkdir -p src-tauri/data
+            printf %s eyJvcmRlcnMiOltdfQ== | base64 -d > src-tauri/data/sponsor-orders.json
+            echo placeholder-written
+          else
+            echo sponsor-orders-found
+          fi
+
       - name: Build release binary
         run: |
           TARGET="${{ matrix.target }}"
