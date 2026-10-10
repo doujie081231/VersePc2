@@ -233,7 +233,7 @@ pub fn build_launch_arguments(
     let mut jvm_args: Vec<String> = Vec::new();
     jvm_args.push(format!("-Xmx{}M", max_mem_mb));
     jvm_args.push("-Dlog4j2.formatMsgNoLookups=true".to_string());
-    jvm_args.push("-Djava.net.preferIPv4Stack=true".to_string());
+    // 不强制 IPv4 栈：保持 JVM 默认双栈，避免仅含 AAAA（IPv6）记录的域名无法连接
 
     // GC 选择
     let has_user_gc = jvm_args.iter().any(|a| {
@@ -261,10 +261,6 @@ pub fn build_launch_arguments(
         let ccs_mb = meta_mb.min(512);
         jvm_args.push(format!("-XX:CompressedClassSpaceSize={}m", ccs_mb));
         jvm_args.push(format!("-XX:MaxMetaspaceSize={}m", meta_mb));
-    }
-    if !jvm_args.iter().any(|a| a.contains("preferIPv4Stack") || a.contains("preferIPv6Stack")) {
-        jvm_args.push("-Djava.net.preferIPv4Stack=true".to_string());
-        jvm_args.push("-Djava.net.preferIPv4Addresses=true".to_string());
     }
 
     // 用户自定义 JVM 参数（版本独立 > 全局）
