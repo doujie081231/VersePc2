@@ -1,13 +1,13 @@
 {
-    "version":  "1.5.3",
-    "releaseName":  "v1.5.3",
+    "version":  "1.5.4",
+    "releaseName":  "v1.5.4",
     "releaseDate":  "2026-10-10",
-    "releaseNotes":  "VersePC2 v1.5.3\n\n修复:\n- 部分纯域名服务器在游戏内服务器列表显示「离线」的问题（此前启动游戏时强制 JVM 使用 IPv4，导致仅含 IPv6 记录的域名无法连接；现恢复与官方启动器一致的双栈默认行为）",
+    "releaseNotes":  "VersePC2 v1.5.4\n\n其他:\n- 例行版本更新，无功能性变更（包含 v1.5.3 全部修复）",
     "files":  {
                   "win-x64":  {
-                                  "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.3/VersePC2.exe",
+                                  "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.4/VersePC2.exe",
                                   "size":  73991680,
-                                  "sha256":  "d75606fd0a91d4a3715041ed799639f6c44112d5661e06b440f6c0b76b233d02"
+                                  "sha256":  "f9dfcf266aec1be42decea086117cf1dcf264917fcc968c251fe8d49a384e6df"
                               },
                   "linux-x86_64":  {
                                        "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.1/VersePC2-linux-x86_64",
