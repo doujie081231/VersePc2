@@ -1,13 +1,13 @@
 {
-    "version":  "1.5.2",
-    "releaseName":  "v1.5.2",
+    "version":  "1.5.3",
+    "releaseName":  "v1.5.3",
     "releaseDate":  "2026-10-10",
-    "releaseNotes":  "VersePC2 v1.5.2\n\n修复:\n- 默认皮肤 Enderman 显示为错误纹理且无法更换的问题\n- 问题反馈验证码输错后无法重试的问题（现在允许 3 次尝试，超出后自动换新）",
+    "releaseNotes":  "VersePC2 v1.5.3\n\n修复:\n- 部分纯域名服务器在游戏内服务器列表显示「离线」的问题（此前启动游戏时强制 JVM 使用 IPv4，导致仅含 IPv6 记录的域名无法连接；现恢复与官方启动器一致的双栈默认行为）",
     "files":  {
                   "win-x64":  {
-                                  "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.2/VersePC2.exe",
-                                  "size":  73992192,
-                                  "sha256":  "47a53984a839f4713981ff8d80e1236a7b56d64cf3d8ffbbb65c476bee22571c"
+                                  "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.3/VersePC2.exe",
+                                  "size":  73991680,
+                                  "sha256":  "d75606fd0a91d4a3715041ed799639f6c44112d5661e06b440f6c0b76b233d02"
                               },
                   "linux-x86_64":  {
                                        "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.1/VersePC2-linux-x86_64",
