@@ -19,7 +19,8 @@ src-tauri/.cf_api_key
 src-tauri/data/
 
 # 服务器凭据（只保留本地，禁止入库）
-scripts/_sshwork/ssh.mjs
+scripts/_sshwork/
 .target-msvc/
 
 .next/
+.trae/
