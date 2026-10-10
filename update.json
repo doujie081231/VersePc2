@@ -1,13 +1,13 @@
 {
-    "version":  "1.5.1",
-    "releaseName":  "v1.5.1",
-    "releaseDate":  "2026-10-07",
-    "releaseNotes":  "VersePC2 v1.5.1\n\n新功能:\n- 账户详情新增披风切换：导入本地披风或从官方皮肤站获取，预览即时切换，支持卸下\n- 个性化设置新增「侧边栏单点不自动回收」\n- 顶栏更新胶囊：自动后台下载新版本，一键「重启以更新」\n\n优化:\n- 更新下载更稳：无效源快速切换，全部失败后自动二轮扫描断点续传\n- 反馈验证码失败后自动换新；站点验证码有效期延长至 10 分钟\n\n修复:\n- 版本设置页返回键被遮挡的问题\n- 启动器反馈页验证码失败后无法重试的问题",
+    "version":  "1.5.2",
+    "releaseName":  "v1.5.2",
+    "releaseDate":  "2026-10-10",
+    "releaseNotes":  "VersePC2 v1.5.2\n\n修复:\n- 默认皮肤 Enderman 显示为错误纹理且无法更换的问题\n- 问题反馈验证码输错后无法重试的问题（现在允许 3 次尝试，超出后自动换新）",
     "files":  {
                   "win-x64":  {
-                                  "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.1/VersePC2.exe",
-                                  "size":  73979904,
-                                  "sha256":  "f48a246c1f3f5c12a3a94bf666cccf89ce2f1f943f546838814dd7044b39b6cf"
+                                  "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.2/VersePC2.exe",
+                                  "size":  73992192,
+                                  "sha256":  "47a53984a839f4713981ff8d80e1236a7b56d64cf3d8ffbbb65c476bee22571c"
                               },
                   "linux-x86_64":  {
                                        "url":  "https://github.com/doujie081231/VersePc2/releases/download/v1.5.1/VersePC2-linux-x86_64",
