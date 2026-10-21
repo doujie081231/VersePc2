@@ -1341,14 +1341,15 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| format!("读取条目失败: {}", e))?;
         let name = entry.name().to_string();
+        let normalized = name.replace('\\', "/");
 
-        // ZipSlip 保护：跳过包含 .. 的路径
-        if name.split('/').any(|c| c == "..") || name.split('\\').any(|c| c == "..") {
-            eprintln!("[java] 跳过可疑路径: {}", name);
-            continue;
-        }
+        // ZipSlip 保护：跳过包含 .. 的路径，以及绝对路径（/x、C:/x）
+        if normalized.split('/').any(|c| c == "..")
+            || normalized.starts_with('/')
+            || normalized.as_bytes().get(1) == Some(&b':')
+        {
 
-        let out_path = dest_dir.join(&name);
+        let out_path = dest_dir.join(&normalized);
 
         if entry.is_dir() {
             std::fs::create_dir_all(&out_path).map_err(|e| format!("创建目录失败: {}", e))?;
