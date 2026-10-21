@@ -82,9 +82,20 @@ pub fn is_modpack_path_safe(entry_path: &str) -> bool {
     if normalized.to_lowercase().starts_with("__macosx/") {
         return false;
     }
+    // 绝对路径：/x 或 C:/x（UNC 路径经上面替换后同样以 / 开头）
+    if normalized.starts_with('/') {
+        return false;
+    }
+    if normalized.as_bytes().get(1) == Some(&b':') {
+        return false;
+    }
     for seg in normalized.split('/') {
-        if seg.is_empty() {
+        if seg.is_empty() || seg == "." {
             continue;
+        }
+        // 拒 .. 段，防止 zip-slip 越出目标目录
+        if seg == ".." {
+            return false;
         }
         let stem = seg.split('.').next().unwrap_or(seg);
         if WIN_RESERVED_NAMES.iter().any(|r| r.eq_ignore_ascii_case(stem)) {
