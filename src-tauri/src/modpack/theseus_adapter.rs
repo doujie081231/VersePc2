@@ -118,6 +118,11 @@ async fn import_zip_generic(
             if name.ends_with('/') {
                 continue;
             }
+            // 防 zip-slip：拒绝 .. / 绝对路径 / 盘符，避免写出版本目录
+            if !super::curseforge_shared::is_modpack_path_safe(&name) {
+                eprintln!("[Modpack] 跳过可疑路径: {}", name);
+                continue;
+            }
             let out_path = version_dir.join(&name);
             if let Some(parent) = out_path.parent() {
                 let _ = fs::create_dir_all(parent);
