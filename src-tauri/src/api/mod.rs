@@ -4,6 +4,7 @@
 
 pub mod accounts;
 pub mod authlib;
+pub mod cloud;
 pub mod crash;
 pub mod download;
 pub mod favorites;
@@ -21,6 +22,9 @@ pub mod settings;
 pub mod skins;
 pub mod sponsor;
 pub mod system;
+
+/// 联机功能总开关（false=关闭；联机相关代码全部保留，置回 true 即恢复）
+pub(crate) const LAN_ENABLED: bool = true;
 
 use serde_json::Value;
 
@@ -118,6 +122,13 @@ pub async fn api_proxy(
         }
     }
 
+    // Verse 云盘路由（async，登录中继 + cloudapi 中继 + 存档打包/上传/下载）
+    if path.starts_with("/api/cloud") {
+        if let Some(r) = cloud::handle(&app, &method, &path, &params, &body).await {
+            return r;
+        }
+    }
+
     // 账号路由（async，第三方登录涉及 Yggdrasil HTTP 请求 + authlib 下载）
     if path.starts_with("/api/accounts") {
         if let Some(r) = accounts::handle(&method, &path, &params, &body).await {
@@ -155,6 +166,9 @@ pub async fn api_proxy(
 
     // LAN / EasyTier 路由（async，UPnP SSDP + EasyTier 子进程管理）
     if path.starts_with("/api/lan") || path.starts_with("/api/easytier") {
+        if !LAN_ENABLED {
+            return ApiResult::err(403, "联机功能暂不可用");
+        }
         if let Some(r) = lan::handle(&app, &method, &path, &params, &body).await {
             return r;
         }
@@ -179,6 +193,7 @@ pub async fn api_proxy(
         || path == "/api/skin-texture"
         || path == "/api/save-avatar"
         || path == "/api/clear-avatar"
+        || path.starts_with("/api/capes")
     {
         if let Some(r) = skins::handle(&app, &method, &path, &params, &body).await {
             return r;

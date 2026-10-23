@@ -280,6 +280,8 @@ function resetMdDetailView() {
 
 async function getInstalledVersionInfo() {
   try {
+    // 直接从模组页进入时 installedVersions 可能尚未填充，先确保加载
+    await ensureInstalledVersions();
     const settings = await API.getSettings().catch(() => ({}));
     const selectedVersion = settings.selectedVersion || '';
     if (!selectedVersion) return { gameVersion: '', loaderType: '', versionId: '' };
@@ -584,9 +586,8 @@ async function loadModDependencies() {
       if (d.projectId && !allDeps.has(d.projectId)) {
         let type = d.dependencyType || '';
         if (mdSource === 'curseforge') {
-          if (type === '1' || type === '2') type = 'required';
-          else if (type === '5') type = 'incompatible';
-          else type = 'optional';
+          // 后端已将 CurseForge relationType 统一为 required/optional/incompatible
+          type = type === 'required' ? 'required' : (type === 'incompatible' ? 'incompatible' : 'optional');
         }
         allDeps.set(d.projectId, Object.assign({}, d, { dependencyType: type }));
       }
@@ -604,9 +605,13 @@ async function loadModDependencies() {
   const requiredDeps = depArray.filter(d => d.dependencyType === 'required');
   depsSection.style.display = 'block';
 
+  // 依赖兼容性优先跟随下载页当前筛选（版本/加载器），
+  // 未筛选时才回退到已选中的游戏实例，避免“筛选了 1.21.11 Fabric 却按 Forge 实例检查”
   const verInfo = await getInstalledVersionInfo();
-  const currentGameVersion = verInfo.gameVersion;
-  const currentLoader = verInfo.loaderType;
+  const filterGameVersion = getCustomSelectValue('mod-filter-version') || '';
+  const filterLoader = getCustomSelectValue('mod-filter-loader') || '';
+  const currentGameVersion = filterGameVersion || verInfo.gameVersion;
+  const currentLoader = filterLoader || verInfo.loaderType;
   const hasVersionFilter = !!(currentGameVersion || currentLoader);
 
   if (!hasVersionFilter) {
@@ -646,88 +651,75 @@ async function loadModDependencies() {
     let resolved = {};
     let versionInfo = {};
     let installedMods = [];
-    const isCF = mdSource === 'curseforge';
+    // 按筛选后的目标实例读取已安装模组，避免“筛选 Fabric 却查了 Forge 实例”
+    const targetVersionId = matchInstalledVersion(currentGameVersion, currentLoader);
+    const installedModsPromise = targetVersionId
+      ? API.getVersionMods(targetVersionId).catch(() => [])
+      : API.getInstalledMods().catch(() => []);
 
-    if (!isCF) {
+    if (hasVersionFilter) {
+      // Modrinth / CurseForge 都走同一个“解析 + 匹配版本”接口，
+      // 避免 CurseForge 只查元信息、导致有 1.21.11 Fabric 版本却显示“未有对应版本”
       const [resolveResult, installedModsData] = await Promise.all([
-        hasVersionFilter
-          ? API.resolveDepVersions(depIds, currentGameVersion, currentLoader, 'modrinth')
-          : API.resolveModDeps(depIds.join(',')).then(r => ({ _basic: r })),
-        API.getInstalledMods().catch(() => []).then(r => Array.isArray(r) ? r : (r.mods || []))
+        API.resolveDepVersions(depIds, currentGameVersion, currentLoader, mdSource),
+        installedModsPromise
       ]);
-      installedMods = Array.isArray(installedModsData) ? installedModsData : [];
+      installedMods = Array.isArray(installedModsData)
+        ? installedModsData
+        : ((installedModsData && installedModsData.mods) || []);
 
-      if (hasVersionFilter) {
-        versionInfo = resolveResult;
-        mdDepsVersionInfo = versionInfo;
-        for (const pid of depIds) {
-          const info = versionInfo[pid] || {};
-          resolved[pid] = {
-            id: info.id || pid,
-            title: info.title || pid,
-            slug: info.slug || '',
-            icon: info.icon || '',
-            description: info.description || '',
-            downloads: info.downloads || 0
-          };
-        }
-        mdDepsResolved = resolved;
+      versionInfo = resolveResult || {};
+      mdDepsVersionInfo = versionInfo;
 
-        const failedIds = depIds.filter(pid => {
-          const r = resolved[pid];
-          return !r || !r.title || r.title === pid;
-        });
-        if (failedIds.length > 0) {
-          try {
-            const retryRes = await API.resolveDepVersions(failedIds, '', '', 'modrinth');
-            for (const pid of failedIds) {
-              const ri = retryRes[pid];
-              if (ri && ri.title && ri.title !== pid) {
-                resolved[pid] = { ...resolved[pid], ...ri };
-              }
+      for (const pid of depIds) {
+        const info = versionInfo[pid] || {};
+        resolved[pid] = {
+          id: info.id || pid,
+          title: info.title || pid,
+          slug: info.slug || '',
+          icon: info.icon || '',
+          description: info.description || '',
+          downloads: info.downloads || 0
+        };
+      }
+      mdDepsResolved = resolved;
+
+      const failedIds = depIds.filter(pid => {
+        const r = resolved[pid];
+        return !r || !r.title || r.title === pid;
+      });
+      if (failedIds.length > 0) {
+        try {
+          const retryRes = await API.resolveModDeps(failedIds.join(','), mdSource);
+          for (const pid of failedIds) {
+            const ri = retryRes[pid];
+            if (ri && ri.title && ri.title !== pid) {
+              resolved[pid] = { ...resolved[pid], ...ri };
             }
-            mdDepsResolved = resolved;
-          } catch (e) { console.warn('[ModInstall] 依赖检查失败:', e.message); }
-        }
-
-        const compatibleCount = requiredDeps.filter(d => versionInfo[d.projectId]?.hasCompatibleVersion).length;
-        const incompatibleCount = requiredDeps.filter(d => !versionInfo[d.projectId]?.hasCompatibleVersion).length;
-        if (depsCount) {
-          let countText = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
-          countText += ` — ${compatibleCount} 个有对应版本`;
-          if (incompatibleCount > 0) {
-            countText += `，${incompatibleCount} 个未有对应版本`;
           }
-          depsCount.textContent = countText;
+          mdDepsResolved = resolved;
+        } catch (e) { console.warn('[ModInstall] 依赖检查失败:', e.message); }
+      }
+
+      const compatibleCount = requiredDeps.filter(d => versionInfo[d.projectId]?.hasCompatibleVersion).length;
+      const incompatibleCount = requiredDeps.filter(d => !versionInfo[d.projectId]?.hasCompatibleVersion).length;
+      if (depsCount) {
+        let countText = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
+        countText += ` — ${compatibleCount} 个有对应版本`;
+        if (incompatibleCount > 0) {
+          countText += `，${incompatibleCount} 个未有对应版本`;
         }
-      } else {
-        resolved = resolveResult._basic;
-        mdDepsResolved = resolved;
-        mdDepsVersionInfo = {};
-        if (depsCount) depsCount.textContent = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
+        depsCount.textContent = countText;
       }
     } else {
-      try {
-        const d = await API.getInstalledMods().catch(() => []);
-        installedMods = Array.isArray(d) ? d : ((d && d.mods) || []);
-      } catch (e) {}
-      resolved = {};
-      try {
-        const r = await API.resolveModDeps(depIds.join(','), 'curseforge') || {};
-        for (const pid of depIds) {
-          const ri = r[pid];
-          if (ri) {
-            resolved[pid] = {
-              id: ri.id || pid,
-              title: ri.title || ri.name || pid,
-              slug: ri.slug || '',
-              icon: ri.icon || ri.logo || '',
-              description: ri.description || '',
-              downloads: ri.downloads || 0
-            };
-          }
-        }
-      } catch (e) { console.warn('[ModInstall] CF依赖解析失败:', e.message); }
+      const [basic, installedModsData] = await Promise.all([
+        API.resolveModDeps(depIds.join(','), mdSource),
+        installedModsPromise
+      ]);
+      installedMods = Array.isArray(installedModsData)
+        ? installedModsData
+        : ((installedModsData && installedModsData.mods) || []);
+      resolved = basic || {};
       mdDepsResolved = resolved;
       mdDepsVersionInfo = {};
       if (depsCount) depsCount.textContent = `(${requiredDeps.length} 必选, ${depArray.length - requiredDeps.length} 可选)`;
@@ -760,13 +752,17 @@ function renderDepsList(depArray, resolved, versionInfo, hasVersionFilter, curre
     const depType = d.dependencyType || 'optional';
     const typeLabel = depType === 'required' ? '必选' : (depType === 'incompatible' ? '冲突' : '可选');
     const badgeClass = depType === 'required' ? 'required' : (depType === 'incompatible' ? 'incompatible' : 'optional');
+    const vInfo = versionInfo[d.projectId];
 
     const isInstalled = installedMods.some(m => {
       if (m.id === d.projectId) return true;
-      if (!m.filename) return false;
-      const fn = m.filename.toLowerCase();
+      const fn = (m.fileName || m.filename || '').toLowerCase();
+      if (!fn) return false;
       const pid = d.projectId.toLowerCase();
       if (fn.includes(pid)) return true;
+      // 后端解析出的兼容文件与本地文件完全一致，视为已安装
+      const depFileName = (vInfo?.fileName || '').toLowerCase();
+      if (depFileName && fn === depFileName) return true;
       const slug = (info.slug || '').toLowerCase();
       if (slug && fn.includes(slug)) return true;
       return false;
@@ -778,7 +774,6 @@ function renderDepsList(depArray, resolved, versionInfo, hasVersionFilter, curre
       statusText = '✓ 已安装';
       statusClass = 'installed';
     } else if (hasVersionFilter) {
-      const vInfo = versionInfo[d.projectId];
       if (vInfo?.hasCompatibleVersion) {
         statusText = '可安装';
         statusClass = 'compatible';
@@ -793,7 +788,6 @@ function renderDepsList(depArray, resolved, versionInfo, hasVersionFilter, curre
 
     let versionInfoHtml = '';
     if (hasVersionFilter && !isInstalled) {
-      const vInfo = versionInfo[d.projectId];
       if (vInfo?.hasCompatibleVersion) {
         const verNum = vInfo.versionNumber || '';
         const loaders = (vInfo.loaders || []).map(l => {
@@ -834,15 +828,42 @@ function toggleMdDepsSection() {
   }
 }
 
+// 当前筛选（或已选实例）下，挑一个可作为依赖解析根模组本体的版本
+function pickDependencyRootVersion(gameVersion, loader) {
+  let candidates = Array.isArray(mdAllVersions) ? mdAllVersions.slice() : [];
+  if (gameVersion) {
+    candidates = candidates.filter(v =>
+      (v.gameVersions || []).some(gv => gv === gameVersion));
+  }
+  if (loader) {
+    candidates = candidates.filter(v =>
+      (v.loaders || []).some(l => l.toLowerCase() === loader.toLowerCase()));
+  }
+  if (candidates.length === 0) return '';
+  const sorted = _sortVersionsByNumber(candidates);
+  const release = sorted.find(v => v.releaseType === 'release');
+  return (release || sorted[0]).id || '';
+}
+
 async function downloadAllDeps() {
   if (!currentModDetailData) return;
   const source = currentModDetailData.source || 'modrinth';
-  const versionId = currentModDetailData.selectedVersionId || currentModDetailData.versionId || '';
-  const gameVersion = currentModDetailData.selectedGameVersion || getCustomSelectValue('mod-filter-version') || '';
-  const loader = currentModDetailData.selectedLoader || getCustomSelectValue('mod-filter-loader') || '';
+  const projectId = currentModDetailData.id || currentModDetailId || '';
+  const filterGame = getCustomSelectValue('mod-filter-version') || '';
+  const filterLoader = getCustomSelectValue('mod-filter-loader') || '';
+  const verInfo = await getInstalledVersionInfo();
+  const gameVersion = filterGame || verInfo.gameVersion || '';
+  const loader = filterLoader || verInfo.loaderType || '';
+  // “一键下载”不强制先点某个版本：按当前筛选/实例自动选根版本，
+  // 否则 currentModDetailData 里没有 selectedVersionId 时会永远提示“请先选择一个版本”
+  const versionId = currentModDetailData.selectedVersionId
+    || currentModDetailData.versionId
+    || pickDependencyRootVersion(gameVersion, loader);
 
   if (!versionId) {
-    showToast('请先选择一个版本', 'error');
+    showToast(gameVersion || loader
+      ? `当前筛选（${gameVersion || '未知版本'}${loader ? ' / ' + loader : ''}）下未找到可用版本`
+      : '请先选择一个版本', 'error');
     return;
   }
 
@@ -852,15 +873,72 @@ async function downloadAllDeps() {
   showToast('正在检测前置依赖...', 'info');
 
   try {
+    const targetVersionId = matchInstalledVersion(gameVersion, loader);
+    const installedModsPromise = targetVersionId
+      ? API.getVersionMods(targetVersionId).catch(() => [])
+      : API.getInstalledMods().catch(() => []);
     const [depResult, installedModsData] = await Promise.all([
-      API.getDependenciesRecursive(versionId, source, gameVersion, loader),
-      API.getInstalledMods().catch(() => [])
+      API.getDependenciesRecursive(versionId, source, gameVersion, loader, projectId),
+      installedModsPromise
     ]);
     const deps = depResult.dependencies || [];
-    const installedMods = Array.isArray(installedModsData) ? installedModsData : [];
+    const unresolved = depResult.unresolved || [];
+    const installedMods = Array.isArray(installedModsData)
+      ? installedModsData
+      : ((installedModsData && installedModsData.mods) || []);
 
     if (deps.length === 0) {
-      showToast('该模组没有前置依赖', 'info');
+      if (unresolved.length > 0) {
+        showToast(`有 ${unresolved.length} 个前置无法解析，请检查网络或游戏版本/加载器`, 'error');
+      } else {
+        showToast('该模组没有前置依赖', 'info');
+      }
+      if (btn) { btn.disabled = false; btn.innerHTML = '<span>一键下载</span>'; }
+      return;
+    }
+
+    // 后端未找到兼容版本的依赖会带 compatibleVersion: null，先明确提示，避免误报“均已安装”
+    const noVersionDeps = deps.filter(d => !d.compatibleVersion);
+    const problemNames = [...new Set([
+      ...unresolved.map(d => d.title || d.projectId),
+      ...noVersionDeps.map(d => d.title || d.projectId)
+    ])].filter(Boolean);
+    if (problemNames.length > 0) {
+      showToast(
+        `有 ${problemNames.length} 个前置无兼容版本：${problemNames.slice(0, 3).join('、')}${problemNames.length > 3 ? ' 等' : ''}`,
+        'error'
+      );
+    }
+
+    const toDownload = [];
+    const seen = new Set();
+    for (const dep of deps) {
+      if (!dep.compatibleVersion) continue;
+      if (seen.has(dep.projectId)) continue;
+      seen.add(dep.projectId);
+      const depFileName = (dep.compatibleVersion.fileName || '').toLowerCase();
+      const depBaseName = depFileName.replace(/\.jar$/i, '').replace(/[-_](v?\d[\w.\-]*)$/i, '');
+      const alreadyInstalled = installedMods.some(m => {
+        if (m.id === dep.projectId) return true;
+        const fn = (m.fileName || m.filename || '').toLowerCase();
+        if (!fn) return false;
+        if (fn.includes(dep.projectId.toLowerCase())) return true;
+        if (depFileName && fn === depFileName) return true;
+        if (depBaseName.length >= 3) {
+          const mBase = fn.replace(/\.jar\.disabled$/i, '').replace(/\.jar$/i, '').replace(/[-_](v?\d[\w.\-]*)$/i, '');
+          if (mBase.length >= 3 && (mBase === depBaseName || mBase.includes(depBaseName) || depBaseName.includes(mBase))) return true;
+        }
+        return false;
+      });
+      if (!alreadyInstalled) toDownload.push(dep);
+    }
+
+    if (toDownload.length === 0) {
+      if (problemNames.length > 0) {
+        showToast(`没有可下载的前置（${problemNames.length} 个无法解析或无兼容版本）`, 'error');
+      } else {
+        showToast('所有前置依赖均已安装', 'info');
+      }
       if (btn) { btn.disabled = false; btn.innerHTML = '<span>一键下载</span>'; }
       return;
     }
@@ -875,58 +953,38 @@ async function downloadAllDeps() {
     }
     const savePath = folderResult.path;
 
-    const toDownload = [];
-    const seen = new Set();
-    for (const dep of deps) {
-      if (!dep.compatibleVersion) continue;
-      if (seen.has(dep.projectId)) continue;
-      seen.add(dep.projectId);
-      const depFileName = (dep.compatibleVersion.fileName || '').toLowerCase();
-      const depBaseName = depFileName.replace(/\.jar$/i, '').replace(/[-_](v?\d[\w.\-]*)$/i, '');
-      const alreadyInstalled = installedMods.some(m => {
-        if (m.id === dep.projectId) return true;
-        if (!m.filename) return false;
-        const fn = m.filename.toLowerCase();
-        if (fn.includes(dep.projectId.toLowerCase())) return true;
-        if (depFileName && fn === depFileName) return true;
-        if (depBaseName.length >= 3) {
-          const mBase = fn.replace(/\.jar\.disabled$/i, '').replace(/\.jar$/i, '').replace(/[-_](v?\d[\w.\-]*)$/i, '');
-          if (mBase.length >= 3 && (mBase === depBaseName || mBase.includes(depBaseName) || depBaseName.includes(mBase))) return true;
-        }
-        return false;
-      });
-      if (!alreadyInstalled) toDownload.push(dep);
-    }
-
-    if (toDownload.length === 0) {
-      showToast('所有前置依赖均已安装', 'info');
-      if (btn) { btn.disabled = false; btn.innerHTML = '<span>一键下载</span>'; }
-      return;
-    }
-
     if (btn) { btn.innerHTML = `<span>下载中 (0/${toDownload.length})...</span>`; }
 
-    let downloaded = 0;
+    let submitted = 0;
+    let failed = 0;
+    let index = 0;
     for (const dep of toDownload) {
+      index++;
       try {
-        if (btn) { btn.innerHTML = `<span>下载中 (${downloaded + 1}/${toDownload.length})...</span>`; }
+        if (btn) { btn.innerHTML = `<span>下载中 (${index}/${toDownload.length})...</span>`; }
         const result = await API.downloadModVersion(
           dep.compatibleVersion.versionId, dep.projectId, source, '',
           gameVersion, loader, savePath, false
         );
         if (result.success && result.sessionId) {
+          submitted++;
           showModDownloadModal(result.fileName, result.sessionId, savePath, dep.icon || '');
         } else {
-          showToast(`${dep.title}: ${result.error || '下载失败'}`, 'error');
+          failed++;
+          showToast(`${dep.title || dep.projectId}: ${result.error || '下载失败'}`, 'error');
         }
       } catch (e) {
-        showToast(`${dep.title}: ${e.message || '下载失败'}`, 'error');
+        failed++;
+        showToast(`${dep.title || dep.projectId}: ${e.message || '下载失败'}`, 'error');
       }
-      downloaded++;
     }
 
     mdDepsCache.clear();
-    showToast(`已提交 ${downloaded} 个前置依赖下载`, 'success');
+    if (failed > 0) {
+      showToast(`已提交 ${submitted}/${toDownload.length} 个前置下载，${failed} 个失败`, 'error');
+    } else {
+      showToast(`已提交 ${submitted} 个前置依赖下载`, 'success');
+    }
     if (btn) { btn.disabled = false; btn.innerHTML = '<span>一键下载</span>'; }
   } catch (e) {
     showToast('检测前置依赖失败: ' + (e.message || '未知错误'), 'error');

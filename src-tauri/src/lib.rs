@@ -23,13 +23,26 @@ mod network;
 mod plugin_exec;
 mod plugins;
 mod private_server;
+#[cfg(target_os = "windows")]
 mod promote;
+#[cfg(not(target_os = "windows"))]
+mod promote {
+    /// 非 Windows 平台没有 UAC 提权流程
+    pub fn try_run_promote_process() -> bool {
+        false
+    }
+    /// 非 Windows 平台不支持系统级内存优化
+    pub fn run_memory_optimize() -> Result<(), String> {
+        Err("内存优化仅支持 Windows".to_string())
+    }
+}
 mod redstone_online;
 mod resource;
 mod saves;
 pub mod server_host;
 pub mod server_host_daemon;
 mod storage;
+mod transfer;
 mod system;
 mod tts;
 mod updater;
@@ -39,7 +52,11 @@ mod wallpaper_engine;
 mod scene_renderer;
 
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use tauri::{Emitter, Manager, PhysicalPosition, Position};
+
+/// 窗口缩放防抖计数：每次 Resized 递增，只有延迟结束时仍是最后一次才写盘
+static WINDOW_RESIZE_GEN: AtomicU64 = AtomicU64::new(0);
 
 // ============== Windows 内存压缩：EmptyWorkingSet ==============
 // 调用 Windows psapi.dll 的 EmptyWorkingSet，将进程不活跃的内存页交换出物理内存
@@ -216,6 +233,10 @@ fn window_show(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 async fn window_close(window: tauri::WebviewWindow) {
+    // 关闭前先记录窗口尺寸，避免动画移动后把位移/尺寸写进记忆
+    WINDOW_RESIZE_GEN.fetch_add(1, AtomicOrdering::SeqCst);
+    save_window_state(&window);
+
     // 自动更新：若已有下载完成的更新包，直接进入"替换+重启"流程（安装脚本会退出进程并重启新版本），
     // 不再播放关闭动画，避免旧进程占用 exe 导致替换失败。
     if crate::updater::auto_install_on_close(&window.app_handle()) {
@@ -264,6 +285,8 @@ async fn window_close(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn window_destroy(window: tauri::WebviewWindow) {
+    WINDOW_RESIZE_GEN.fetch_add(1, AtomicOrdering::SeqCst);
+    save_window_state(&window);
     let _ = window.close();
 }
 
@@ -316,6 +339,52 @@ fn window_is_minimized(window: tauri::WebviewWindow) -> bool {
 fn window_set_size(window: tauri::WebviewWindow, width: f64, height: f64) -> bool {
     use tauri::LogicalSize;
     window.set_size(LogicalSize { width, height }).is_ok()
+}
+
+// ============== 主窗口尺寸记忆 ==============
+/// store.json 中的键名
+const WINDOW_STATE_KEY: &str = "versepc_window_state";
+/// 与 tauri.conf.json 的 minWidth/minHeight 保持一致
+const MIN_WINDOW_WIDTH: f64 = 800.0;
+const MIN_WINDOW_HEIGHT: f64 = 450.0;
+
+/// 启动时恢复上次关闭前的窗口尺寸与最大化状态
+fn apply_saved_window_state(window: &tauri::WebviewWindow) {
+    let store = window.app_handle().state::<storage::Store>();
+    let Some(state) = store.get(WINDOW_STATE_KEY) else { return };
+    let width = state.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let height = state.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if width >= MIN_WINDOW_WIDTH && height >= MIN_WINDOW_HEIGHT {
+        let _ = window.set_size(tauri::LogicalSize::new(width, height));
+        // 只记忆尺寸，不记忆位置：还原后重新居中，避免窗口落在已拔掉的显示器上
+        let _ = window.center();
+    }
+    if state.get("maximized").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let _ = window.maximize();
+    }
+}
+
+/// 保存当前窗口尺寸；最大化/全屏时保留上次的常规尺寸，仅更新状态标记
+fn save_window_state(window: &tauri::WebviewWindow) {
+    let maximized = window.is_maximized().unwrap_or(false);
+    let fullscreen = window.is_fullscreen().unwrap_or(false);
+    let store = window.app_handle().state::<storage::Store>();
+    let prev = store.get(WINDOW_STATE_KEY).unwrap_or_else(|| json!({}));
+    let mut width = prev.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let mut height = prev.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if !maximized && !fullscreen {
+        if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
+            let logical = size.to_logical::<f64>(scale);
+            if logical.width >= MIN_WINDOW_WIDTH && logical.height >= MIN_WINDOW_HEIGHT {
+                width = logical.width;
+                height = logical.height;
+            }
+        }
+    }
+    let _ = store.set(
+        WINDOW_STATE_KEY.into(),
+        json!({ "width": width, "height": height, "maximized": maximized }),
+    );
 }
 
 #[tauri::command]
@@ -740,6 +809,11 @@ pub fn run() {
             app.manage(store);
             println!("[boot] after manage {}\n", chrono::Local::now().format("%H:%M:%S%.3f"));
 
+            // 恢复上次关闭前的窗口尺寸（此时窗口仍隐藏，不会出现尺寸跳变）
+            if let Some(main_win) = app.get_webview_window("main") {
+                apply_saved_window_state(&main_win);
+            }
+
             // 后台预热 Java 探测缓存：在启动时后台刷新 Java 列表，
             // 避免真正启动游戏时才在启动流程里同步跑每个 Java 的 -version 探测，造成卡顿
             tauri::async_runtime::spawn_blocking(|| {
@@ -761,7 +835,8 @@ pub fn run() {
             // 最小化/恢复内存优化
             // - 最小化：延迟 1.5s 后第一次优化，之后每 30s 循环执行
             // - 恢复：立即停止循环，通知前端恢复壁纸
-            // - 空闲 3 分钟无操作：自动执行一次优化
+            // 不在窗口正常显示时定时压缩工作集：EmptyWorkingSet 会打断 WebView2
+            // 渲染线程，造成约 1 秒的周期性卡顿。
             if let Some(main_win) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
                 let main_win_for_min = main_win.clone();
@@ -813,22 +888,6 @@ pub fn run() {
                     }
                 });
 
-                // ===== 每 2 分钟自动优化（窗口正常显示时也保持低内存） =====
-                let main_win_for_idle = main_win.clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
-                    loop {
-                        interval.tick().await;
-                        // 如果此时正最小化（有单独的优化循环在跑），跳过
-                        let minimized = main_win_for_idle.is_minimized().unwrap_or(false);
-                        if !minimized {
-                            // 压缩整个进程树（含 WebView2 子进程），任务管理器内存稳定在低位
-                            trim_working_set_tree();
-                            // 同步提示前端做 GC + 清理隐藏图片缓存
-                            let _ = main_win_for_idle.emit("memory-optimize-request", ());
-                        }
-                    }
-                });
             }
 
             // 初始化 theseus 事件系统：把 Tauri AppHandle 注入 theseus，
@@ -862,6 +921,15 @@ pub fn run() {
             dialog::select_folder,
             dialog::select_file,
             filesystem::read_file_buffer,
+            transfer::transfer_start_send,
+            transfer::transfer_send_status,
+            transfer::transfer_receive,
+            transfer::transfer_list_versions,
+            transfer::transfer_list_mods,
+            transfer::transfer_list_saves,
+            transfer::transfer_start_send_game,
+            transfer::transfer_lookup_meta,
+            transfer::transfer_receive_game,
             // 路径获取
             get_default_mod_path,
             get_default_mod_save_folder,
@@ -948,10 +1016,33 @@ pub fn run() {
             saves::version_save_update,
         ])
         .on_window_event(|window, event| {
-            // 主窗口关闭时清理 Wallpaper Engine 场景壁纸渲染进程，防止残留
             if window.label() == "main" {
-                if let tauri::WindowEvent::Destroyed = event {
-                    crate::scene_renderer::shutdown_renderer();
+                match event {
+                    // 拖动缩放会高频触发 Resized：防抖后只写最后一次尺寸
+                    tauri::WindowEvent::Resized(_) => {
+                        let seq = WINDOW_RESIZE_GEN.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+                        let win = window.app_handle().get_webview_window("main");
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                            if WINDOW_RESIZE_GEN.load(AtomicOrdering::SeqCst) == seq {
+                                if let Some(win) = win {
+                                    save_window_state(&win);
+                                }
+                            }
+                        });
+                    }
+                    // 系统关闭（Alt+F4 / 任务栏关闭）前记录最终尺寸
+                    tauri::WindowEvent::CloseRequested { .. } => {
+                        WINDOW_RESIZE_GEN.fetch_add(1, AtomicOrdering::SeqCst);
+                        if let Some(win) = window.app_handle().get_webview_window("main") {
+                            save_window_state(&win);
+                        }
+                    }
+                    // 窗口销毁时清理 Wallpaper Engine 场景壁纸渲染进程，防止残留
+                    tauri::WindowEvent::Destroyed => {
+                        crate::scene_renderer::shutdown_renderer();
+                    }
+                    _ => {}
                 }
             }
             // 自动更新：主窗口被系统关闭（Alt+F4 / 任务栏关闭）时，若已有下载完成的更新包，

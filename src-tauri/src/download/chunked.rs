@@ -34,14 +34,13 @@ const SPEED_FLOOR_BASE: u64 = 256 * 1024;
 
 /// 全局连接预算：限制所有文件的分块连接总数，避免多个大文件各开满并发导致
 /// 连接爆炸（如 64 mod × 64 分块 = 4096 连接），从而触发 CDN 限流反而拖慢速度。
-/// 连接池充足到能并行下载多个大文件，但不至于无限并发。
-/// 默认 256。
+/// 默认 64，与启动器默认下载线程上限一致；网络好的环境可通过 downloadConcurrency 调高。
 fn global_conn_budget() -> usize {
     crate::storage::load_settings()
         .get("downloadConcurrency")
         .and_then(|v| v.as_u64())
         .map(|n| n as usize)
-        .unwrap_or(256)
+        .unwrap_or(64)
         .clamp(4, 256)
 }
 static GLOBAL_CONN: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(global_conn_budget()));

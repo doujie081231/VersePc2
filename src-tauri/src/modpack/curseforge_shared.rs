@@ -82,9 +82,20 @@ pub fn is_modpack_path_safe(entry_path: &str) -> bool {
     if normalized.to_lowercase().starts_with("__macosx/") {
         return false;
     }
+    // 绝对路径：/x 或 C:/x（UNC 路径经上面替换后同样以 / 开头）
+    if normalized.starts_with('/') {
+        return false;
+    }
+    if normalized.as_bytes().get(1) == Some(&b':') {
+        return false;
+    }
     for seg in normalized.split('/') {
-        if seg.is_empty() {
+        if seg.is_empty() || seg == "." {
             continue;
+        }
+        // 拒 .. 段，防止 zip-slip 越出目标目录
+        if seg == ".." {
+            return false;
         }
         let stem = seg.split('.').next().unwrap_or(seg);
         if WIN_RESERVED_NAMES.iter().any(|r| r.eq_ignore_ascii_case(stem)) {
@@ -350,6 +361,11 @@ pub fn repair_corrupted_mod_jars(version_dir: &Path) -> RepairResult {
             fixed = try_repair_with_unzip(&jar.path, &temp_dir);
         }
 
+        // 最后回退：内置 zip 解析（macOS/Linux 无 unzip 时也能修复）
+        if !fixed {
+            fixed = try_repair_with_zip(&jar.path, &temp_dir);
+        }
+
         // 清理临时目录
         if temp_dir.exists() {
             let _ = fs::remove_dir_all(&temp_dir);
@@ -475,6 +491,27 @@ fn try_repair_with_powershell(jar_path: &Path, temp_dir: &Path) -> bool {
         return false;
     }
     // 用 zip crate 重新打包
+    if !repack_files(jar_path, &files, temp_dir) {
+        return false;
+    }
+    is_jar_intact_deep(jar_path)
+}
+
+/// 内置 zip crate 解压 + 重打包（不依赖外部命令）
+fn try_repair_with_zip(jar_path: &Path, temp_dir: &Path) -> bool {
+    let Ok(file) = std::fs::File::open(jar_path) else {
+        return false;
+    };
+    let Ok(mut archive) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    if crate::plugins::extract_safely(&mut archive, temp_dir).is_err() {
+        return false;
+    }
+    let files = collect_files(temp_dir);
+    if files.is_empty() {
+        return false;
+    }
     if !repack_files(jar_path, &files, temp_dir) {
         return false;
     }

@@ -1,28 +1,28 @@
 {
-  "version": "1.5.0",
-  "releaseName": "v1.5.0",
-  "releaseDate": "2026-10-03",
-  "releaseNotes": "VersePC2 v1.5.0\n\n新功能:\n- 工具箱新增「投影工坊」入口，一键打开投影文件分享站\n\n改进:\n- 红石联机 / EnderLink 创建房间流程新增「中转节点选择」卡片，可手动挑选节点\n- 红石联机内核接入更新至红石 2.0：节点列表 API、内核下载接口、启动参数与日志解析全部对齐新版接入文档\n- 问题反馈页支持按分类自动收集日志附件\n\n修复:\n- Windows 路径校验在部分场景下将合法路径误判为无权访问（日志检测不到的问题）",
-  "files": {
-    "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.5.0/VersePC2-1.5.0.exe",
-      "size": 73916416,
-      "sha256": "5F13A14210666E1E08D88ADDA569F3C412632FE00E2BF9B038CC79E21F41B195"
-    },
-    "linux-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.5.0/VersePC2-linux-x86_64",
-      "size": 70089344,
-      "sha256": "500599190C1E87856AFFAE2CB42D5876DA20491DC089E2B5C580BF153CB6E646"
-    },
-    "macos-x86_64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.5.0/VersePC2-macos-x86_64.zip",
-      "size": 62333628,
-      "sha256": "1A367E509FDC79349E90E85B7ED95761CA25D639087153BD32B378D3E0A30D05"
-    },
-    "macos-aarch64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.5.0/VersePC2-macos-aarch64.zip",
-      "size": 62439196,
-      "sha256": "D6AF910A45D14B46D40BDC0AFD5142F1D7714F7CF277171C170493CF843662B0"
+    "version": "1.7.2",
+    "releaseName": "v1.7.2",
+    "releaseDate": "2026-10-23",
+    "releaseNotes": "VersePC2 v1.7.2\n\n新增:\n- 记住关闭前的窗口大小与最大化状态\n\n修复:\n- 修复 Fabric / NeoForge 版本因原版与加载器重复 ASM 库导致启动退出码 1\n- 修复启动即退时只提示“检查 Java 版本”，现在直接显示 stderr 中的具体异常\n- 修复模组前置依赖解析：按游戏版本与加载器选择兼容文件，修正 CurseForge 关系类型与加载器 ID\n- 修复模组搜索：JEI Forge 等关键词能正确命中 JEI 本体，NeoForge 使用正确的加载器筛选\n- 修复整合包模组批量下载失败：并发上限调整为 64，CurseForge 文件接口支持官方源回退，失败提示更明确\n- 修复运行中每 2 分钟强制内存压缩造成的周期性卡顿（约 1 秒）\n- 修复 WE 壁纸列表混入其他 Steam 账号订阅、WE 视频大文件播放失败\n- 修复场景渲染器启动超时与下载地址 404，增加 v1.4.3 回退；场景壁纸暂时显示预览图\n\n优化:\n- WE 视频改为本地协议 + HTTP Range 流式读取，降低内存占用\n- 插件与资源包解压路径校验加强（Zip Slip）",
+    "files": {
+        "win-x64": {
+            "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.7.2/VersePC2.exe",
+            "size": 74567680,
+            "sha256": "d508a6c41214d01829d1f99939fd912cffc457d1589e934b502947651adccc9d"
+        },
+        "linux-x86_64": {
+            "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.7.2/VersePC2-linux-x86_64",
+            "size": 70508448,
+            "sha256": "9a232c3c71550446735600cd3e73b1bd97d8583bbf7b34fc8bb1c8435d36dc79"
+        },
+        "macos-x86_64": {
+            "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.7.2/VersePC2-macos-x86_64.zip",
+            "size": 62536616,
+            "sha256": "0c60f94c5eb7cba6deeab0dc77c5f9f0655bf766c121832e3ea4c77e2a1006de"
+        },
+        "macos-aarch64": {
+            "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.7.2/VersePC2-macos-aarch64.zip",
+            "size": 62614732,
+            "sha256": "3e7be08094bb66f02abc969abf0230b0c037dfff78ed1b72de4440a58ac519a5"
+        }
     }
-  }
 }

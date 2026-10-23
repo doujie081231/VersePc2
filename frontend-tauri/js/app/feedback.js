@@ -559,6 +559,11 @@ async function submitFeedback() {
   } catch (e) {
     setFeedbackSubmitting(false);
     updateFeedbackSubmitState();
+    // 验证码一次一用（服务端校验即删）：失败后必须换新验证码并清空输入，
+    // 否则携带已失效的 captchaId 重试会永远报"验证码不正确"
+    var captchaInput = document.getElementById("fb-captcha-input");
+    if (captchaInput) captchaInput.value = "";
+    loadFeedbackCaptcha();
     // 429 时提示明日再试
     if (e && e.status === 429) {
       if (typeof showToast === 'function') showToast('今日已提交过反馈，请明日再试', 'error');

@@ -35,7 +35,16 @@ struct JavaCache {
     cached_at: u64,
 }
 
-/// 扫描常见 Java 安装路径（Windows 优先）
+/// 当前平台的 Java 可执行文件名（macOS/Linux 为 java）
+fn java_bin_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "java.exe"
+    } else {
+        "java"
+    }
+}
+
+/// 扫描常见 Java 安装路径
 fn scan_common_java_paths() -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = Vec::new();
     let mut found: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -56,7 +65,7 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
         if let Ok(home) = std::env::var(var) {
             let home = home.trim_matches(|c| c == '"' || c == '\\').to_string();
             if !home.is_empty() {
-                let java_exe = PathBuf::from(&home).join("bin").join("java.exe");
+                let java_exe = PathBuf::from(&home).join("bin").join(java_bin_name());
                 add(&mut paths, &mut found, java_exe);
             }
         }
@@ -73,16 +82,28 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
             }
             let dir_path = PathBuf::from(trimmed);
             // 直接查 PATH 目录下的 java.exe
-            let direct = dir_path.join("java.exe");
+            let direct = dir_path.join(java_bin_name());
             add(&mut paths, &mut found, direct);
             // 如果 PATH 目录名包含 java/jdk 关键字，很可能是 .../bin，父目录就是 javaHome
             let dir_lower = trimmed.to_lowercase();
             if dir_lower.contains("java") || dir_lower.contains("jdk") {
                 if let Some(parent) = dir_path.parent() {
-                    let parent_java = PathBuf::from(parent).join("bin").join("java.exe");
+                    let parent_java = PathBuf::from(parent).join("bin").join(java_bin_name());
                     add(&mut paths, &mut found, parent_java);
                 }
             }
+        }
+    }
+
+    // 2b. 非 Windows：PATH 以冒号分隔，直接查找 java
+    #[cfg(not(target_os = "windows"))]
+    if let Ok(path_env) = std::env::var("PATH") {
+        for dir in path_env.split(':') {
+            let trimmed = dir.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            add(&mut paths, &mut found, PathBuf::from(trimmed).join(java_bin_name()));
         }
     }
 
@@ -211,7 +232,7 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
     // scan_java_subdirs_depth 找到 bin/java.exe 后 continue 不再深入，
     // 这里对每个已找到的 jdk 目录补扫 jre/bin/java.exe
     let extra: Vec<PathBuf> = paths.iter()
-        .filter_map(|p| p.parent().and_then(|b| b.parent()).map(|h| h.join("jre").join("bin").join("java.exe")))
+        .filter_map(|p| p.parent().and_then(|b| b.parent()).map(|h| h.join("jre").join("bin").join(java_bin_name())))
         .collect();
     for e in extra {
         if e.exists() {
@@ -281,27 +302,96 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        for drive in &["C:", "D:", "E:", "F:", "G:", "H:"] {
-            for dir_name in &[
-                "Java", "JDK", "JRE", "OpenJDK", "jdk", "jre",
-                ".jdks", ".jre", ".java", "Temurin", "Corretto", "Zulu",
-                "Microsoft", "GraalVM", "Liberica", "Dragonwell",
+        // macOS：系统 JVM 目录、Homebrew OpenJDK、java_home 与 Minecraft 自带运行时
+        #[cfg(target_os = "macos")]
+        {
+            for p in [
+                "/Library/Java/JavaVirtualMachines",
+                "/System/Library/Java/JavaVirtualMachines",
             ] {
-                let p = PathBuf::from(format!("{}/{}", drive, dir_name));
-                scan_java_subdirs(&p.to_string_lossy(), &mut paths, &mut found, add);
+                scan_java_subdirs_depth(Path::new(p), 5, &mut paths, &mut found, add);
+            }
+            for p in ["/opt/homebrew/opt", "/usr/local/opt"] {
+                if let Ok(entries) = std::fs::read_dir(p) {
+                    for entry in entries.flatten() {
+                        let name = entry.file_name().to_string_lossy().to_lowercase();
+                        if name.starts_with("openjdk") {
+                            // Homebrew: openjdk@21/libexec/openjdk.jdk/Contents/Home/bin/java
+                            scan_java_subdirs_depth(&entry.path(), 5, &mut paths, &mut found, add);
+                        }
+                    }
+                }
+            }
+            if let Ok(out) = Command::new("/usr/libexec/java_home").output() {
+                if out.status.success() {
+                    let home = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !home.is_empty() {
+                        add(
+                            &mut paths,
+                            &mut found,
+                            PathBuf::from(&home).join("bin").join(java_bin_name()),
+                        );
+                    }
+                }
+            }
+            if let Some(home) = dirs::home_dir() {
+                for rel in [
+                    "Library/Java/JavaVirtualMachines",
+                    "Library/Application Support/minecraft/runtime",
+                ] {
+                    scan_java_subdirs_depth(
+                        &home.join(rel),
+                        5,
+                        &mut paths,
+                        &mut found,
+                        add,
+                    );
+                }
+            }
+        }
+        // Linux：发行版包目录、SDKMAN 与 Minecraft 自带运行时
+        #[cfg(target_os = "linux")]
+        {
+            for p in [
+                "/usr/lib/jvm",
+                "/usr/java",
+                "/opt/java",
+                "/opt/jdk",
+                "/opt/openjdk",
+            ] {
+                scan_java_subdirs_depth(Path::new(p), 4, &mut paths, &mut found, add);
+            }
+            if let Some(home) = dirs::home_dir() {
+                for rel in [
+                    ".jdks",
+                    ".sdkman/candidates/java",
+                    ".minecraft/runtime",
+                    ".local/share/minecraft/runtime",
+                ] {
+                    scan_java_subdirs_depth(
+                        &home.join(rel),
+                        4,
+                        &mut paths,
+                        &mut found,
+                        add,
+                    );
+                }
             }
         }
     }
-    // ProgramData\Oracle\Java
-    if let Ok(pd) = std::env::var("ProgramData") {
-        let oracle = PathBuf::from(pd).join("Oracle").join("Java");
-        scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
-    } else {
-        let oracle = PathBuf::from("C:\\ProgramData\\Oracle\\Java");
-        scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
+    // ProgramData\Oracle\Java（Windows）
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(pd) = std::env::var("ProgramData") {
+            let oracle = PathBuf::from(pd).join("Oracle").join("Java");
+            scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
+        } else {
+            let oracle = PathBuf::from("C:\\ProgramData\\Oracle\\Java");
+            scan_java_subdirs(&oracle.to_string_lossy(), &mut paths, &mut found, add);
+        }
     }
 
-    // 8. where java（PATH 里的 java）
+    // 8. where / which java（PATH 里的 java）
     #[cfg(target_os = "windows")]
     let mut cmd = {
         let mut c = Command::new("where");
@@ -312,7 +402,7 @@ fn scan_common_java_paths() -> Vec<PathBuf> {
     };
     #[cfg(not(target_os = "windows"))]
     let mut cmd = {
-        let mut c = Command::new("where");
+        let mut c = Command::new("which");
         c.arg("java");
         c
     };
@@ -377,7 +467,7 @@ fn scan_registry_java_paths() -> Vec<PathBuf> {
                             .trim_matches('"')
                             .trim_end_matches('\\');
                         if !home.is_empty() {
-                            let java_exe = PathBuf::from(home).join("bin").join("java.exe");
+                            let java_exe = PathBuf::from(home).join("bin").join(java_bin_name());
                             if java_exe.exists() {
                                 let norm = java_exe
                                     .to_string_lossy()
@@ -411,7 +501,7 @@ fn scan_java_subdirs(
     }
     // 关键点：如果 dir 本身就是 Java Home（C:\Java\bin\java.exe 存在），直接匹配，
     // 这样用户把 JDK 解压成单层 C:\Java 的情况也能识别
-    let self_java = dir_path.join("bin").join("java.exe");
+    let self_java = dir_path.join("bin").join(java_bin_name());
     if self_java.exists() {
         add(paths, found, self_java);
     }
@@ -439,7 +529,7 @@ fn scan_java_subdirs(
             continue;
         }
         // 找到 java/jdk 目录，深入一层找 bin/java.exe
-        let java_exe = path.join("bin").join("java.exe");
+        let java_exe = path.join("bin").join(java_bin_name());
         if java_exe.exists() {
             add(paths, found, java_exe);
             continue;
@@ -447,7 +537,7 @@ fn scan_java_subdirs(
         // 再深入一层
         if let Ok(sub_entries) = std::fs::read_dir(&path) {
             for sub in sub_entries.flatten() {
-                let sub_java = sub.path().join("bin").join("java.exe");
+                let sub_java = sub.path().join("bin").join(java_bin_name());
                 if sub_java.exists() {
                     add(paths, found, sub_java);
                 }
@@ -468,7 +558,7 @@ fn scan_java_subdirs_depth(
         return;
     }
     // 先检查 dir 本身是不是 Java Home（用户直接解压到盘根目录的单层 Java Home）
-    let self_java = dir.join("bin").join("java.exe");
+    let self_java = dir.join("bin").join(java_bin_name());
     if self_java.exists() {
         add(paths, found, self_java);
     }
@@ -481,7 +571,7 @@ fn scan_java_subdirs_depth(
         if !path.is_dir() {
             continue;
         }
-        let java_exe = path.join("bin").join("java.exe");
+        let java_exe = path.join("bin").join(java_bin_name());
         if java_exe.exists() {
             add(paths, found, java_exe);
             continue;
@@ -595,9 +685,11 @@ pub fn inspect_java(java_exe: &Path) -> Option<(String, u32, bool)> {
         if let Some(version) = extract_version_from_output(&combined) {
             if let Some(normalized) = normalize_version_string(&version) {
                 let major = parse_version_major(&normalized);
-                // 检查 64 位
+                // 检查 64 位（含 macOS/Linux 的 aarch64/arm64）
                 let is64 = combined.contains("os.arch = x86_64")
                     || combined.contains("os.arch = amd64")
+                    || combined.contains("os.arch = aarch64")
+                    || combined.contains("os.arch = arm64")
                     || combined.contains("64-Bit")
                     || combined.contains("64-bit");
                 return Some((normalized, major, is64));
@@ -721,7 +813,13 @@ fn sort_java_list(list: &mut Vec<Value>) {
 }
 
 /// 检查路径是否包含重解析点（符号链接 / junction）
-/// 筛除含重解析点的 Java；.minecraft\runtime 目录不受此限制
+/// 仅在 Windows 上过滤；macOS/Linux 的 JDK 常用符号链接管理，不能据此排除
+#[cfg(not(target_os = "windows"))]
+fn has_reparse_point(_java_exe: &Path) -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
 fn has_reparse_point(java_exe: &Path) -> bool {
     let lower = java_exe.to_string_lossy().to_lowercase();
     if lower.contains(".minecraft\\runtime") || lower.contains(".minecraft/runtime") {
@@ -1073,7 +1171,7 @@ fn find_java_exe_recursive(dir: &Path, depth: u32) -> Option<PathBuf> {
     if depth == 0 || !dir.is_dir() {
         return None;
     }
-    let direct = dir.join("bin").join("java.exe");
+    let direct = dir.join("bin").join(java_bin_name());
     if direct.exists() {
         return Some(direct);
     }
@@ -1130,13 +1228,12 @@ async fn import_java_async(session_id: &str, import_type: &str, source_path: &st
     let mut found_home: Option<PathBuf> = None;
 
     if import_type == "archive" {
-        let ext = source
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        if ext != "zip" {
-            report("error", 0, "目前仅支持 .zip 格式的 Java 压缩包");
+        let name_lower = source.to_string_lossy().to_lowercase();
+        if !(name_lower.ends_with(".zip")
+            || name_lower.ends_with(".tar.gz")
+            || name_lower.ends_with(".tgz"))
+        {
+            report("error", 0, "目前支持 .zip / .tar.gz / .tgz 格式的 Java 压缩包");
             return;
         }
 
@@ -1144,7 +1241,7 @@ async fn import_java_async(session_id: &str, import_type: &str, source_path: &st
         // 解压到临时目录（spawn_blocking 避免阻塞 tokio worker）
         let src = source.clone();
         let tmp = import_root.clone();
-        let extract_result = tokio::task::spawn_blocking(move || extract_zip(&src, &tmp)).await;
+        let extract_result = tokio::task::spawn_blocking(move || extract_java_archive(&src, &tmp)).await;
         match extract_result {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
@@ -1165,8 +1262,8 @@ async fn import_java_async(session_id: &str, import_type: &str, source_path: &st
             found_home = exe.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf());
         }
     } else if import_type == "directory" {
-        // 文件夹导入：源目录应是 javaHome（含 bin/java.exe），若用户选了 bin 目录则上移一级
-        let java_exe_name = "java.exe";
+        // 文件夹导入：源目录应是 javaHome（含 bin/java），若用户选了 bin 目录则上移一级
+        let java_exe_name = java_bin_name();
         let mut src_dir = source.clone();
         if !src_dir.join("bin").join(java_exe_name).exists() {
             let parent_exe = src_dir
@@ -1195,10 +1292,11 @@ async fn import_java_async(session_id: &str, import_type: &str, source_path: &st
         Some(p) => p,
         None => {
             let _ = std::fs::remove_dir_all(&import_root);
-            report("error", 0, "未找到有效的 Java（缺少 bin/java.exe）");
+            report("error", 0, &format!("未找到有效的 Java（缺少 bin/{}）", java_bin_name()));
             return;
         }
     };
+    ensure_executable(&java_exe);
 
     report("importing", 70, "正在验证 Java...");
     let info = inspect_java(&java_exe);
@@ -1259,9 +1357,9 @@ async fn import_java_async(session_id: &str, import_type: &str, source_path: &st
     // 最终 java.exe 路径
     let final_java_exe = if import_type == "archive" {
         // 压缩包导入后 javaHome 已移到 final_dir，java.exe 在 final_dir/bin/java.exe
-        final_dir.join("bin").join("java.exe")
+        final_dir.join("bin").join(java_bin_name())
     } else {
-        final_dir.join("bin").join("java.exe")
+        final_dir.join("bin").join(java_bin_name())
     };
 
     // 校验最终 java.exe 存在
@@ -1331,6 +1429,43 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 解压 Java 压缩包：zip / tar.gz / tgz
+fn extract_java_archive(path: &Path, dest_dir: &Path) -> Result<(), String> {
+    let lower = path.to_string_lossy().to_lowercase();
+    if lower.ends_with(".zip") {
+        return extract_zip(path, dest_dir);
+    }
+    if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        std::fs::create_dir_all(dest_dir).map_err(|e| format!("创建目录失败: {}", e))?;
+        let status = std::process::Command::new("tar")
+            .arg("-xzf")
+            .arg(path)
+            .arg("-C")
+            .arg(dest_dir)
+            .status();
+        return match status {
+            Ok(s) if s.success() => Ok(()),
+            Ok(s) => Err(format!("tar 解压失败（退出码 {:?}）", s.code())),
+            Err(e) => Err(format!("无法启动 tar 解压: {}", e)),
+        };
+    }
+    Err("仅支持 .zip / .tar.gz / .tgz".to_string())
+}
+
+/// 确保文件可执行（macOS/Linux）
+#[cfg(unix)]
+fn ensure_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perms = meta.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        let _ = std::fs::set_permissions(path, perms);
+    }
+}
+
+#[cfg(not(unix))]
+fn ensure_executable(_path: &Path) {}
+
 /// 解压 ZIP 文件到目标目录（含 ZipSlip 保护）
 fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     let file = std::fs::File::open(zip_path).map_err(|e| format!("打开 ZIP 失败: {}", e))?;
@@ -1341,14 +1476,18 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| format!("读取条目失败: {}", e))?;
         let name = entry.name().to_string();
+        let normalized = name.replace('\\', "/");
 
-        // ZipSlip 保护：跳过包含 .. 的路径
-        if name.split('/').any(|c| c == "..") || name.split('\\').any(|c| c == "..") {
+        // ZipSlip 保护：跳过包含 .. 的路径，以及绝对路径（/x、C:/x）
+        if normalized.split('/').any(|c| c == "..")
+            || normalized.starts_with('/')
+            || normalized.as_bytes().get(1) == Some(&b':')
+        {
             eprintln!("[java] 跳过可疑路径: {}", name);
             continue;
         }
 
-        let out_path = dest_dir.join(&name);
+        let out_path = dest_dir.join(&normalized);
 
         if entry.is_dir() {
             std::fs::create_dir_all(&out_path).map_err(|e| format!("创建目录失败: {}", e))?;
@@ -1360,6 +1499,14 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
                 std::fs::File::create(&out_path).map_err(|e| format!("创建文件失败: {}", e))?;
             std::io::copy(&mut entry, &mut out_file)
                 .map_err(|e| format!("写入文件失败: {}", e))?;
+            #[cfg(unix)]
+            if let Some(mode) = entry.unix_mode() {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(
+                    &out_path,
+                    std::fs::Permissions::from_mode(mode),
+                );
+            }
         }
     }
 
@@ -1370,7 +1517,7 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
 /// 有些 ZIP 解压后 extract_dir 本身就是 javaHome，有些则包含一个子目录
 fn find_java_home(extract_dir: &Path) -> PathBuf {
     // extract_dir/bin/java.exe 存在，直接用
-    let direct = extract_dir.join("bin").join("java.exe");
+    let direct = extract_dir.join("bin").join(java_bin_name());
     if direct.exists() {
         return extract_dir.to_path_buf();
     }
@@ -1380,7 +1527,7 @@ fn find_java_home(extract_dir: &Path) -> PathBuf {
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
-                let java_exe = p.join("bin").join("java.exe");
+                let java_exe = p.join("bin").join(java_bin_name());
                 if java_exe.exists() {
                     return p;
                 }
@@ -1414,8 +1561,16 @@ async fn install_mojang_runtime(
     } else {
         "linux"
     };
+    // Apple Silicon 缺少专用运行时（旧组件）时回退到 mac-os（可通过 Rosetta 运行）
     let platform_runtimes = runtime_list
         .get(platform_key)
+        .or_else(|| {
+            if platform_key == "mac-os-arm64" {
+                runtime_list.get("mac-os")
+            } else {
+                None
+            }
+        })
         .and_then(|v| v.as_object())
         .ok_or_else(|| format!("平台 {} 无 Java 运行时", platform_key))?;
 
@@ -1523,6 +1678,11 @@ async fn install_mojang_runtime(
         if !downloaded {
             return Err(if last_err.is_empty() { format!("下载失败: {}", file_url) } else { last_err });
         }
+        // Mojang manifest 用 executable 标记 bin/java 等可执行文件；
+        // macOS/Linux 必须补上执行权限，否则运行时无法启动。
+        if info.get("executable").and_then(|v| v.as_bool()).unwrap_or(false) {
+            ensure_executable(&dest);
+        }
 
         done_files += 1;
         let pct = if total_bytes > 0 {
@@ -1605,7 +1765,7 @@ async fn install_java_async(session_id: String, major_version: u64) {
         match install_mojang_runtime(&session_id, major_version, component).await {
             Ok(()) => {
                 let java_home = storage::resolve_data_dir().join("java").join(component);
-                let java_path = java_home.join("bin").join("java.exe");
+                let java_path = java_home.join("bin").join(java_bin_name());
                 let completed = json!({
                     "sessionId": session_id,
                     "status": "completed",

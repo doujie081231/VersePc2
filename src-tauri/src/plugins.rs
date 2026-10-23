@@ -164,11 +164,15 @@ pub(crate) fn extract_safely(archive: &mut zip::ZipArchive<std::fs::File>, dest:
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| format!("读取 zip 项失败: {}", e))?;
         let name = entry.name().to_string();
-        let out_path = dest.join(&name);
-        // 防穿越
-        if !out_path.starts_with(dest) {
+        let normalized = name.replace('\\', "/");
+        // 防穿越：Path::starts_with 只比组件前缀、不解析 ..，必须显式检查
+        if normalized.starts_with('/')
+            || normalized.as_bytes().get(1) == Some(&b':')
+            || normalized.split('/').any(|seg| seg == "..")
+        {
             return Err(format!("插件包含非法路径: {}", name));
         }
+        let out_path = dest.join(&normalized);
         if entry.is_dir() {
             let _ = std::fs::create_dir_all(&out_path);
             continue;

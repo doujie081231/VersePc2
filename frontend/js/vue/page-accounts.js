@@ -227,6 +227,25 @@ const PageAccounts = {
                     <span>导入自定义皮肤</span>
                   </button>
                 </div>
+                <div class="acct-detail-skins" id="acct-detail-capes" style="display:none">
+                  <span class="acct-detail-label">披风</span>
+                  <div class="acct-skin-grid" id="acct-cape-grid"></div>
+                  <input type="file" id="cape-file-input" accept=".png" style="display:none" onchange="handleCapeUpload(this)">
+                  <div class="acct-cape-btns">
+                    <button class="acct-skin-import-btn" onclick="document.getElementById('cape-file-input').click()">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      <span>导入披风</span>
+                    </button>
+                    <button class="acct-skin-import-btn" id="cape-fetch-session-btn" style="display:none" onclick="fetchSessionCape()">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="21 15 21 19 15 21"/><polyline points="3 9 3 5 9 3"/><line x1="12" y1="3" x2="12" y2="15"/><polyline points="8 7 12 3 16 7"/></svg>
+                      <span>获取官方披风</span>
+                    </button>
+                    <button class="acct-skin-import-btn" onclick="unselectCape()">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      <span>卸下披风</span>
+                    </button>
+                  </div>
+                </div>
                 <div class="acct-detail-actions">
                   <button class="acct-btn acct-btn-primary" onclick="detailSelectAccount()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>

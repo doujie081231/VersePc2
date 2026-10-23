@@ -35,6 +35,7 @@
 //     GET  /api/mods/select-file         选择模组文件
 //     POST /api/mods/select-save-folder  选择保存文件夹
 
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -53,6 +54,12 @@ const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 const CURSEFORGE_API: &str = "https://api.curseforge.com/v1";
 /// CurseForge 默认 API Key
 const DEFAULT_CF_API_KEY: &str = "$2a$10$bL4bIL5pUWqfcO7KQtnMReakwtfHbNKh6v1uTpKlzhwoueEJQnPnm";
+/// 依赖递归解析的最大深度
+const MAX_DEPENDENCY_DEPTH: usize = 32;
+/// Modrinth 上由加载器自动安装、不应当作前置重复下载的项目（Fabric API / Quilt API）
+const MODRINTH_BUNDLED_DEPS: [&str; 2] = ["P7dR8mSH", "qvIfYCYJ"];
+/// CurseForge 上由加载器自动安装、不应当作前置重复下载的项目（Fabric API / Quilt API）
+const CURSEFORGE_BUNDLED_DEPS: [u64; 2] = [306612, 634179];
 
 /// 处理模组路由
 pub async fn handle(
@@ -312,6 +319,50 @@ async fn handle_featured() -> ApiResult {
 // ============== 搜索路由 ==============
 
 /// GET /api/mods/search — Modrinth + CurseForge 双源搜索
+/// 归一化模组搜索词：
+/// 去掉 forge / fabric / for / mod / quilt 等加载器或类型词；
+/// 全部被去掉时保留原词，避免搜索框只输入 “Forge” 时变成空查询。
+fn normalize_mod_search_query(raw: &str) -> String {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return String::new();
+    }
+
+    // 例外：OptiForge / OptiFabric 本身包含 Forge/Fabric，拆词后反而搜不到
+    let compact = raw.replace(' ', "").to_ascii_lowercase();
+    if compact.contains("optiforge") {
+        return "optiforge".to_string();
+    }
+    if compact.contains("optifabric") {
+        return "optifabric".to_string();
+    }
+
+    let mut words: Vec<String> = Vec::new();
+    for word in raw.split_whitespace() {
+        let clean = word
+            .trim_matches(|c| c == '[' || c == ']')
+            .to_ascii_lowercase();
+        if clean.is_empty() {
+            continue;
+        }
+        if matches!(
+            clean.as_str(),
+            "forge" | "fabric" | "neoforge" | "for" | "mod" | "quilt"
+        ) {
+            continue;
+        }
+        if !words.contains(&clean) {
+            words.push(clean);
+        }
+    }
+
+    if words.is_empty() {
+        raw.to_string()
+    } else {
+        words.join(" ")
+    }
+}
+
 async fn handle_search(params: &Option<Value>) -> ApiResult {
     let query = params
         .as_ref()
@@ -366,10 +417,13 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    let mut cf_query = query.clone();
-    let mut mr_query = query.clone();
+    // 搜索词里的加载器/类型词不应参与检索。
+    // 例如输入 “JEI Forge” 时应搜 “jei”，否则 JEI 本体反而搜不到。
+    let normalized_query = normalize_mod_search_query(&query);
+    let mut cf_query = normalized_query.clone();
+    let mut mr_query = normalized_query.clone();
     let plan_debug = wiki::build_plan(
-        &query.to_lowercase(),
+        &normalized_query.to_lowercase(),
         "mod",
         source == "any" || source == "curseforge",
         source == "any" || source == "modrinth",
@@ -388,12 +442,23 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
         Err(_) => {}
     }
 
+    // 1.14 以下的 Forge 搜索忽略加载器筛选：
+    // 老模组经常没有写 Forge 标记，强制过滤会导致搜不到。
+    let search_loader = if loader.eq_ignore_ascii_case("forge")
+        && !mc_version.is_empty()
+        && crate::resource::mcversion::version_to_drop(&mc_version) < 140
+    {
+        String::new()
+    } else {
+        loader.clone()
+    };
+
     let mut all_hits: Vec<Value> = Vec::new();
     let mut total_hits: u64 = 0;
 
     // Modrinth 源
     if source == "any" || source == "modrinth" {
-        if let Ok((hits, total)) = search_modrinth_mods(&client, &mr_query, &loader, &mc_version, &category, &sort, limit, offset).await {
+        if let Ok((hits, total)) = search_modrinth_mods(&client, &mr_query, &search_loader, &mc_version, &category, &sort, limit, offset).await {
             all_hits.extend(hits);
             total_hits = total_hits.max(total);
         }
@@ -401,7 +466,7 @@ async fn handle_search(params: &Option<Value>) -> ApiResult {
 
     // CurseForge 源
     if source == "any" || source == "curseforge" {
-        if let Ok((hits, total)) = search_curseforge_mods(&client, &cf_query, &loader, &mc_version, &sort, limit, offset).await {
+        if let Ok((hits, total)) = search_curseforge_mods(&client, &cf_query, &search_loader, &mc_version, &sort, limit, offset).await {
             all_hits.extend(hits);
             total_hits = total_hits.max(total);
         }
@@ -529,6 +594,8 @@ async fn search_curseforge_mods(
         "downloads" => "6",
         "newest" => "11",
         "updated" => "3",
+        // CurseForge 的 4 并不是真正相关度（实测会返回无关结果），保持 2=Popularity；
+        // 拉取结果后还会用本地相似度重新排序，这里先保证结果不丢失。
         _ => "2",
     };
 
@@ -545,7 +612,8 @@ async fn search_curseforge_mods(
         let loader_id = match loader.to_lowercase().as_str() {
             "forge" => "1",
             "fabric" => "4",
-            "quilt" | "neoforge" => "5",
+            "quilt" => "5",
+            "neoforge" => "6",
             _ => "",
         };
         if !loader_id.is_empty() {
@@ -756,7 +824,8 @@ async fn handle_detail(params: &Option<Value>) -> ApiResult {
                                         f.get("modLoader").and_then(|ml| ml.as_u64()).and_then(|id| match id {
                                             1 => Some("forge"),
                                             4 => Some("fabric"),
-                                            5 => Some("neoforge"),
+                                            5 => Some("quilt"),
+                                            6 => Some("neoforge"),
                                             _ => None,
                                         })
                                     })
@@ -891,12 +960,18 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                     "changelog": v.get("changelog").and_then(|c| c.as_str()).unwrap_or(""),
                                     "files": files,
                                     "dependencies": v.get("dependencies").and_then(|d| d.as_array()).map(|arr| {
-                                        arr.iter().map(|de| json!({
-                                            "projectId": de.get("project_id").and_then(|p| p.as_str()).unwrap_or(""),
-                                            "versionId": de.get("version_id").and_then(|x| x.as_str()).unwrap_or(""),
-                                            "fileName": de.get("file_name").and_then(|x| x.as_str()).unwrap_or(""),
-                                            "dependencyType": de.get("dependency_type").and_then(|x| x.as_str()).unwrap_or("")
-                                        })).collect::<Vec<_>>()
+                                        arr.iter().filter_map(|de| {
+                                            let pid = de.get("project_id").and_then(|p| p.as_str()).unwrap_or("");
+                                            if pid.is_empty() || MODRINTH_BUNDLED_DEPS.contains(&pid) {
+                                                return None;
+                                            }
+                                            Some(json!({
+                                                "projectId": pid,
+                                                "versionId": de.get("version_id").and_then(|x| x.as_str()).unwrap_or(""),
+                                                "fileName": de.get("file_name").and_then(|x| x.as_str()).unwrap_or(""),
+                                                "dependencyType": de.get("dependency_type").and_then(|x| x.as_str()).unwrap_or("")
+                                            }))
+                                        }).collect::<Vec<_>>()
                                     }).unwrap_or_default()
                                 })
                             })
@@ -956,7 +1031,8 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                                 ml.get("modLoader").and_then(|id| id.as_u64()).and_then(|id| match id {
                                                     1 => Some("forge".to_string()),
                                                     4 => Some("fabric".to_string()),
-                                                    5 => Some("neoforge".to_string()),
+                                                    5 => Some("quilt".to_string()),
+                                                    6 => Some("neoforge".to_string()),
                                                     _ => None,
                                                 })
                                             })
@@ -999,19 +1075,25 @@ async fn handle_versions(params: &Option<Value>) -> ApiResult {
                                     .and_then(|d| d.as_array())
                                     .map(|arr| {
                                         arr.iter()
-                                            .map(|d| {
+                                            .filter_map(|d| {
                                                 let rel = d.get("relationType").and_then(|x| x.as_u64()).unwrap_or(0);
+                                                // CurseForge: 3=必需, 2=可选, 5=冲突；1/4/6 为内嵌库/工具/包含项，不展示
                                                 let dep_type = match rel {
-                                                    1 | 2 => "required",
+                                                    3 => "required",
+                                                    2 => "optional",
                                                     5 => "incompatible",
-                                                    _ => "optional",
+                                                    _ => return None,
                                                 };
-                                                json!({
-                                                    "projectId": d.get("modId").map(|m| m.to_string()).unwrap_or_default(),
+                                                let mod_id = d.get("modId").and_then(|m| m.as_u64()).unwrap_or(0);
+                                                if CURSEFORGE_BUNDLED_DEPS.contains(&mod_id) {
+                                                    return None;
+                                                }
+                                                Some(json!({
+                                                    "projectId": mod_id.to_string(),
                                                     "versionId": d.get("fileId").map(|m| m.to_string()).unwrap_or_default(),
                                                     "dependencyType": dep_type,
                                                     "fileName": d.get("fileName").and_then(|x| x.as_str()).unwrap_or("")
-                                                })
+                                                }))
                                             })
                                             .collect()
                                     })
@@ -1380,89 +1462,789 @@ fn handle_download_status(params: &Option<Value>) -> ApiResult {
 
 // ============== 依赖路由 ==============
 
-/// POST /api/mods/get-dependencies — 获取依赖
+/// POST /api/mods/get-dependencies — 获取依赖（第一层）
 async fn handle_get_dependencies(body: &Option<Value>) -> ApiResult {
-    let version_id = body
-        .as_ref()
-        .and_then(|b| b.get("versionId"))
+    resolve_dependency_tree(body, false).await
+}
+
+/// POST /api/mods/get-dependencies-recursive — 递归获取依赖
+///
+/// 递归解析规则：
+/// 1. 只解析 required 前置，忽略 optional / incompatible；
+/// 2. 每个前置选择“精确游戏版本 + 加载器匹配 + release 优先 + 最新”的文件；
+/// 3. 对选中前置文件继续解析其 required 前置，按 projectId 去重，最大深度 32；
+/// 4. 跳过加载器自带的 Fabric API / Quilt API。
+async fn handle_get_dependencies_recursive(body: &Option<Value>) -> ApiResult {
+    resolve_dependency_tree(body, true).await
+}
+
+/// 依赖引用（只保留 projectId）
+#[derive(Clone)]
+struct DepRef {
+    project_id: String,
+}
+
+/// 依赖文件（Modrinth / CurseForge 统一结构）
+#[derive(Clone)]
+struct DepFile {
+    id: String,
+    version_number: String,
+    file_name: String,
+    game_versions: Vec<String>,
+    loaders: Vec<String>,
+    release_type: u8,
+    release_date: String,
+    dependencies: Vec<DepRef>,
+}
+
+/// 依赖项目元信息 + 文件列表
+struct DepProject {
+    id: String,
+    title: String,
+    slug: String,
+    icon: String,
+    description: String,
+    downloads: u64,
+    files: Vec<DepFile>,
+}
+
+/// 根模组版本信息
+struct DepRoot {
+    project_id: String,
+    game_versions: Vec<String>,
+    loaders: Vec<String>,
+    dependencies: Vec<DepRef>,
+}
+
+fn body_string(body: &Option<Value>, key: &str) -> String {
+    body.as_ref()
+        .and_then(|b| b.get(key))
         .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let _source = body
-        .as_ref()
-        .and_then(|b| b.get("source"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("modrinth");
-    let game_version = body
-        .as_ref()
-        .and_then(|b| b.get("gameVersion"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let loader = body
-        .as_ref()
-        .and_then(|b| b.get("loader"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let _project_id = body
-        .as_ref()
-        .and_then(|b| b.get("projectId"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string()
+}
+
+fn json_string_array(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 判断字符串是否像 Minecraft 版本号（用于从 CurseForge 的 gameVersions 中剔除加载器名）
+fn looks_like_mc_version(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() {
+        return false;
+    }
+    let lower = value.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "forge" | "fabric" | "neoforge" | "quilt" | "liteloader" | "rift" | "cauldron"
+    ) {
+        return false;
+    }
+    value
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false)
+        && (value.contains('.') || value.contains('w'))
+}
+
+fn parse_loader_list(input: &str) -> Vec<String> {
+    let mut loaders: Vec<String> = Vec::new();
+    for part in input.split(|c: char| c == ',' || c.is_whitespace()) {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let lower = part.to_ascii_lowercase();
+        if !loaders.contains(&lower) {
+            loaders.push(lower);
+        }
+    }
+    loaders
+}
+
+fn loader_matches(file_loaders: &[String], target_loaders: &[String]) -> bool {
+    target_loaders.is_empty()
+        || file_loaders.is_empty()
+        || file_loaders.iter().any(|fl| {
+            target_loaders
+                .iter()
+                .any(|tl| tl.eq_ignore_ascii_case(fl))
+        })
+}
+
+fn loader_exact_match(file_loaders: &[String], target_loaders: &[String]) -> bool {
+    !target_loaders.is_empty()
+        && file_loaders.iter().any(|fl| {
+            target_loaders
+                .iter()
+                .any(|tl| tl.eq_ignore_ascii_case(fl))
+        })
+}
+
+fn release_rank(release_type: u8) -> u8 {
+    match release_type {
+        1 => 1,
+        2 => 2,
+        3 => 3,
+        _ => 4,
+    }
+}
+
+/// 选择兼容文件：精确游戏版本 > 加载器匹配 > release > 最新
+fn select_compatible_file<'a>(
+    files: &'a [DepFile],
+    game_version: &str,
+    loaders: &[String],
+) -> Option<&'a DepFile> {
+    let mut candidates: Vec<&DepFile> = files
+        .iter()
+        .filter(|file| {
+            (game_version.is_empty()
+                || file
+                    .game_versions
+                    .iter()
+                    .any(|gv| gv.eq_ignore_ascii_case(game_version)))
+                && loader_matches(&file.loaders, loaders)
+        })
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        let a_loader = loader_exact_match(&a.loaders, loaders);
+        let b_loader = loader_exact_match(&b.loaders, loaders);
+        b_loader
+            .cmp(&a_loader)
+            .then_with(|| release_rank(a.release_type).cmp(&release_rank(b.release_type)))
+            .then_with(|| b.release_date.cmp(&a.release_date))
+    });
+
+    candidates.first().copied()
+}
+
+fn cf_loader_name(id: u64) -> Option<&'static str> {
+    match id {
+        1 => Some("forge"),
+        4 => Some("fabric"),
+        5 => Some("quilt"),
+        6 => Some("neoforge"),
+        _ => None,
+    }
+}
+
+fn cf_loader_id(loader: &str) -> Option<u32> {
+    match loader.to_ascii_lowercase().as_str() {
+        "forge" => Some(1),
+        "fabric" => Some(4),
+        "quilt" => Some(5),
+        "neoforge" => Some(6),
+        _ => None,
+    }
+}
+
+fn cf_file_loaders(file: &Value) -> Vec<String> {
+    let mut loaders: Vec<String> = Vec::new();
+    if let Some(arr) = file.get("modLoaders").and_then(|v| v.as_array()) {
+        for ml in arr {
+            if let Some(id) = ml.get("modLoader").and_then(|v| v.as_u64()) {
+                if let Some(name) = cf_loader_name(id) {
+                    let name = name.to_string();
+                    if !loaders.contains(&name) {
+                        loaders.push(name);
+                    }
+                }
+            }
+        }
+    }
+    if loaders.is_empty() {
+        for gv in json_string_array(file.get("gameVersions")) {
+            let lower = gv.to_ascii_lowercase();
+            if matches!(
+                lower.as_str(),
+                "forge" | "fabric" | "neoforge" | "quilt" | "liteloader"
+            ) && !loaders.contains(&lower)
+            {
+                loaders.push(lower);
+            }
+        }
+    }
+    loaders
+}
+
+fn parse_modrinth_dependencies(value: &Value) -> Vec<DepRef> {
+    value
+        .get("dependencies")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|dep| {
+                    if dep.get("dependency_type").and_then(|t| t.as_str()) != Some("required") {
+                        return None;
+                    }
+                    let pid = dep.get("project_id").and_then(|p| p.as_str()).unwrap_or("");
+                    if pid.is_empty() || MODRINTH_BUNDLED_DEPS.contains(&pid) {
+                        return None;
+                    }
+                    Some(DepRef {
+                        project_id: pid.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_cf_dependencies(file: &Value) -> Vec<DepRef> {
+    file.get("dependencies")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|dep| {
+                    // CurseForge: 3=必需；1=内嵌库、2=可选、4=工具、5=冲突、6=包含项均不作为前置
+                    if dep.get("relationType").and_then(|r| r.as_u64()) != Some(3) {
+                        return None;
+                    }
+                    let mod_id = dep
+                        .get("modId")
+                        .and_then(|m| m.as_u64())
+                        .or_else(|| {
+                            dep.get("modId")
+                                .and_then(|m| m.as_str())
+                                .and_then(|s| s.parse::<u64>().ok())
+                        })?;
+                    if CURSEFORGE_BUNDLED_DEPS.contains(&mod_id) {
+                        return None;
+                    }
+                    Some(DepRef {
+                        project_id: mod_id.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_modrinth_file(version: &Value) -> DepFile {
+    let files = version.get("files").and_then(|f| f.as_array());
+    let primary = files.and_then(|arr| {
+        arr.iter()
+            .find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false))
+            .or_else(|| arr.first())
+    });
+
+    DepFile {
+        id: version
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        version_number: version
+            .get("version_number")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        file_name: primary
+            .and_then(|f| f.get("filename").and_then(|n| n.as_str()))
+            .unwrap_or("")
+            .to_string(),
+        game_versions: json_string_array(version.get("game_versions")),
+        loaders: json_string_array(version.get("loaders"))
+            .into_iter()
+            .map(|l| l.to_ascii_lowercase())
+            .collect(),
+        release_type: match version
+            .get("version_type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("release")
+        {
+            "beta" => 2,
+            "alpha" => 3,
+            _ => 1,
+        },
+        release_date: version
+            .get("date_published")
+            .and_then(|d| d.as_str())
+            .unwrap_or("")
+            .to_string(),
+        dependencies: parse_modrinth_dependencies(version),
+    }
+}
+
+fn parse_cf_file(file: &Value) -> DepFile {
+    let file_name = file
+        .get("fileName")
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    let version_number = file
+        .get("displayName")
+        .and_then(|n| n.as_str())
+        .filter(|n| !n.is_empty())
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| file_name.trim_end_matches(".jar").to_string());
+
+    DepFile {
+        id: file
+            .get("id")
+            .map(|i| i.to_string())
+            .unwrap_or_default(),
+        version_number,
+        file_name,
+        game_versions: json_string_array(file.get("gameVersions")),
+        loaders: cf_file_loaders(file),
+        release_type: file.get("releaseType").and_then(|r| r.as_u64()).unwrap_or(1) as u8,
+        release_date: file
+            .get("fileDate")
+            .and_then(|d| d.as_str())
+            .unwrap_or("")
+            .to_string(),
+        dependencies: parse_cf_dependencies(file),
+    }
+}
+
+fn derive_target(
+    input_game: &str,
+    input_loader: &str,
+    root_game_versions: &[String],
+    root_loaders: &[String],
+) -> (String, Vec<String>) {
+    let game_version = if input_game.trim().is_empty() {
+        root_game_versions
+            .iter()
+            .find(|v| looks_like_mc_version(v))
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        input_game.trim().to_string()
+    };
+
+    let mut loaders = parse_loader_list(input_loader);
+    if loaders.is_empty() {
+        loaders = root_loaders
+            .iter()
+            .map(|l| l.to_ascii_lowercase())
+            .filter(|l| !l.is_empty())
+            .collect();
+    }
+
+    (game_version, loaders)
+}
+
+async fn fetch_dep_root(
+    client: &reqwest::Client,
+    is_cf: bool,
+    project_id: &str,
+    version_id: &str,
+    cf_api_key: &str,
+) -> Result<DepRoot, String> {
+    if is_cf {
+        if project_id.is_empty() {
+            return Err("CurseForge 依赖解析缺少 projectId".to_string());
+        }
+        let url = format!("{}/mods/{}/files/{}", CURSEFORGE_API, project_id, version_id);
+        let resp = client
+            .get(&url)
+            .header("x-api-key", cf_api_key)
+            .send()
+            .await
+            .map_err(|e| format!("请求 CurseForge 文件失败: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("CurseForge 文件 HTTP {}", resp.status()));
+        }
+        let data: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 CurseForge 文件失败: {}", e))?;
+        let file = data.get("data").unwrap_or(&data);
+        Ok(DepRoot {
+            project_id: project_id.to_string(),
+            game_versions: json_string_array(file.get("gameVersions")),
+            loaders: cf_file_loaders(file),
+            dependencies: parse_cf_dependencies(file),
+        })
+    } else {
+        let url = format!("{}/version/{}", MODRINTH_API, version_id);
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("请求 Modrinth 版本失败: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Modrinth 版本 HTTP {}", resp.status()));
+        }
+        let data: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 Modrinth 版本失败: {}", e))?;
+        let pid = data
+            .get("project_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(project_id);
+        Ok(DepRoot {
+            project_id: pid.to_string(),
+            game_versions: json_string_array(data.get("game_versions")),
+            loaders: json_string_array(data.get("loaders"))
+                .into_iter()
+                .map(|l| l.to_ascii_lowercase())
+                .collect(),
+            dependencies: parse_modrinth_dependencies(&data),
+        })
+    }
+}
+
+async fn fetch_cf_files(
+    client: &reqwest::Client,
+    project_id: &str,
+    game_version: &str,
+    loaders: &[String],
+    cf_api_key: &str,
+) -> Result<Vec<DepFile>, String> {
+    let mut url = format!("{}/mods/{}/files?pageSize=50", CURSEFORGE_API, project_id);
+    if !game_version.is_empty() {
+        url.push_str(&format!(
+            "&gameVersion={}",
+            urlencoding::encode(game_version)
+        ));
+    }
+    if loaders.len() == 1 {
+        if let Some(loader_id) = cf_loader_id(&loaders[0]) {
+            url.push_str(&format!("&modLoaderType={}", loader_id));
+        }
+    }
+
+    let resp = client
+        .get(&url)
+        .header("x-api-key", cf_api_key)
+        .send()
+        .await
+        .map_err(|e| format!("请求 CurseForge 文件列表失败: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("CurseForge 文件列表 HTTP {}", resp.status()));
+    }
+    let data: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析 CurseForge 文件列表失败: {}", e))?;
+    Ok(data
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| arr.iter().map(parse_cf_file).collect())
+        .unwrap_or_default())
+}
+
+async fn fetch_dep_project(
+    client: &reqwest::Client,
+    is_cf: bool,
+    project_id: &str,
+    game_version: &str,
+    loaders: &[String],
+    cf_api_key: &str,
+) -> Result<DepProject, String> {
+    if is_cf {
+        let project_url = format!("{}/mods/{}", CURSEFORGE_API, project_id);
+        let (project_resp, files_result) = tokio::join!(
+            client
+                .get(&project_url)
+                .header("x-api-key", cf_api_key)
+                .send(),
+            fetch_cf_files(client, project_id, game_version, loaders, cf_api_key)
+        );
+
+        let project_resp = project_resp
+            .map_err(|e| format!("请求 CurseForge 项目失败: {}", e))?;
+        if !project_resp.status().is_success() {
+            return Err(format!("CurseForge 项目 HTTP {}", project_resp.status()));
+        }
+        let project: Value = project_resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 CurseForge 项目失败: {}", e))?;
+        let data = project.get("data").unwrap_or(&project);
+
+        let mut files = files_result?;
+        // 带过滤条件的查询可能因为加载器映射差异返回空，退回全量列表后本地筛选
+        if files.is_empty() && (!game_version.is_empty() || !loaders.is_empty()) {
+            files = fetch_cf_files(client, project_id, "", &[], cf_api_key).await?;
+        }
+
+        Ok(DepProject {
+            id: data
+                .get("id")
+                .map(|i| i.to_string())
+                .unwrap_or_else(|| project_id.to_string()),
+            title: data
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or(project_id)
+                .to_string(),
+            slug: data
+                .get("slug")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string(),
+            icon: data
+                .get("logo")
+                .and_then(|l| l.get("thumbnailUrl"))
+                .and_then(|u| u.as_str())
+                .unwrap_or("")
+                .to_string(),
+            description: data
+                .get("summary")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .chars()
+                .take(100)
+                .collect(),
+            downloads: data
+                .get("downloadCount")
+                .and_then(|d| d.as_u64())
+                .unwrap_or(0),
+            files,
+        })
+    } else {
+        let project_url = format!("{}/project/{}", MODRINTH_API, project_id);
+        let versions_url = format!("{}/project/{}/version", MODRINTH_API, project_id);
+        let (project_resp, versions_resp) = tokio::join!(
+            client.get(&project_url).send(),
+            client.get(&versions_url).send()
+        );
+
+        let project_resp = project_resp
+            .map_err(|e| format!("请求 Modrinth 项目失败: {}", e))?;
+        if !project_resp.status().is_success() {
+            return Err(format!("Modrinth 项目 HTTP {}", project_resp.status()));
+        }
+        let project: Value = project_resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 Modrinth 项目失败: {}", e))?;
+
+        let versions_resp = versions_resp
+            .map_err(|e| format!("请求 Modrinth 版本列表失败: {}", e))?;
+        if !versions_resp.status().is_success() {
+            return Err(format!("Modrinth 版本列表 HTTP {}", versions_resp.status()));
+        }
+        let versions: Vec<Value> = versions_resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 Modrinth 版本列表失败: {}", e))?;
+
+        Ok(DepProject {
+            id: project
+                .get("id")
+                .and_then(|i| i.as_str())
+                .unwrap_or(project_id)
+                .to_string(),
+            title: project
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or(project_id)
+                .to_string(),
+            slug: project
+                .get("slug")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string(),
+            icon: project
+                .get("icon_url")
+                .and_then(|i| i.as_str())
+                .unwrap_or("")
+                .to_string(),
+            description: project
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("")
+                .chars()
+                .take(100)
+                .collect(),
+            downloads: project
+                .get("downloads")
+                .and_then(|d| d.as_u64())
+                .unwrap_or(0),
+            files: versions.iter().map(parse_modrinth_file).collect(),
+        })
+    }
+}
+
+/// 解析前置依赖树。返回：
+/// { dependencies: [...], unresolved: [...], target: { gameVersion, loaders }, source }
+async fn resolve_dependency_tree(body: &Option<Value>, recursive: bool) -> ApiResult {
+    let version_id = body_string(body, "versionId");
+    let mut source = body_string(body, "source");
+    if source.is_empty() {
+        source = "modrinth".to_string();
+    }
+    let game_version = body_string(body, "gameVersion");
+    let loader = body_string(body, "loader");
+    let project_id = body_string(body, "projectId");
 
     if version_id.is_empty() {
-        return ApiResult::ok(json!({ "dependencies": [] }));
+        return ApiResult::ok(json!({ "dependencies": [], "unresolved": [] }));
+    }
+
+    let is_cf = source.eq_ignore_ascii_case("curseforge");
+    if !is_cf && !source.eq_ignore_ascii_case("modrinth") {
+        return ApiResult::err(400, "Unsupported source");
     }
 
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(20))
         .user_agent("VersePC/1.0")
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    // 拉取版本信息
-    let url = format!("{}/version/{}", MODRINTH_API, version_id);
-    let version_data: Value = match client.get(&url).send().await {
-        Ok(r) if r.status().is_success() => r.json().await.unwrap_or(Value::Null),
-        _ => return ApiResult::ok(json!({ "dependencies": [] })),
+    let settings = storage::load_settings();
+    let cf_api_key = settings
+        .get("curseforgeApiKey")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_CF_API_KEY)
+        .to_string();
+
+    let root = match fetch_dep_root(&client, is_cf, &project_id, &version_id, &cf_api_key).await {
+        Ok(root) => root,
+        Err(e) => return ApiResult::err(502, &e),
     };
 
-    let deps = version_data
-        .get("dependencies")
-        .and_then(|d| d.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let (target_game, target_loaders) = derive_target(
+        &game_version,
+        &loader,
+        &root.game_versions,
+        &root.loaders,
+    );
 
-    // 过滤必要依赖（排除 Fabric API / QSL）
-    let required: Vec<Value> = deps
-        .iter()
-        .filter(|d| {
-            let dep_type = d.get("dependency_type").and_then(|t| t.as_str()).unwrap_or("");
-            let pid = d.get("project_id").and_then(|p| p.as_str()).unwrap_or("");
-            dep_type == "required" && !pid.is_empty() && pid != "P7dR8mSH" && pid != "qvIfYCYJ"
-        })
-        .cloned()
-        .collect();
+    let mut queue: VecDeque<(String, usize)> = VecDeque::new();
+    for dep in &root.dependencies {
+        queue.push_back((dep.project_id.clone(), 1));
+    }
 
-    // 简化：直接返回依赖 ID 列表（完整实现需查询每个依赖的兼容版本）
-    let result: Vec<Value> = required
-        .iter()
-        .map(|d| {
-            json!({
-                "projectId": d.get("project_id").and_then(|p| p.as_str()).unwrap_or(""),
-                "dependencyType": d.get("dependency_type").and_then(|t| t.as_str()).unwrap_or(""),
-                "versionId": d.get("version_id").and_then(|v| v.as_str()).unwrap_or(""),
-                "gameVersion": game_version,
-                "loader": loader
-            })
-        })
-        .collect();
+    // 根项目自身也标记为已访问，避免环形依赖把本体当成前置重复下载
+    let mut visited: HashSet<String> = HashSet::new();
+    if !root.project_id.is_empty() {
+        visited.insert(root.project_id.to_lowercase());
+    }
 
-    ApiResult::ok(json!({ "dependencies": result }))
-}
+    let mut dependencies: Vec<Value> = Vec::new();
+    let mut unresolved: Vec<Value> = Vec::new();
 
-/// POST /api/mods/get-dependencies-recursive — 递归获取依赖
-async fn handle_get_dependencies_recursive(body: &Option<Value>) -> ApiResult {
-    // 简化：递归依赖复杂，先返回第一层
-    handle_get_dependencies(body).await
+    while let Some((pid, depth)) = queue.pop_front() {
+        if !visited.insert(pid.to_lowercase()) {
+            continue;
+        }
+        if depth > MAX_DEPENDENCY_DEPTH {
+            unresolved.push(json!({
+                "projectId": pid,
+                "reason": "依赖层级超过上限"
+            }));
+            continue;
+        }
+
+        let project = match fetch_dep_project(
+            &client,
+            is_cf,
+            &pid,
+            &target_game,
+            &target_loaders,
+            &cf_api_key,
+        )
+        .await
+        {
+            Ok(project) => project,
+            Err(reason) => {
+                unresolved.push(json!({
+                    "projectId": pid,
+                    "reason": reason
+                }));
+                continue;
+            }
+        };
+
+        match select_compatible_file(&project.files, &target_game, &target_loaders) {
+            Some(file) => {
+                let compatible = json!({
+                    "versionId": &file.id,
+                    "versionNumber": &file.version_number,
+                    "fileName": &file.file_name,
+                    "gameVersions": &file.game_versions,
+                    "loaders": &file.loaders,
+                    "releaseType": match file.release_type {
+                        1 => "release",
+                        2 => "beta",
+                        3 => "alpha",
+                        _ => "release",
+                    },
+                    "datePublished": &file.release_date
+                });
+
+                dependencies.push(json!({
+                    "projectId": &project.id,
+                    "title": &project.title,
+                    "slug": &project.slug,
+                    "icon": &project.icon,
+                    "description": &project.description,
+                    "downloads": project.downloads,
+                    "depth": depth,
+                    "dependencyType": "required",
+                    "versionId": &file.id,
+                    "versionNumber": &file.version_number,
+                    "fileName": &file.file_name,
+                    "gameVersions": &file.game_versions,
+                    "loaders": &file.loaders,
+                    "compatibleVersion": compatible
+                }));
+
+                if recursive {
+                    for nested in &file.dependencies {
+                        queue.push_back((nested.project_id.clone(), depth + 1));
+                    }
+                }
+            }
+            None => {
+                let reason = if target_game.is_empty() {
+                    "未找到兼容版本".to_string()
+                } else {
+                    format!("未找到兼容 {} 的版本", target_game)
+                };
+                unresolved.push(json!({
+                    "projectId": &project.id,
+                    "title": &project.title,
+                    "reason": &reason
+                }));
+                dependencies.push(json!({
+                    "projectId": &project.id,
+                    "title": &project.title,
+                    "slug": &project.slug,
+                    "icon": &project.icon,
+                    "description": &project.description,
+                    "downloads": project.downloads,
+                    "depth": depth,
+                    "dependencyType": "required",
+                    "compatibleVersion": Value::Null,
+                    "reason": &reason
+                }));
+            }
+        }
+    }
+
+    ApiResult::ok(json!({
+        "dependencies": dependencies,
+        "unresolved": unresolved,
+        "target": {
+            "gameVersion": target_game,
+            "loaders": target_loaders
+        },
+        "source": if is_cf { "curseforge" } else { "modrinth" }
+    }))
 }
 
 /// GET /api/mods/resolve-deps — 解析依赖（仅项目元信息，不查兼容版本）
@@ -1636,166 +2418,98 @@ async fn handle_resolve_deps_versions(body: &Option<Value>) -> ApiResult {
                 .collect()
         })
         .unwrap_or_default();
-    let game_version = data.get("gameVersion").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let loader = data.get("loader").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let game_version = data
+        .get("gameVersion")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let loader = data
+        .get("loader")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let source = data
+        .get("source")
+        .and_then(|v| v.as_str())
+        .unwrap_or("modrinth")
+        .to_string();
 
     if ids.is_empty() {
         return ApiResult::ok(json!({}));
     }
 
+    let is_cf = source.eq_ignore_ascii_case("curseforge");
+    if !is_cf && !source.eq_ignore_ascii_case("modrinth") {
+        return ApiResult::err(400, "Unsupported source");
+    }
+
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(20))
         .user_agent("VersePC/1.0")
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    // 该项目信息：批量，失败则逐个兜底
-    let mut project_map: serde_json::Map<String, Value> = serde_json::Map::new();
-    let batch_url = format!("{}/projects?ids={}", MODRINTH_API, serde_json::to_string(&ids).unwrap_or_default());
-    if let Ok(resp) = client.get(&batch_url).send().await {
-        if resp.status().is_success() {
-            if let Ok(arr) = resp.json::<Vec<Value>>().await {
-                for p in arr {
-                    if let Some(pid) = p.get("id").and_then(|v| v.as_str()) {
-                        project_map.insert(pid.to_string(), p);
-                    }
-                }
-            }
-        }
-    }
-    for id in &ids {
-        if project_map.contains_key(id) {
-            continue;
-        }
-        let url = format!("{}/project/{}", MODRINTH_API, id);
-        if let Ok(resp) = client.get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(p) = resp.json::<Value>().await {
-                    if let Some(pid) = p.get("id").and_then(|v| v.as_str()) {
-                        project_map.insert(pid.to_string(), p);
-                    }
-                }
-            }
-        }
-    }
+    let settings = storage::load_settings();
+    let cf_api_key = settings
+        .get("curseforgeApiKey")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_CF_API_KEY)
+        .to_string();
+    let loaders = parse_loader_list(&loader);
 
     let mut resolve = serde_json::Map::new();
 
-    // 对每个依赖查版本
     for pid in &ids {
-        let project = project_map.get(pid);
-        let base: Value = project.map(|p| {
-            json!({
-                "id": p.get("id").and_then(|v| v.as_str()).unwrap_or(pid.as_str()),
-                "title": p.get("title").and_then(|v| v.as_str()).unwrap_or(pid.as_str()),
-                "slug": p.get("slug").and_then(|v| v.as_str()).unwrap_or(""),
-                "icon": p.get("icon_url").and_then(|v| v.as_str()).unwrap_or(""),
-                "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("").chars().take(100).collect::<String>(),
-                "downloads": p.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0)
-            })
-        }).unwrap_or_else(|| json!({
-            "id": pid,
-            "title": pid,
-            "slug": "",
-            "icon": "",
-            "description": "",
-            "downloads": 0
-        }));
-
-        // 查询该项目的版本列表，按 gameVersion + loader 过滤
-        let mut url = format!("{}/project/{}/version", MODRINTH_API, pid);
-        let mut params_list: Vec<String> = Vec::new();
-        if !loader.is_empty() {
-            params_list.push(format!("loaders=[\"{}\"]", loader));
-        }
-        if !game_version.is_empty() {
-            params_list.push(format!("game_versions=[\"{}\"]", game_version));
-        }
-        if !params_list.is_empty() {
-            url.push('?');
-            url.push_str(&params_list.join("&"));
-        }
-
-        let mut compatible: Option<Value> = None;
-        if let Ok(resp) = client.get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(versions) = resp.json::<Vec<Value>>().await {
-                    if let Some(first) = versions.first() {
-                        compatible = Some(first.clone());
-                    }
+        let project =
+            fetch_dep_project(&client, is_cf, pid, &game_version, &loaders, &cf_api_key).await;
+        let entry = match project {
+            Ok(project) => {
+                let compatible = select_compatible_file(&project.files, &game_version, &loaders);
+                let mut entry = json!({
+                    "id": &project.id,
+                    "title": &project.title,
+                    "slug": &project.slug,
+                    "icon": &project.icon,
+                    "description": &project.description,
+                    "downloads": project.downloads,
+                    "hasCompatibleVersion": compatible.is_some(),
+                    "versionId": "",
+                    "versionNumber": "",
+                    "fileName": "",
+                    "gameVersions": [],
+                    "loaders": []
+                });
+                if let (Some(file), Some(obj)) = (compatible, entry.as_object_mut()) {
+                    obj.insert("versionId".to_string(), json!(&file.id));
+                    obj.insert("versionNumber".to_string(), json!(&file.version_number));
+                    obj.insert("fileName".to_string(), json!(&file.file_name));
+                    obj.insert(
+                        "gameVersions".to_string(),
+                        Value::Array(file.game_versions.iter().map(|v| json!(v)).collect()),
+                    );
+                    obj.insert(
+                        "loaders".to_string(),
+                        Value::Array(file.loaders.iter().map(|v| json!(v)).collect()),
+                    );
                 }
+                entry
             }
-        }
-
-        // 客户端二次过滤兜底：服务端过滤可能不生效时（如空版本列表），重查全部再本地过滤
-        if compatible.is_none() && (!game_version.is_empty() || !loader.is_empty()) {
-            let full_url = format!("{}/project/{}/version", MODRINTH_API, pid);
-            if let Ok(resp) = client.get(&full_url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(versions) = resp.json::<Vec<Value>>().await {
-                        let match_ver = |v: &Value| -> bool {
-                            let gv_ok = if game_version.is_empty() {
-                                true
-                            } else {
-                                v.get("game_versions")
-                                    .and_then(|x| x.as_array())
-                                    .map(|a| a.iter().any(|g| g.as_str() == Some(game_version.as_str())))
-                                    .unwrap_or(false)
-                            };
-                            let l_ok = if loader.is_empty() {
-                                true
-                            } else {
-                                v.get("loaders")
-                                    .and_then(|x| x.as_array())
-                                    .map(|a| {
-                                        a.iter().any(|l| {
-                                            l.as_str().map(|ls| ls.eq_ignore_ascii_case(loader.as_str())).unwrap_or(false)
-                                        })
-                                    })
-                                    .unwrap_or(false)
-                            };
-                            gv_ok && l_ok
-                        };
-                        if let Some(matched) = versions.iter().find(|v| match_ver(v)) {
-                            compatible = Some(matched.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut entry = base;
-        let has_compatible = compatible.is_some();
-        if let Some(c) = compatible.as_ref() {
-            let file_name = c
-                .get("files")
-                .and_then(|f| f.as_array())
-                .and_then(|files| {
-                    files.iter()
-                        .find(|fa| fa.get("primary").and_then(|pr| pr.as_bool()).unwrap_or(false))
-                        .or_else(|| files.first())
-                        .and_then(|fa| fa.get("filename").and_then(|fnm| fnm.as_str()))
-                })
-                .unwrap_or("");
-            if let Some(mut e) = entry.as_object_mut() {
-                e.insert("hasCompatibleVersion".to_string(), json!(has_compatible));
-                e.insert("versionId".to_string(), json!(c.get("id").and_then(|v| v.as_str()).unwrap_or("")));
-                e.insert("versionNumber".to_string(), json!(c.get("version_number").and_then(|v| v.as_str()).unwrap_or("")));
-                e.insert("fileName".to_string(), json!(file_name));
-                e.insert("gameVersions".to_string(), Value::Array(c.get("game_versions").and_then(|v| v.as_array()).cloned().unwrap_or_default()));
-                e.insert("loaders".to_string(), Value::Array(c.get("loaders").and_then(|v| v.as_array()).cloned().unwrap_or_default()));
-            }
-        } else {
-            if let Some(mut e) = entry.as_object_mut() {
-                e.insert("hasCompatibleVersion".to_string(), json!(false));
-                e.insert("versionId".to_string(), json!(""));
-                e.insert("versionNumber".to_string(), json!(""));
-                e.insert("fileName".to_string(), json!(""));
-                e.insert("gameVersions".to_string(), json!([]));
-                e.insert("loaders".to_string(), json!([]));
-            }
-        }
-
+            Err(_) => json!({
+                "id": pid,
+                "title": pid,
+                "slug": "",
+                "icon": "",
+                "description": "",
+                "downloads": 0,
+                "hasCompatibleVersion": false,
+                "versionId": "",
+                "versionNumber": "",
+                "fileName": "",
+                "gameVersions": [],
+                "loaders": []
+            }),
+        };
         resolve.insert(pid.clone(), entry);
     }
 

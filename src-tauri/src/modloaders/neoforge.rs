@@ -349,6 +349,17 @@ pub async fn install_neoforge(
     // 官方安装器需要检测到启动器配置，否则报 "There is no Minecraft launcher profile" 中止
     shared::ensure_launcher_profile(game_version);
 
+    // 安装器内部按 install_profile.json 里的官方 Maven 地址下载依赖，
+    // 国内直连常见超时；改写为 BMCLAPI 镜像后再执行（先跑镜像版，失败回退原版）
+    let orig_path = installer_path.with_extension("orig.jar");
+    let mut use_mirror = true;
+    if std::fs::copy(&installer_path, &orig_path).is_err() {
+        use_mirror = false;
+    } else if patch_installer_mirrors(&installer_path).is_err() {
+        use_mirror = false;
+        let _ = std::fs::copy(&orig_path, &installer_path);
+    }
+
     eprintln!(
         "[NeoForge] 执行: java -jar ... --installClient {}",
         data_dir.display()
@@ -357,72 +368,95 @@ pub async fn install_neoforge(
     let mut last_error: Option<String> = None;
     let mut installed = false;
 
-    for (idx, java_path) in java_candidates.iter().enumerate() {
-        eprintln!("[NeoForge] 尝试第 {} 个 Java: {}", idx + 1, java_path);
+    let mut rounds: Vec<bool> = Vec::new();
+    if use_mirror {
+        rounds.push(true);
+        rounds.push(false);
+    } else {
+        rounds.push(false);
+    }
 
-        // [Java 9+ 必需] 现代 NeoForge 安装器依赖 cpw.mods.bootstraplauncher 模块，
-        // 不加 --add-exports 会报模块访问错误导致安装器崩溃
-        let mut args: Vec<String> = Vec::new();
-        if let Some((_, major, _)) = crate::java::inspect_java(std::path::Path::new(java_path)) {
-            if major >= 9 {
-                args.push("--add-exports".to_string());
-                args.push("cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED".to_string());
+    for &mirror_round in &rounds {
+        if !mirror_round {
+            if use_mirror {
+                if std::fs::copy(&orig_path, &installer_path).is_err() {
+                    continue;
+                }
+                eprintln!("[NeoForge] 镜像下载失败，回退官方源重试");
             }
         }
-        args.push("-jar".to_string());
-        args.push(installer_path.to_string_lossy().to_string());
-        args.push("--installClient".to_string());
-        args.push(data_dir.to_string_lossy().to_string());
 
-        let install_result = shared::run_subprocess_with_timeout(
-            std::path::Path::new(java_path),
-            &args,
-            None,
-            600, // 10 分钟超时
-        )
-        .await;
+        for (idx, java_path) in java_candidates.iter().enumerate() {
+            eprintln!(
+                "[NeoForge] 尝试第 {} 个 Java: {}（{}）",
+                idx + 1,
+                java_path,
+                if mirror_round { "镜像源" } else { "官方源" }
+            );
 
-        let (exit_code, stdout, stderr) = match install_result {
-            Ok(r) => r,
-            Err(e) => {
-                last_error = Some(e.clone());
-                eprintln!("[NeoForge] Java {} 执行失败: {}", java_path, e);
-                continue;
+            let args: Vec<String> = vec![
+                "-jar".to_string(),
+                installer_path.to_string_lossy().to_string(),
+                "--installClient".to_string(),
+                data_dir.to_string_lossy().to_string(),
+            ];
+
+            let install_result = shared::run_subprocess_with_timeout(
+                std::path::Path::new(java_path),
+                &args,
+                None,
+                600, // 10 分钟超时
+            )
+            .await;
+
+            let (exit_code, stdout, stderr) = match install_result {
+                Ok(r) => r,
+                Err(e) => {
+                    last_error = Some(e.clone());
+                    eprintln!("[NeoForge] Java {} 执行失败: {}", java_path, e);
+                    continue;
+                }
+            };
+
+            eprintln!("[NeoForge] installer 退出码: {}", exit_code);
+            if !stdout.is_empty() {
+                eprintln!(
+                    "[NeoForge] installer stdout (最后 500 字): {}",
+                    &stdout[stdout.len().saturating_sub(500)..]
+                );
             }
-        };
+            if !stderr.is_empty() {
+                eprintln!(
+                    "[NeoForge] installer stderr (最后 500 字): {}",
+                    &stderr[stderr.len().saturating_sub(500)..]
+                );
+            }
 
-        eprintln!("[NeoForge] installer 退出码: {}", exit_code);
-        if !stdout.is_empty() {
+            if exit_code == 0 {
+                eprintln!("[NeoForge] 安装成功，使用的 Java: {}", java_path);
+                installed = true;
+                break;
+            }
+
+            last_error = Some(if !stderr.is_empty() {
+                stderr[stderr.len().saturating_sub(300)..].to_string()
+            } else if !stdout.is_empty() {
+                stdout[stdout.len().saturating_sub(300)..].to_string()
+            } else {
+                "(无输出)".to_string()
+            });
             eprintln!(
-                "[NeoForge] installer stdout (最后 500 字): {}",
-                &stdout[stdout.len().saturating_sub(500)..]
+                "[NeoForge] Java {} 安装失败，尝试下一个候选...",
+                java_path
             );
         }
-        if !stderr.is_empty() {
-            eprintln!(
-                "[NeoForge] installer stderr (最后 500 字): {}",
-                &stderr[stderr.len().saturating_sub(500)..]
-            );
-        }
 
-        if exit_code == 0 {
-            eprintln!("[NeoForge] 安装成功，使用的 Java: {}", java_path);
-            installed = true;
+        if installed {
             break;
         }
-
-        last_error = Some(if !stderr.is_empty() {
-            stderr[stderr.len().saturating_sub(300)..].to_string()
-        } else if !stdout.is_empty() {
-            stdout[stdout.len().saturating_sub(300)..].to_string()
-        } else {
-            "(无输出)".to_string()
-        });
-        eprintln!(
-            "[NeoForge] Java {} 安装失败，尝试下一个候选...",
-            java_path
-        );
     }
+
+    let _ = std::fs::remove_file(&orig_path);
 
     if !installed {
         let _ = std::fs::remove_file(&installer_path);
@@ -551,4 +585,64 @@ fn rename_version_dir(old_id: &str, new_id: &str) {
     let old_dir = shared::versions_dir().join(old_id);
     let new_dir = shared::versions_dir().join(new_id);
     shared::normalize_version_dir(&old_dir, old_id, &new_dir, new_id);
+}
+
+/// 把安装器内 install_profile.json / version.json 的官方 Maven 地址改写为 BMCLAPI 镜像
+fn patch_installer_mirrors(installer_path: &std::path::Path) -> Result<(), String> {
+    use std::io::{Read, Write};
+
+    let entries: Vec<(String, Vec<u8>)> = {
+        let file = std::fs::File::open(installer_path).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+        let mut out = Vec::with_capacity(archive.len());
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+            let name = entry.name().to_string();
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+            out.push((name, buf));
+        }
+        out
+    };
+
+    let tmp_path = installer_path.with_extension("mirror.tmp");
+    {
+        let out_file = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        let mut writer = zip::ZipWriter::new(out_file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (name, buf) in entries {
+            let data = if name == "install_profile.json" || name == "version.json" {
+                let text = String::from_utf8_lossy(&buf)
+                    .replace(
+                        "https://maven.neoforged.net/releases/",
+                        "https://bmclapi2.bangbang93.com/maven/",
+                    )
+                    .replace(
+                        "https://maven.minecraftforge.net/",
+                        "https://bmclapi2.bangbang93.com/maven/",
+                    )
+                    .replace(
+                        "https://libraries.minecraft.net/",
+                        "https://bmclapi2.bangbang93.com/maven/",
+                    );
+                text.into_bytes()
+            } else {
+                buf
+            };
+            // 目录条目对 JAR 有效性无影响，跳过以避免不同 zip 版本对目录命名的差异
+            if name.ends_with('/') {
+                continue;
+            }
+            writer
+                .start_file(name, options)
+                .map_err(|e| e.to_string())?;
+            writer.write_all(&data).map_err(|e| e.to_string())?;
+        }
+        writer.finish().map_err(|e| e.to_string())?;
+    }
+
+    std::fs::remove_file(installer_path).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, installer_path).map_err(|e| e.to_string())?;
+    Ok(())
 }

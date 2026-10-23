@@ -177,6 +177,11 @@ pub fn build_launch_arguments(
     variables.insert("assets_index_name".to_string(), asset_index.clone());
     variables.insert("auth_uuid".to_string(), uuid.clone());
     variables.insert("auth_access_token".to_string(), access_token.clone());
+    // 旧版模板占位符：1.7.x 的 --userProperties 需要一个 JSON 对象，
+    // 旧版本（1.6 及更早）还会用 auth_session / access_token 传递令牌
+    variables.insert("user_properties".to_string(), "{}".to_string());
+    variables.insert("auth_session".to_string(), access_token.clone());
+    variables.insert("access_token".to_string(), access_token.clone());
     variables.insert("user_type".to_string(), user_type.clone());
     variables.insert(
         "version_type".to_string(),
@@ -228,7 +233,7 @@ pub fn build_launch_arguments(
     let mut jvm_args: Vec<String> = Vec::new();
     jvm_args.push(format!("-Xmx{}M", max_mem_mb));
     jvm_args.push("-Dlog4j2.formatMsgNoLookups=true".to_string());
-    jvm_args.push("-Djava.net.preferIPv4Stack=true".to_string());
+    // 不强制 IPv4 栈：保持 JVM 默认双栈，避免仅含 AAAA（IPv6）记录的域名无法连接
 
     // GC 选择
     let has_user_gc = jvm_args.iter().any(|a| {
@@ -256,10 +261,6 @@ pub fn build_launch_arguments(
         let ccs_mb = meta_mb.min(512);
         jvm_args.push(format!("-XX:CompressedClassSpaceSize={}m", ccs_mb));
         jvm_args.push(format!("-XX:MaxMetaspaceSize={}m", meta_mb));
-    }
-    if !jvm_args.iter().any(|a| a.contains("preferIPv4Stack") || a.contains("preferIPv6Stack")) {
-        jvm_args.push("-Djava.net.preferIPv4Stack=true".to_string());
-        jvm_args.push("-Djava.net.preferIPv4Addresses=true".to_string());
     }
 
     // 用户自定义 JVM 参数（版本独立 > 全局）
@@ -382,8 +383,10 @@ pub fn build_launch_arguments(
         jvm_args.push("-Dlog4j2.formatMsgNoLookups=true".to_string());
     }
 
-    // macOS 必须在主线程启动（LWJGL 要求）
-    if cfg!(target_os = "macos") {
+    // macOS 必须在主线程启动（LWJGL 要求），用户已配置时不重复添加
+    if cfg!(target_os = "macos")
+        && !jvm_args.iter().any(|a| a.starts_with("-XstartOnFirstThread"))
+    {
         jvm_args.insert(0, "-XstartOnFirstThread".to_string());
     }
 
@@ -629,7 +632,11 @@ pub fn build_classpath(
     external_version_dir: Option<&Path>,
     libraries_dir: &Path,
 ) -> Vec<String> {
-    let mut classpath: Vec<String> = Vec::new();
+    // 同一 group:artifact 只保留版本最高的一个。
+    // 典型场景：原版 1.21.10 带 asm 9.6，Fabric 带 asm 9.10.1，
+    // 两个 jar 同时进入 classpath 会让 Fabric 校验报
+    // "duplicate ASM classes found on classpath" 并以退出码 1 结束。
+    let mut entries: Vec<ClasspathEntry> = Vec::new();
     let libraries = version_json
         .get("libraries")
         .and_then(|v| v.as_array())
@@ -671,69 +678,139 @@ pub fn build_classpath(
             continue;
         }
 
+        let mut resolved_path: Option<String> = None;
+
         // 优先用 downloads.artifact.path
         if let Some(artifact) = lib.get("downloads").and_then(|d| d.get("artifact")) {
             if let Some(path) = artifact.get("path").and_then(|p| p.as_str()) {
                 if !path.is_empty() {
-                    if let Some(found) = find_lib_in_bases(&search_bases, path) {
-                        if !classpath.contains(&found) {
-                            classpath.push(found);
-                        }
-                        continue;
-                    }
+                    resolved_path = find_lib_in_bases(&search_bases, path);
                 }
             }
         }
 
         // 回退：从 maven name 解析路径
-        if !name.is_empty() {
+        if resolved_path.is_none() && !name.is_empty() {
             if let Some(rel_path) = maven_name_to_path(&name) {
-                if let Some(found) = find_lib_in_bases(&search_bases, &rel_path) {
-                    if !classpath.contains(&found) {
-                        classpath.push(found);
-                    }
-                    continue;
-                }
+                resolved_path = find_lib_in_bases(&search_bases, &rel_path);
             }
-            // 最后回退：扫描目录
-            if let Some(found) = find_lib_by_fallback(&name, &search_bases) {
-                if !classpath.contains(&found) {
-                    classpath.push(found);
-                }
-            }
+        }
+
+        // 最后回退：扫描目录
+        if resolved_path.is_none() && !name.is_empty() {
+            resolved_path = find_lib_by_fallback(&name, &search_bases);
+        }
+
+        if let Some(path) = resolved_path {
+            push_classpath_entry(&mut entries, &name, path);
         }
     }
 
     let _ = (current_os, current_arch); // 标记变量已用
-    classpath
+    entries.into_iter().map(|e| e.path).collect()
 }
 
-/// 判断库是否为 native 库（按 classifiers 判断）
-fn is_native_library(lib: &Value, current_os: &str) -> bool {
-    let classifiers = lib
-        .get("downloads")
-        .and_then(|d| d.get("classifiers"))
-        .and_then(|c| c.as_object());
-    if let Some(classifiers) = classifiers {
-        let native_keys = [
-            format!("natives-{}", current_os),
-            format!("natives-{}-legacy", current_os),
-            format!("natives-{}-arm64", current_os),
-        ];
-        for k in &native_keys {
-            if classifiers.contains_key(k) {
-                return true;
-            }
-        }
-        // 检查 lib.name 中是否含 natives-<os> 后缀
-        let name = utils::get_str(lib, "name");
-        if name.contains(&format!(":natives-{}:", current_os))
-            || name.contains(&format!(":natives-{}-legacy:", current_os))
+/// classpath 中的一条库记录
+struct ClasspathEntry {
+    /// group:artifact（用于同名库去重）
+    key: Option<String>,
+    version: String,
+    path: String,
+}
+
+/// 加入 classpath；同一 group:artifact 已存在时保留版本更高的那个
+fn push_classpath_entry(entries: &mut Vec<ClasspathEntry>, name: &str, path: String) {
+    // 同一路径只保留一次
+    if entries.iter().any(|e| e.path == path) {
+        return;
+    }
+    let key = lib_artifact_key(name);
+    let version = lib_version_of(name, &path);
+    if let Some(k) = key.as_deref() {
+        if let Some(existing) = entries
+            .iter_mut()
+            .find(|e| e.key.as_deref() == Some(k))
         {
-            return true;
+            if compare_lib_version(&version, &existing.version) == std::cmp::Ordering::Greater {
+                existing.version = version;
+                existing.path = path;
+            }
+            return;
         }
     }
-    false
+    entries.push(ClasspathEntry {
+        key,
+        version,
+        path,
+    });
+}
+
+/// 从 Maven 坐标取 group:artifact 作为去重键
+fn lib_artifact_key(name: &str) -> Option<String> {
+    let mut parts = name.split(':');
+    let group = parts.next()?.trim();
+    let artifact = parts.next()?.trim();
+    if group.is_empty() || artifact.is_empty() {
+        return None;
+    }
+    Some(format!("{}:{}", group, artifact))
+}
+
+/// 从 Maven 坐标或文件路径取库版本号
+fn lib_version_of(name: &str, path: &str) -> String {
+    if let Some(v) = name.split(':').nth(2) {
+        let v = v.trim();
+        if !v.is_empty() {
+            return v.to_string();
+        }
+    }
+    Path::new(path)
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+/// 库版本比较：按 `.`/`-`/`_`/`+` 分段，数字段按数值比较，其余按字符串比较
+fn compare_lib_version(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let split = |s: &str| {
+        s.split(|c: char| c == '.' || c == '-' || c == '_' || c == '+')
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+    };
+    let av = split(a);
+    let bv = split(b);
+    for i in 0..av.len().max(bv.len()) {
+        let x = av.get(i).map(|s| s.as_str()).unwrap_or("0");
+        let y = bv.get(i).map(|s| s.as_str()).unwrap_or("0");
+        let ord = match (x.parse::<u64>(), y.parse::<u64>()) {
+            (Ok(nx), Ok(ny)) => nx.cmp(&ny),
+            _ => x.cmp(y),
+        };
+        if ord != Ordering::Equal {
+            return ord;
+        }
+    }
+    Ordering::Equal
+}
+
+/// 判断库是否为 native 库（任何平台的 natives-* 都不应进入 classpath）
+fn is_native_library(lib: &Value, _current_os: &str) -> bool {
+    // 旧版 JSON 用 natives 字段 + classifiers；新版 JSON 把原生包作为独立 classifier 条目
+    lib.get("natives").is_some() || utils::get_str(lib, "name").contains(":natives-")
+}
+
+/// 原生库包使用的平台后缀（Windows/macOS/Linux）
+fn native_os_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    }
 }
 
 /// Maven 名称转相对路径
@@ -833,7 +910,15 @@ fn extract_natives_dir(
         .cloned()
         .unwrap_or_default();
     let current_platform = dep_check::current_platform_name();
+    let native_os = native_os_name();
     let is_64 = cfg!(target_pointer_width = "64");
+    let is_arm64 = cfg!(target_arch = "aarch64");
+    // 同一库可能同时提供通用包（x86_64）与 arm64 专用包，arm64 上优先专用包
+    let has_arm_variant = libraries.iter().any(|lib| {
+        let name = utils::get_str(lib, "name");
+        name.contains(&format!(":natives-{}-arm64", native_os))
+            || name.contains(&format!(":natives-{}-aarch64", native_os))
+    });
 
     // 搜索路径：外部根 libraries 优先，其次本地 libraries，再 .minecraft/libraries
     let mut search_bases: Vec<PathBuf> = Vec::new();
@@ -888,13 +973,25 @@ fn extract_natives_dir(
                 continue;
             }
             let platform_native = native_suffix.strip_prefix("natives-").unwrap_or("");
-            let valid = if is_64 {
-                platform_native == current_platform
-                    || platform_native == format!("{}-x64", current_platform)
+            // Minecraft 的规则名是 osx，但原生包后缀是 macos/natives-macos
+            let arch_ok = if is_arm64 {
+                if has_arm_variant {
+                    platform_native.ends_with("arm64") || platform_native.ends_with("aarch64")
+                } else {
+                    !platform_native.ends_with("x86") && !platform_native.ends_with("x64")
+                }
             } else {
-                platform_native == format!("{}-x86", current_platform)
-                    || platform_native == current_platform
+                !platform_native.ends_with("arm64")
+                    && !platform_native.ends_with("aarch64")
+                    && !(is_64 && platform_native.ends_with("-x86"))
             };
+            let valid = arch_ok
+                && (platform_native == native_os
+                    || platform_native == format!("{}-legacy", native_os)
+                    || platform_native == format!("{}-x64", native_os)
+                    || platform_native == format!("{}-x86", native_os)
+                    || platform_native == format!("{}-arm64", native_os)
+                    || platform_native == format!("{}-aarch64", native_os));
             if !valid {
                 continue;
             }
@@ -961,11 +1058,21 @@ fn extract_natives_dir(
         "so"
     };
     let is_win = cfg!(target_os = "windows");
-    let critical_missing: Vec<&str> = critical_list
-        .iter()
-        .filter(|n| !native_critical_exists(&natives_dir, n, is_win, native_ext))
-        .copied()
-        .collect();
+    // macOS/Linux 的原生库名带 lib 前缀（liblwjgl.dylib / liblwjgl.so），
+    // 不能沿用 Windows 的精确 DLL 名，否则每次启动都会误判缺失并重复解压。
+    let critical_missing: Vec<&str> = if is_win {
+        critical_list
+            .iter()
+            .filter(|n| !native_critical_exists(&natives_dir, n, true, native_ext))
+            .copied()
+            .collect()
+    } else {
+        ["lwjgl", "glfw", "openal"]
+            .iter()
+            .filter(|key| !native_lib_exists(&natives_dir, key, native_ext))
+            .copied()
+            .collect()
+    };
 
     // 判断是否需要重新解压：目录缺失 / 关键库缺失 / jar 已更新
     let needs_extract = if natives_dir.exists() && critical_missing.is_empty() {
@@ -1000,7 +1107,7 @@ fn find_native_jar(bases: &[PathBuf], href: &str) -> Option<PathBuf> {
     None
 }
 
-/// 判断关键原生库文件是否存在（Windows 下直接匹配 .dll，其他平台按扩展名）
+/// 判断关键原生库文件是否存在（Windows 下直接匹配 .dll）
 fn native_critical_exists(natives_dir: &Path, dll_name: &str, is_win: bool, ext: &str) -> bool {
     let target = if is_win {
         natives_dir.join(dll_name)
@@ -1009,6 +1116,18 @@ fn native_critical_exists(natives_dir: &Path, dll_name: &str, is_win: bool, ext:
         natives_dir.join(format!("{}.{}", base, ext))
     };
     target.exists()
+}
+
+/// 非 Windows：原生库通常带 lib 前缀，按"文件名包含关键字且扩展名匹配"判断
+fn native_lib_exists(natives_dir: &Path, key: &str, ext: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(natives_dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        name.contains(key)
+            && (name.ends_with(&format!(".{}", ext)) || name.ends_with(".jnilib"))
+    })
 }
 
 /// 计算一组路径中的最大修改时间（毫秒）
@@ -1831,6 +1950,10 @@ fn collect_game_args_from_json(
 /// 游戏窗口分辨率修正：减去标题栏+边框，避免窗口铺满屏幕时标题栏被顶出屏幕外。
 /// 对所有版本（原版 / Forge / NeoForge / Fabric）统一生效。
 fn adjust_window_resolution(res_w: u32, res_h: u32, _game_args: &[String]) -> (u32, u32) {
+    // 标题栏/边框修正仅适用于 Windows 窗口
+    if !cfg!(target_os = "windows") {
+        return (res_w, res_h);
+    }
     let (screen_w, screen_h, work_h) = get_screen_size();
     if screen_w == 0 || screen_h == 0 {
         return (res_w, res_h);
@@ -1869,6 +1992,63 @@ fn get_screen_size() -> (u32, u32, u32) {
                 return (w as u32, h as u32, wh.max(0) as u32);
             }
         }
+    }
+    // Linux：xrandr 当前分辨率
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(out) = std::process::Command::new("xrandr").arg("--current").output() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                if let Some(pos) = line.find("current ") {
+                    let rest = &line[pos + 8..];
+                    let mut parts = rest.split(|c: char| c == ' ' || c == 'x' || c == ',');
+                    if let (Some(w), Some(h)) = (parts.next(), parts.next()) {
+                        if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
+                            return (w, h, h);
+                        }
+                    }
+                }
+                if line.contains(" connected") {
+                    for token in line.split_whitespace() {
+                        if let Some(x) = token.find('x') {
+                            let (w, rest) = token.split_at(x);
+                            let h = rest[1..].split('+').next().unwrap_or("");
+                            if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
+                                return (w, h, h);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // macOS：system_profiler 读取主显示器分辨率（避免 osascript 触发自动化权限弹窗）
+    #[cfg(target_os = "macos")]
+    {
+        static MAC_SCREEN: std::sync::OnceLock<(u32, u32, u32)> = std::sync::OnceLock::new();
+        return *MAC_SCREEN.get_or_init(|| {
+            if let Ok(out) = std::process::Command::new("system_profiler")
+                .arg("SPDisplaysDataType")
+                .output()
+            {
+                let text = String::from_utf8_lossy(&out.stdout);
+                for line in text.lines() {
+                    let line = line.trim();
+                    if let Some(pos) = line.find("Resolution:") {
+                        let rest = &line[pos + 11..];
+                        let mut parts = rest.split_whitespace();
+                        if let Some(size) = parts.next() {
+                            let nums: Vec<u32> =
+                                size.split('x').filter_map(|s| s.parse().ok()).collect();
+                            if nums.len() == 2 && nums[0] > 0 && nums[1] > 0 {
+                                return (nums[0], nums[1], nums[1]);
+                            }
+                        }
+                    }
+                }
+            }
+            (0, 0, 0)
+        });
     }
     (0, 0, 0)
 }

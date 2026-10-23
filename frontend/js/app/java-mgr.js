@@ -77,7 +77,7 @@ async function loadInstalledJava() {
     }
 }
 
-/* 手动添加 Java：弹出文件选择器，选 java.exe */
+/* 手动添加 Java：弹出文件选择器，选 java（Windows 为 java.exe） */
 async function browseManualJava() {
     if (!window.electronAPI || !window.electronAPI.showOpenDialog) {
         showToast('当前环境不支持文件选择器', 'error');
@@ -118,9 +118,12 @@ async function browseImportJava(type) {
     let result;
     if (type === 'archive') {
         result = await window.electronAPI.showOpenDialog({
-            title: '选择 Java 压缩包（.zip）',
+            title: '选择 Java 压缩包（.zip / .tar.gz / .tgz）',
             properties: ['openFile'],
-            filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }, { name: '所有文件', extensions: ['*'] }]
+            filters: [
+                { name: 'Java 压缩包', extensions: ['zip', 'gz', 'tgz'] },
+                { name: '所有文件', extensions: ['*'] }
+            ]
         });
     } else {
         result = await window.electronAPI.showOpenDialog({

@@ -775,7 +775,16 @@ fn extract_maven_prefix<R: std::io::Read + std::io::Seek>(
         if rel.is_empty() || entry.is_dir() {
             continue;
         }
-        let dest = libs_dir.join(rel);
+        // 防 zip-slip：拒 .. 组件与绝对路径，避免写出 libs 目录
+        let rel_norm = rel.replace('\\', "/");
+        if rel_norm.starts_with('/')
+            || rel_norm.as_bytes().get(1) == Some(&b':')
+            || rel_norm.split('/').any(|seg| seg == "..")
+        {
+            eprintln!("[Forge] 跳过可疑路径: {}", name);
+            continue;
+        }
+        let dest = libs_dir.join(&rel_norm);
         if let Some(parent) = dest.parent() {
             if std::fs::create_dir_all(parent).is_err() {
                 continue;

@@ -166,7 +166,78 @@ async fn handle_current_context() -> ApiResult {
 async fn handle_create_shortcut(body: &Option<Value>) -> ApiResult {
     #[cfg(not(target_os = "windows"))]
     {
-        return ApiResult::ok(json!({ "success": false, "error": "创建快捷方式仅支持 Windows 系统" }));
+        let shortcut_type = body
+            .as_ref()
+            .and_then(|b| b.get("type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("desktop");
+        let exe_path = match std::env::current_exe() {
+            Ok(p) => p,
+            Err(e) => return ApiResult::err(500, &format!("无法获取程序路径: {}", e)),
+        };
+
+        #[cfg(target_os = "macos")]
+        {
+            // macOS：在桌面创建指向 .app 的符号链接
+            let target = exe_path
+                .ancestors()
+                .find(|p| p.extension().map(|e| e == "app").unwrap_or(false))
+                .map(|p| p.to_path_buf())
+                .unwrap_or(exe_path);
+            let desktop = dirs::desktop_dir()
+                .or_else(|| dirs::home_dir().map(|h| h.join("Desktop")))
+                .unwrap_or_default();
+            if let Err(e) = std::fs::create_dir_all(&desktop) {
+                return ApiResult::err(500, &format!("无法创建桌面目录: {}", e));
+            }
+            let link = desktop.join("VersePC2.app");
+            let _ = std::fs::remove_file(&link);
+            return match std::os::unix::fs::symlink(&target, &link) {
+                Ok(()) => ApiResult::ok(json!({ "success": true, "path": link.to_string_lossy() })),
+                Err(e) => ApiResult::err(500, &format!("创建快捷方式失败: {}", e)),
+            };
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Linux：写入 .desktop 文件（桌面或应用菜单）
+            let dir = if shortcut_type == "desktop" {
+                dirs::desktop_dir()
+                    .or_else(|| dirs::home_dir().map(|h| h.join("Desktop")))
+                    .unwrap_or_default()
+            } else {
+                dirs::data_dir()
+                    .unwrap_or_else(|| {
+                        dirs::home_dir()
+                            .map(|h| h.join(".local").join("share"))
+                            .unwrap_or_default()
+                    })
+                    .join("applications")
+            };
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                return ApiResult::err(500, &format!("无法创建目录: {}", e));
+            }
+            let path = dir.join("versepc2.desktop");
+            let content = format!(
+                "[Desktop Entry]\nType=Application\nName=VersePC2\nComment=VersePC2 Minecraft Launcher\nExec=\"{}\"\nTerminal=false\nCategories=Game;\n",
+                exe_path.to_string_lossy()
+            );
+            if let Err(e) = std::fs::write(&path, content) {
+                return ApiResult::err(500, &format!("写入快捷方式失败: {}", e));
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
+            }
+            return ApiResult::ok(json!({ "success": true, "path": path.to_string_lossy() }));
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            let _ = (shortcut_type, exe_path);
+            return ApiResult::ok(json!({ "success": false, "error": "当前平台暂不支持创建快捷方式" }));
+        }
     }
 
     #[cfg(target_os = "windows")]

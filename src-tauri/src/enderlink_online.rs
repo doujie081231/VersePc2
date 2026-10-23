@@ -263,6 +263,9 @@ async fn create_public_room(app: &AppHandle, params: &Value, remote_port: u16, n
 
 #[tauri::command]
 pub async fn enderlink_rooms(_app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用", "rooms": [] });
+    }
     let client = http_client(10);
     let resp = match client.get(HALL_URL).send().await {
         Ok(r) => r,
@@ -280,6 +283,9 @@ pub async fn enderlink_rooms(_app: AppHandle) -> Value {
 
 #[tauri::command]
 pub async fn enderlink_nodes(_app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用", "nodes": [] });
+    }
     let client = http_client(15);
     let resp = match client.get(NODES_URL).send().await {
         Ok(r) => r,
@@ -300,6 +306,12 @@ pub async fn enderlink_nodes(_app: AppHandle) -> Value {
 
 #[tauri::command]
 pub async fn enderlink_download(_app: AppHandle) -> Value {
+    if !cfg!(target_os = "windows") {
+        return json!({ "ok": false, "error": "EnderLink 联机暂仅支持 Windows（官方客户端仅提供 Windows 版）" });
+    }
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
     match download_client().await {
         Ok(()) => json!({ "ok": true }),
         Err(e) => json!({ "ok": false, "error": e }),
@@ -308,6 +320,12 @@ pub async fn enderlink_download(_app: AppHandle) -> Value {
 
 #[tauri::command]
 pub async fn enderlink_start(app: AppHandle, params: Value) -> Value {
+    if !cfg!(target_os = "windows") {
+        return json!({ "ok": false, "error": "EnderLink 联机暂仅支持 Windows（官方客户端仅提供 Windows 版）" });
+    }
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
     let log = |msg: &str| emit_log(&app, msg);
     {
         let s = state().lock().await;
@@ -411,6 +429,9 @@ pub async fn enderlink_start(app: AppHandle, params: Value) -> Value {
 
 #[tauri::command]
 pub async fn enderlink_stop(app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
     let log = |msg: &str| emit_log(&app, msg);
     let (pid, heartbeat) = {
         let mut s = state().lock().await;
@@ -425,11 +446,22 @@ pub async fn enderlink_stop(app: AppHandle) -> Value {
     }
     log("正在关闭联机...");
     if let Some(pid) = pid {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F", "/T"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/F", "/T"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
     }
     {
         let mut s = state().lock().await;
@@ -445,6 +477,9 @@ pub async fn enderlink_stop(app: AppHandle) -> Value {
 
 #[tauri::command]
 pub async fn enderlink_status(_app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用", "running": false });
+    }
     let s = state().lock().await;
     json!({
         "ok": true,

@@ -1,7 +1,7 @@
 // scene_renderer.rs — Wallpaper Engine 场景壁纸渲染进程管理
 // 职责：启动/停止 verse-scene-renderer.exe（离屏 OpenGL 渲染 WE scene 壁纸，
 //       经本地 HTTP 输出 MJPEG 流），前端 <img> 显示动态壁纸。
-//       渲染器组件约 314MB，不随主程序分发；缺失时由前端引导下载到 <数据目录>/scene-renderer/。
+//       渲染器组件约 104MB，不随主程序分发；缺失时由前端引导下载到 <数据目录>/scene-renderer/。
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -24,13 +24,27 @@ static RENDERER_PID: AtomicI32 = AtomicI32::new(0);
 /// 渲染器组件压缩包文件名（GitHub/Gitee release 资产，zip 根目录即 exe 与 DLL）
 const RENDERER_PACKAGE_FILE: &str = "scene-renderer-windows-x64.zip";
 
-/// 渲染器组件压缩包的 GitHub release 地址（版本号跟随应用版本）
-fn renderer_package_github_url() -> String {
-    format!(
-        "https://github.com/doujie081231/VersePc2/releases/download/v{}/{}",
-        env!("CARGO_PKG_VERSION"),
-        RENDERER_PACKAGE_FILE
-    )
+/// 渲染器组件的发布 tag。
+///
+/// 注意：组件不随主程序版本发布。当前主程序是 1.7.0，但 v1.5.0 之后的
+/// release 都没有再上传 scene-renderer-windows-x64.zip；如果继续使用
+/// `env!("CARGO_PKG_VERSION")` 拼接下载地址（旧逻辑），1.7.0 会请求
+/// /v1.7.0/scene-renderer-windows-x64.zip 并 404。这里锁定到最后一个带组件
+/// 的 release（v1.4.3），并按新→旧顺序回退；后续重新发布组件时只需在数组
+/// 最前面加 tag，不要改主程序版本号。
+const RENDERER_RELEASE_TAGS: &[&str] = &["v1.4.3", "v1.4.2", "v1.4.1"];
+
+/// 渲染器组件压缩包的候选 GitHub release 地址
+fn renderer_package_github_urls() -> Vec<String> {
+    RENDERER_RELEASE_TAGS
+        .iter()
+        .map(|tag| {
+            format!(
+                "https://github.com/doujie081231/VersePc2/releases/download/{}/{}",
+                tag, RENDERER_PACKAGE_FILE
+            )
+        })
+        .collect()
 }
 
 /// 定位 verse-scene-renderer.exe（优先 <数据目录>/scene-renderer/，其次主程序同目录）
@@ -66,10 +80,30 @@ fn is_child_alive(child: &mut Child) -> bool {
     }
 }
 
+/// 读取场景渲染器日志末尾若干行，启动失败时回传给前端提示
+fn renderer_log_tail(max_lines: usize) -> String {
+    let path = crate::storage::resolve_data_dir()
+        .join("logs")
+        .join("scene-renderer.log");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    let mut lines: Vec<&str> = raw.lines().rev().take(max_lines).collect();
+    lines.reverse();
+    lines.join("\n")
+}
+
 /// 启动场景壁纸渲染进程
-/// 参数：workshop_id（WE 创意工坊作品 ID）
+/// 参数：workshop_id（WE 创意工坊作品 ID）；width/height 为窗口物理像素尺寸
 #[tauri::command]
-pub fn scene_renderer_start(workshop_id: String) -> Value {
+pub fn scene_renderer_start(
+    workshop_id: String,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Value {
+    if !cfg!(target_os = "windows") {
+        return json!({ "ok": false, "error": "场景壁纸渲染组件仅提供 Windows 版" });
+    }
     // 已有渲染进程则先停掉
     scene_renderer_stop();
 
@@ -87,9 +121,10 @@ pub fn scene_renderer_start(workshop_id: String) -> Value {
         return json!({ "ok": false, "error": "无法分配本地端口" });
     };
 
-    // 渲染分辨率跟随窗口，上限 1080p
-    let width = 1280i32;
-    let height = 720i32;
+    // 渲染分辨率跟随窗口物理像素（前端按 devicePixelRatio 换算），
+    // 最高 4K，避免此前固定 1280x720 在 2K/高 DPI 屏幕上被放大发虚。
+    let width = width.unwrap_or(1280).clamp(640, 3840) as i32;
+    let height = height.unwrap_or(720).clamp(360, 2160) as i32;
 
     // Mesa 软件渲染（无 GPU/D3D12 环境可靠回退）+ SDL 虚拟音频（渲染器禁用音频）
     let mut cmd = Command::new(&exe);
@@ -134,7 +169,46 @@ pub fn scene_renderer_start(workshop_id: String) -> Value {
     RENDERER_PORT.store(port, Ordering::SeqCst);
     RENDERER_PID.store(pid, Ordering::SeqCst);
 
-    json!({ "ok": true, "port": port, "pid": pid, "project": project_dir.to_string_lossy().to_string() })
+    // 等待渲染器 HTTP 端口真正就绪后再返回：场景渲染器是独立进程，
+    // 首帧/OpenGL 初始化需要数秒，立即返回会让前端 <img> 连不上而显示空白。
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let mut ready = false;
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            ready = true;
+            break;
+        }
+        let exited = {
+            let mut guard = RENDERER_CHILD.lock().unwrap();
+            match guard.as_mut() {
+                Some(child) => !is_child_alive(child),
+                None => true,
+            }
+        };
+        if exited {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if !ready {
+        let tail = renderer_log_tail(20);
+        scene_renderer_stop();
+        let detail = if tail.is_empty() {
+            "渲染进程启动超时（30 秒）".to_string()
+        } else {
+            format!("渲染进程启动超时（30 秒）:\n{}", tail)
+        };
+        return json!({ "ok": false, "error": detail });
+    }
+
+    json!({
+        "ok": true,
+        "port": port,
+        "pid": pid,
+        "width": width,
+        "height": height,
+        "project": project_dir.to_string_lossy().to_string()
+    })
 }
 
 /// 停止场景壁纸渲染进程
@@ -210,7 +284,7 @@ pub fn scene_renderer_installed() -> Value {
         None => json!({
             "ok": true,
             "installed": false,
-            "sizeHintMb": 314,
+            "sizeHintMb": 104,
         }),
     }
 }
@@ -219,6 +293,9 @@ pub fn scene_renderer_installed() -> Value {
 /// 下载源：Gitee → GitHub → ghfast 镜像（与更新器一致）；进度通过 scene-renderer:progress 事件推送。
 #[tauri::command]
 pub async fn scene_renderer_download(app: tauri::AppHandle) -> Value {
+    if !cfg!(target_os = "windows") {
+        return json!({ "ok": false, "error": "场景壁纸渲染组件仅提供 Windows 版" });
+    }
     // 已安装则直接返回
     if let Some(p) = renderer_exe_path() {
         return json!({ "ok": true, "already": true, "path": p.to_string_lossy().to_string() });
@@ -249,8 +326,16 @@ pub async fn scene_renderer_download(app: tauri::AppHandle) -> Value {
         }));
     }));
 
-    // Gitee → GitHub → ghfast 镜像，复用更新器的下载源构建逻辑
-    let sources = crate::updater::build_download_sources(&renderer_package_github_url());
+    // Gitee → GitHub → ghfast 镜像，复用更新器的下载源构建逻辑。
+    // 组件 tag 可能变化，按 v1.4.3 → v1.4.2 → v1.4.1 依次回退。
+    let mut sources: Vec<String> = Vec::new();
+    for url in renderer_package_github_urls() {
+        for source in crate::updater::build_download_sources(&url) {
+            if !sources.contains(&source) {
+                sources.push(source);
+            }
+        }
+    }
 
     if let Err(e) = crate::download::single::download_file_race(&sources, &tmp_zip, None, None, 300, on_progress).await {
         let _ = std::fs::remove_file(&tmp_zip);

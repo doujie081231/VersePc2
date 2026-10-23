@@ -192,6 +192,9 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// 下载并解压 Terracotta 内核到 dataDir/terracotta/
 pub async fn download() -> Result<(), String> {
+    if !cfg!(target_os = "windows") {
+        return Err("陶瓦联机暂仅支持 Windows（官方组件仅有 Windows 版）".to_string());
+    }
     let data_dir = crate::storage::resolve_data_dir();
     let tc_dir = data_dir.join("terracotta");
     std::fs::create_dir_all(&tc_dir).map_err(|e| format!("创建目录失败: {}", e))?;
@@ -343,6 +346,9 @@ async fn wait_for_port_file(file_path: &Path, timeout_ms: u64) -> Result<u16, St
 ///
 /// 返回 { success, httpPort, gamePort }
 pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, String> {
+    if !cfg!(target_os = "windows") {
+        return Err("陶瓦联机暂仅支持 Windows（官方组件仅有 Windows 版）".to_string());
+    }
     if !state::is_installed() {
         download().await.map_err(|e| format!("陶瓦联机内核下载失败: {}", e))?;
     }
@@ -446,6 +452,9 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
 ///
 /// 返回 { success, httpPort }
 pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, String> {
+    if !cfg!(target_os = "windows") {
+        return Err("陶瓦联机暂仅支持 Windows（官方组件仅有 Windows 版）".to_string());
+    }
     if !state::is_installed() {
         download().await.map_err(|e| format!("陶瓦联机内核下载失败: {}", e))?;
     }

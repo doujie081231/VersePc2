@@ -591,6 +591,16 @@ function runPageExitAnim(pageEl, done) {
 }
 
 async function navigateToPage(pageName) {
+  // 功能开关：下载/联机入口保留，进入时统一展示合规提示页
+  const vf = window.VERSE_FEATURES || {};
+  const isLanPage = pageName.indexOf('lan-') === 0 || pageName === 'private-server';
+  if ((pageName === 'versions' && !vf.versionDownload) || (isLanPage && !vf.lan)) {
+    if (typeof window.showLegalNotice === 'function') {
+      window.showLegalNotice(pageName);
+      return;
+    }
+  }
+
   if (_pageTransitionLock) {
     _pendingPageTransition = pageName;
     return;
@@ -791,6 +801,10 @@ async function navigateToPage(pageName) {
   } else if (pageName === 'lan-terracotta') {
     if (typeof initTerracottaPage === 'function') {
       setTimeout(() => initTerracottaPage(), 100);
+    }
+  } else if (pageName === 'cloud') {
+    if (typeof onCloudPageShow === 'function') {
+      setTimeout(() => { try { onCloudPageShow(); } catch (e) { console.error('[cloud] show failed', e); } }, 100);
     }
   }
 

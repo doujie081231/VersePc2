@@ -830,10 +830,14 @@ async fn run_import_main(
             .map_err(|e| format!("获取信号量失败: {}", e))?;
 
         let file_name = extract_file_name(file_entry);
-        let dest_path = if let Some(ref p) = file_entry.path {
-            version_dir_arc.join(p)
-        } else {
-            mods_dir_arc.join(&file_name)
+        // 防 zip-slip：manifest 的 path 可能是 ../ 或绝对路径，不安全时退回 mods 目录
+        let dest_path = match file_entry
+            .path
+            .as_ref()
+            .filter(|p| cf_shared::is_modpack_path_safe(p.as_str()))
+        {
+            Some(p) => version_dir_arc.join(p),
+            None => mods_dir_arc.join(&file_name),
         };
         let downloads = file_entry.downloads.clone();
         let expected_sha1 = file_entry.hashes.sha1.clone().unwrap_or_default();
@@ -921,10 +925,13 @@ async fn run_import_main(
     let mut manifest_mods: Vec<Value> = Vec::new();
     for (i, f) in files_list.iter().enumerate() {
         let file_name = extract_file_name(f);
-        let mods_file_path = if let Some(ref p) = f.path {
-            version_dir.join(p)
-        } else {
-            mods_dir.join(&file_name)
+        let mods_file_path = match f
+            .path
+            .as_ref()
+            .filter(|p| cf_shared::is_modpack_path_safe(p.as_str()))
+        {
+            Some(p) => version_dir.join(p),
+            None => mods_dir.join(&file_name),
         };
         // 只记录 mods 目录下实际存在的 .jar 文件
         if !file_name.to_lowercase().ends_with(".jar") {

@@ -64,6 +64,24 @@ pub fn resolve_data_dir() -> std::path::PathBuf {
         .unwrap_or_else(|_| std::path::PathBuf::from("verse-tauri.exe"));
     let app_dir = exe.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."));
 
+    // macOS 的 .app 整包更新会替换整个 bundle：数据必须放在用户目录，
+    // 否则放在 Contents/MacOS/data 里的设置、账号和版本会被更新删除。
+    #[cfg(target_os = "macos")]
+    {
+        let in_app_bundle = app_dir
+            .file_name()
+            .map(|n| n == "MacOS")
+            .unwrap_or(false)
+            && app_dir
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|n| n == "Contents")
+                .unwrap_or(false);
+        if in_app_bundle {
+            return user_fallback_data_dir();
+        }
+    }
+
     // 优先级 1: data-config.json 手动指定
     let config_path = app_dir.join("data-config.json");
     if let Ok(raw) = std::fs::read_to_string(&config_path) {

@@ -80,6 +80,62 @@
     box-sizing: border-box;
 }
 
+/* 功能关闭提示页：入口保留，进入后展示合规说明 */
+.legal-notice-card {
+    max-width: 560px;
+    margin: 88px auto 0;
+    padding: 40px 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+}
+
+.legal-notice-icon {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border-radius: 50%;
+    margin-bottom: 4px;
+}
+
+.legal-notice-icon svg {
+    width: 30px;
+    height: 30px;
+}
+
+.legal-notice-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.legal-notice-text {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.legal-notice-sub {
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+
+/* hidden 属性必须生效：作者样式里的 display（如 .btn 的 inline-flex）与 UA 的
+   [hidden]{display:none} 特异性相同但优先级更高，会让 hidden 完全失效 */
+[hidden] {
+    display: none !important;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
     background: var(--bg-primary, #0a0a0a);
@@ -160,13 +216,9 @@ body {
     transform: scale(0.9);
 }
 
-/* macOS：为红绿灯按钮留出空间 */
+/* macOS 使用无边框窗口（decorations:false），同样显示自绘窗口按钮 */
 body.is-mac .title-bar {
-    padding-left: 80px;
-}
-
-body.is-mac .window-controls {
-    display: none !important;
+    padding-left: 16px;
 }
 
 .title-bar-icon {

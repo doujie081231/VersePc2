@@ -944,10 +944,25 @@ fn get_version_game_dir(version_id: &str, is_external: bool) -> PathBuf {
         // 不隔离：用全局 gameDir
         let game_dir = utils::get_str(&settings, "gameDir");
         if game_dir.is_empty() {
-            dirs::home_dir().map(|h| h.join(".minecraft")).unwrap_or_else(|| data_dir.clone())
+            default_minecraft_dir(data_dir.clone())
         } else {
             PathBuf::from(game_dir)
         }
+    }
+}
+
+/// 平台默认的 .minecraft 目录（macOS 使用 Application Support）
+fn default_minecraft_dir(fallback: PathBuf) -> PathBuf {
+    let Some(home) = dirs::home_dir() else {
+        return fallback;
+    };
+    #[cfg(target_os = "macos")]
+    {
+        home.join("Library").join("Application Support").join("minecraft")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        home.join(".minecraft")
     }
 }
 
@@ -969,12 +984,38 @@ fn auto_detect_external_folders() -> Vec<Value> {
             }
         }
     }
+    // macOS/Linux 默认目录
+    if let Some(home) = dirs::home_dir() {
+        #[cfg(target_os = "macos")]
+        let candidates = vec![home
+            .join("Library")
+            .join("Application Support")
+            .join("minecraft")];
+        #[cfg(not(target_os = "macos"))]
+        let candidates = vec![home.join(".minecraft"), home.join(".local").join("share").join("minecraft")];
+        for p in candidates {
+            if p.join("versions").is_dir() {
+                let s = p.to_string_lossy().to_string();
+                if seen.insert(s.clone()) {
+                    found.push(s);
+                }
+            }
+        }
+    }
 
-    // Windows 驱动器枚举 A:\..Z:\；其他平台扫描根目录
+    // Windows 驱动器枚举 A:\..Z:\；macOS 扫描挂载卷；Linux 扫描常见挂载点
     #[cfg(target_os = "windows")]
     let roots: Vec<String> = (b'A'..=b'Z').map(|c| format!("{}:\\", c as char)).collect();
-    #[cfg(not(target_os = "windows"))]
-    let roots: Vec<String> = vec!["/".to_string()];
+    #[cfg(target_os = "macos")]
+    let roots: Vec<String> = vec!["/Volumes".to_string()];
+    #[cfg(target_os = "linux")]
+    let roots: Vec<String> = vec![
+        "/home".to_string(),
+        "/mnt".to_string(),
+        "/media".to_string(),
+    ];
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let roots: Vec<String> = Vec::new();
 
     // 需要跳过的系统级/无关大目录，避免扫描过慢
     fn is_skip(name: &str) -> bool {
@@ -1983,8 +2024,56 @@ fn send_to_recycle_bin(path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn send_to_recycle_bin(_path: &Path) -> std::io::Result<()> {
-    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "暂不支持"))
+fn send_to_recycle_bin(path: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let escaped = path
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        let script = format!(
+            "tell application \"Finder\" to delete POSIX file \"{}\"",
+            escaped
+        );
+        let status = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .status()?;
+        if status.success() {
+            return Ok(());
+        }
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "移到废纸篓失败",
+        ));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // GNOME 的 gio，其次 trash-cli 的 trash-put
+        for cmd in ["gio", "trash-put"] {
+            let mut c = std::process::Command::new(cmd);
+            if cmd == "gio" {
+                c.arg("trash");
+            }
+            c.arg(path);
+            if let Ok(st) = c.status() {
+                if st.success() {
+                    return Ok(());
+                }
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "未找到可用的回收站命令（gio/trash-put）",
+        ))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = path;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "当前平台暂不支持回收站",
+        ))
+    }
 }
 
 // ============== 版本修复 ==============
@@ -2622,12 +2711,22 @@ async fn handle_export_script(body: &Option<Value>) -> crate::api::ApiResult {
     let script_path = temp_dir.join(&file_name);
 
     match std::fs::write(&script_path, &content) {
-        Ok(_) => ApiResult::ok(json!({
-            "success": true,
-            "content": content,
-            "fileName": file_name,
-            "path": script_path.to_string_lossy()
-        })),
+        Ok(_) => {
+            #[cfg(unix)]
+            if ext == "sh" {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(
+                    &script_path,
+                    std::fs::Permissions::from_mode(0o755),
+                );
+            }
+            ApiResult::ok(json!({
+                "success": true,
+                "content": content,
+                "fileName": file_name,
+                "path": script_path.to_string_lossy()
+            }))
+        }
         Err(e) => ApiResult::err(500, &format!("写入脚本失败: {}", e)),
     }
 }

@@ -582,14 +582,26 @@ async fn stop_tunnel_inner(app: &AppHandle) -> Value {
     json!({ "ok": true })
 }
 
-// 按 PID 结束进程（Windows taskkill /T 含子进程）
+// 按 PID 结束进程（Windows taskkill /T 含子进程；macOS/Linux 用 kill -9）
 fn kill_pid(pid: u32) -> std::io::Result<()> {
-    let status = std::process::Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/F", "/T"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-    status.map(|_| ())
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        status.map(|_| ())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = std::process::Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        status.map(|_| ())
+    }
 }
 
 // ============== Tauri 命令 ==============
@@ -597,6 +609,9 @@ fn kill_pid(pid: u32) -> std::io::Result<()> {
 /// 拉取服务器节点列表
 #[tauri::command]
 pub async fn redstone_servers(_app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用", "servers": [] });
+    }
     let list = fetch_server_list().await;
     let mut s = state().lock().await;
     s.servers = list.clone();
@@ -606,6 +621,15 @@ pub async fn redstone_servers(_app: AppHandle) -> Value {
 /// 扫描本机 java 进程监听的端口
 #[tauri::command]
 pub async fn redstone_scan_port() -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return scan_java_port_unix().await;
+    }
+    #[cfg(target_os = "windows")]
+    {
     use tokio::process::Command;
 
     // 1. 获取 java.exe PID 列表
@@ -695,23 +719,119 @@ pub async fn redstone_scan_port() -> Value {
     }
 
     json!({ "ok": true, "port": null })
+    }
+}
+
+/// macOS/Linux：用 ps 找 java 进程，再用 lsof/ss 查监听端口
+#[cfg(not(target_os = "windows"))]
+async fn scan_java_port_unix() -> Value {
+    use tokio::process::Command;
+
+    let ps_out = Command::new("ps").args(["-Ao", "pid=,comm="]).output().await;
+    let mut pids: Vec<String> = Vec::new();
+    if let Ok(out) = ps_out {
+        for line in String::from_utf8_lossy(&out.stdout).lines() {
+            let mut parts = line.split_whitespace();
+            let Some(pid) = parts.next() else { continue };
+            let comm = parts.collect::<Vec<_>>().join(" ").to_lowercase();
+            if comm.contains("java") {
+                pids.push(pid.to_string());
+            }
+        }
+    }
+    if pids.is_empty() {
+        return json!({ "ok": true, "port": null });
+    }
+
+    let mut candidates: Vec<u16> = Vec::new();
+    for pid in &pids {
+        let out = Command::new("lsof")
+            .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-p", pid])
+            .output()
+            .await;
+        if let Ok(o) = out {
+            for line in String::from_utf8_lossy(&o.stdout).lines().skip(1) {
+                if let Some(addr) = line.split_whitespace().last() {
+                    if let Some(port) = addr.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) {
+                        if !candidates.contains(&port) {
+                            candidates.push(port);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Linux 无 lsof 时回退 ss
+    #[cfg(target_os = "linux")]
+    if candidates.is_empty() {
+        if let Ok(out) = Command::new("ss").args(["-ltnp"]).output().await {
+            for line in String::from_utf8_lossy(&out.stdout).lines() {
+                let Some(proc_idx) = line.find("pid=") else { continue };
+                let pid_part = &line[proc_idx + 4..];
+                let pid = pid_part.split(',').next().unwrap_or("").trim();
+                if !pids.iter().any(|p| p.as_str() == pid) {
+                    continue;
+                }
+                let Some(port) = line.split_whitespace().find_map(|token| {
+                    if !token.contains(':') {
+                        return None;
+                    }
+                    token
+                        .rsplit(':')
+                        .next()
+                        .and_then(|s| s.parse::<u16>().ok())
+                        .filter(|p| *p > 0)
+                }) else {
+                    continue;
+                };
+                if !candidates.contains(&port) {
+                    candidates.push(port);
+                }
+            }
+        }
+    }
+
+    if candidates.is_empty() {
+        return json!({ "ok": true, "port": null });
+    }
+    for port in &candidates {
+        let result = tokio::time::timeout(
+            Duration::from_millis(500),
+            tokio::net::TcpStream::connect(("127.0.0.1", *port)),
+        )
+        .await;
+        if let Ok(Ok(_)) = result {
+            return json!({ "ok": true, "port": port });
+        }
+    }
+    json!({ "ok": true, "port": null })
 }
 
 /// 启动隧道（拉起 hongshi.exe 内核）
 #[tauri::command]
 pub async fn redstone_start(app: AppHandle, params: Value) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
     start_tunnel_inner(&app, params).await
 }
 
 /// 关闭隧道
 #[tauri::command]
 pub async fn redstone_stop(app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
     stop_tunnel_inner(&app).await
 }
 
 /// 查询当前运行状态
 #[tauri::command]
 pub async fn redstone_status(_app: AppHandle) -> Value {
+    if !crate::api::LAN_ENABLED {
+        return json!({ "ok": false, "error": "联机功能暂不可用" });
+    }
     let s = state().lock().await;
     json!({
         "ok": true,

@@ -46,6 +46,70 @@ pub(crate) fn get_system_memory_kb() -> (u64, u64) {
             }
         }
     }
+    // Linux：读取 /proc/meminfo（单位 KB）
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(raw) = std::fs::read_to_string("/proc/meminfo") {
+            let mut total = 0u64;
+            let mut avail = 0u64;
+            for line in raw.lines() {
+                let mut parts = line.split_whitespace();
+                let key = parts.next().unwrap_or("");
+                let value = parts.next().and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+                if key == "MemTotal:" {
+                    total = value;
+                } else if key == "MemAvailable:" {
+                    avail = value;
+                }
+            }
+            if total > 0 {
+                // /proc/meminfo 单位是 KB，调用方按字节处理
+                return (total.saturating_mul(1024), avail.saturating_mul(1024));
+            }
+        }
+    }
+    // macOS：sysctl 取总内存，vm_stat 取空闲/非活跃页
+    #[cfg(target_os = "macos")]
+    {
+        let total_bytes = std::process::Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok())
+            .unwrap_or(0);
+        let avail_bytes = std::process::Command::new("vm_stat")
+            .output()
+            .ok()
+            .map(|o| {
+                let text = String::from_utf8_lossy(&o.stdout);
+                let page_size = text
+                    .split("page size of ")
+                    .nth(1)
+                    .and_then(|s| s.split_whitespace().next())
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .unwrap_or(4096);
+                let mut free_pages = 0u64;
+                for line in text.lines() {
+                    if line.starts_with("Pages free:")
+                        || line.starts_with("Pages inactive:")
+                        || line.starts_with("Pages speculative:")
+                    {
+                        if let Some(v) = line
+                            .split(':')
+                            .nth(1)
+                            .and_then(|s| s.trim().trim_end_matches('.').parse::<u64>().ok())
+                        {
+                            free_pages += v;
+                        }
+                    }
+                }
+                free_pages.saturating_mul(page_size)
+            })
+            .unwrap_or(0);
+        if total_bytes > 0 {
+            return (total_bytes, avail_bytes);
+        }
+    }
     (0, 0)
 }
 

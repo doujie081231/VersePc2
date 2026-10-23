@@ -1,0 +1,78 @@
+# windows-build.yml — 在 GitHub 上构建 Windows 便携版压缩包。
+# 产物：VersePC2-windows-x64.zip（exe + 构建产出的所有 DLL，解压即用）。
+# 触发：仅手动 workflow_dispatch（默认分支）。产物不进 release，只上传 Actions artifact。
+name: Build Windows Portable
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch "$env:GITHUB_REF_NAME" https://github.com/doujie081231/VersePc2.git .
+          git rev-parse --short HEAD
+
+      - name: Setup Rust (stable)
+        shell: pwsh
+        run: |
+          rustup update stable
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      # 前端资源复制到 frontend-tauri（tauri.conf 的 frontendDist，generate_context! 编译期读取）。
+      # vue.global.prod.js 已随 frontend/js 入库，无需 npm install。
+      - name: Prepare frontend assets
+        shell: pwsh
+        run: node scripts/prepare-frontend.mjs
+
+      # sponsor-orders.json 未入库（避免泄露赞助者信息），但 sponsor.rs 通过 include_str! 编译期嵌入；
+      # CI 中写入空白名单占位让构建通过（与 release-build.yml 的 macOS/Linux 流程一致）。
+      - name: Ensure sponsor-orders.json exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "src-tauri/data/sponsor-orders.json")) {
+            New-Item -ItemType Directory -Force -Path "src-tauri/data" | Out-Null
+            [IO.File]::WriteAllBytes("src-tauri/data/sponsor-orders.json", [Convert]::FromBase64String("eyJvcmRlcnMiOltdfQ=="))
+            Write-Host "placeholder-written"
+          } else {
+            Write-Host "sponsor-orders-found"
+          }
+
+      # 与 macOS/Linux CI 相同：直接 cargo build bin（bundle targets 为空，tauri build 也不会打包安装器）
+      - name: Build release binary
+        shell: pwsh
+        run: cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml
+
+      - name: Run transfer tests
+        shell: pwsh
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml transfer -- --nocapture
+
+      # 打包：exe + VC 运行库 DLL + 构建产出的全部 DLL，压缩为 zip，解压即用
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item src-tauri/target/release/verse-tauri.exe dist/VersePC2.exe
+          $dlls = Get-ChildItem src-tauri/target/release/*.dll -ErrorAction SilentlyContinue
+          if ($dlls) { Copy-Item $dlls.FullName dist/; Write-Host "构建产出 DLL：$($dlls.Name -join ', ')" }
+          # VC 运行库随包（干净系统免装运行库）
+          foreach ($dll in @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")) {
+            $src = Join-Path $env:SystemRoot "System32\$dll"
+            if (Test-Path $src) { Copy-Item $src dist/; Write-Host "随包 $dll" }
+          }
+          Compress-Archive -Path dist/* -DestinationPath dist/VersePC2-windows-x64.zip -Force
+          Get-ChildItem dist | Select-Object Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VersePC2-windows-x64
+          path: dist/VersePC2-windows-x64.zip

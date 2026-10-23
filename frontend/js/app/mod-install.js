@@ -811,7 +811,7 @@ async function downloadDepWithNestedDeps(projectId, source, versionId, savePath,
   dlManager.update(taskId, { progress: 0, status: 'downloading', message: '正在解析嵌套依赖...' });
 
   try {
-    const recursiveDeps = await API.getDependenciesRecursive(versionId, source, gameVersion, loader);
+    const recursiveDeps = await API.getDependenciesRecursive(versionId, source, gameVersion, loader, projectId);
     const allDeps = recursiveDeps.dependencies || [];
     const downloadableDeps = allDeps.filter(d => d.compatibleVersion);
 

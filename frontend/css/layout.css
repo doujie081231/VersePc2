@@ -23,6 +23,12 @@
    ============================================================================ */
 
 /* 遮罩：透明点击层（不暗化背景，保留玻璃对内容的折射），点击空白处收起胶囊 */
+/* 「侧边栏单点不自动回收」开启时：遮罩透明且不拦截点击，用户可直接操作页面，侧边栏保持常驻展开 */
+body.sidebar-keep-open .sidebar-overlay {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 .sidebar-overlay {
     position: fixed;
     inset: 0;
@@ -224,6 +230,36 @@ body:has(.modal[data-state="open"]) .sidebar-overlay {
     color: var(--accent-text);
 }
 
+/* 侧边栏按钮显示名称：按钮变为竖向圆角矩形，图标下方展示小号文字标签 */
+body.show-nav-labels .nav-btn {
+    flex-direction: column;
+    gap: 3px;
+    height: 54px;
+    border-radius: 18px;
+}
+body.show-nav-labels .nav-btn > span:not(.nav-btn-experimental-badge) {
+    display: block;
+    position: relative;
+    z-index: 1;
+    max-width: 46px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.2px;
+}
+body.show-nav-labels .nav-btn .nav-icon-svg {
+    width: 20px;
+    height: 20px;
+}
+body.show-nav-labels .nav-submenu-toggle .submenu-arrow {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+}
+
 /* 简约线条导航图标 */
 .nav-icon-svg {
     width: 24px;
@@ -391,6 +427,19 @@ body:has(.modal[data-state="open"]) .sidebar-overlay {
 .content-area.no-scroll {
     overflow: hidden;
     padding: 0;
+}
+
+/* 胶囊展开时内容区左侧让位：
+   胶囊占位 8~80px，而内容区左内边距只有 30px，窄窗口下标题与卡片左缘会被胶囊压住
+   （反馈：侧边栏与内容重叠）。仅窄窗口需要让位，宽窗口内容本身已在胶囊右侧，
+   不做无谓的布局跳动；过渡让让位过程不突兀。 */
+.content-area {
+    transition: padding-left 0.2s var(--ease-out-expo);
+}
+@media (max-width: 1400px) {
+    body.sidebar-open .content-area {
+        padding-left: 96px;
+    }
 }
 
 .page.active {
@@ -565,6 +614,10 @@ body:has(.modal[data-state="open"]) .sidebar-overlay {
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
     display: block;
+    /* 图片默认参与浏览器原生 HTML5 拖拽：按住头像拖动时会被浏览器接管，
+       光标变成「禁止放置」，同时 pointermove/pointerup 被取消，自定义拖动失效 */
+    -webkit-user-drag: none;
+    user-drag: none;
 }
 
 /* 无账户时：主页头像框显示"添加账号"虚线方框 + 十字 */
@@ -914,6 +967,53 @@ body {
     z-index: 99999;
     -webkit-app-region: drag;
     pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 顶栏更新胶囊（最小化按钮左侧，Trae/VS Code 同款）：下载中显示进度，就绪后点击重启安装 */
+.window-update-pill {
+    -webkit-app-region: no-drag;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: #1f1f1f;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: default;
+    user-select: none;
+    white-space: nowrap;
+    transition: background 0.15s, transform 0.1s;
+}
+.window-update-pill.is-ready {
+    cursor: pointer;
+}
+.window-update-pill.is-ready:hover {
+    background: #343434;
+}
+.window-update-pill.is-ready:active {
+    transform: scale(0.96);
+}
+.window-update-pill__spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #ffffff;
+    animation: window-update-pill-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes window-update-pill-spin {
+    to { transform: rotate(360deg); }
 }
 .floating-window-controls {
     -webkit-app-region: no-drag;
@@ -2051,4 +2151,185 @@ body:has(#game-launch-overlay[style*="flex"]) .sidebar-toggle-fab {
 .home-pins-item-del svg {
   width: 15px;
   height: 15px;
+}
+
+
+/* ============================================================
+   主页可移动控件系统（参考 ZalithLauncher2 主页卡片模式）
+   - 控件绝对定位 + 按住主体直接拖动，位置持久化 localStorage
+   - 存档坞：常驻卡片（替代原底部展开抽屉）
+   ============================================================ */
+.home-page > .home-page-title,
+.home-page > .home-avatar-widget,
+.home-page > .home-version-card-wrap,
+.home-page > .home-launch-btn,
+.home-page > .home-running-card,
+.home-page > .home-save-dock {
+    position: absolute;
+    margin: 0 !important;
+}
+
+/* 按住拖动：控件主体可抓取，拖动中加视觉反馈；文本不可选中避免拖出选区 */
+.home-page-title,
+.home-avatar-widget,
+.home-version-card-wrap,
+.home-launch-btn,
+.home-running-card,
+.home-save-dock {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.home-page-title:active,
+.home-avatar-widget:active,
+.home-version-card-wrap:active,
+.home-launch-btn:active,
+.home-running-card:active,
+.home-save-dock:active {
+    cursor: grabbing;
+}
+.home-dragging {
+    opacity: 0.92;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18) !important;
+    z-index: 20 !important;
+}
+/* 运行卡片的「停止」按钮保留指针（不参与拖动） */
+.home-running-card .home-running-stop {
+    cursor: pointer;
+}
+
+/* CSS 默认位置（未拖动过的控件）：标题/头像/版本卡/启动按钮精确水平居中，
+   存档坞右侧停靠，运行卡片左下角；用户拖动后由内联 left/top 接管 */
+.home-page > .home-avatar-widget {
+    top: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.home-page > .home-version-card-wrap {
+    top: 52%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.home-page > .home-launch-btn {
+    top: 66%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.home-page > .home-save-dock {
+    top: 22%;
+    right: 28px;
+}
+.home-page > .home-running-card {
+    top: auto;
+    bottom: 24px;
+    left: 28px;
+}
+
+
+/* 头像控件：主体拖动 + 滚轮缩放（含头像与账户信息条，整体缩放） */
+.home-avatar-widget {
+    z-index: 3;
+}
+.home-avatar-widget .home-avatar-scale {
+    transform-origin: center center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.home-avatar-widget .home-avatar-box {
+    margin: 0 auto;
+}
+.home-avatar-widget .home-account-bar {
+    margin-top: 0;
+}
+
+
+/* 存档坞：zL2 网格卡风格的常驻卡片 */
+.home-save-dock {
+    width: 320px;
+    max-width: 70%;
+    background: var(--bg-card-glass);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 12px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    z-index: 4;
+}
+.home-save-dock-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 2px 8px;
+    cursor: grab;
+    user-select: none;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 8px;
+    touch-action: none;
+}
+.home-save-dock-header:active {
+    cursor: grabbing;
+}
+.home-save-dock-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.home-save-dock-body {
+    max-height: 46vh;
+    overflow-y: auto;
+}
+.home-save-dock-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.home-save-dock-list .home-save-card {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+}
+.home-save-dock-list .home-save-card-bg {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.home-save-dock-list .home-save-card-bg img,
+.home-save-dock-list .home-save-card-bg svg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.home-save-dock-list .home-save-card-info {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+}
+.home-save-dock-list .home-save-card-name {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.home-save-dock-list .home-save-card-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.home-saves-hint {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 10px 0;
 }

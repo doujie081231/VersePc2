@@ -742,7 +742,11 @@ async fn run_import_main(
     }
 
     if abort_flag.load(Ordering::SeqCst) {
-        return Err("下载已取消".to_string());
+        return Err(format!(
+            "模组下载失败过多（失败 {} 个 / 成功 {} 个），导入已停止，请检查网络后重试",
+            failed_count.load(Ordering::SeqCst),
+            downloaded_count.load(Ordering::SeqCst)
+        ));
     }
 
     // 2.16 失败模组列表持久化
@@ -1603,31 +1607,47 @@ async fn fetch_single_file_info(
     file_id: i64,
     cf_api_key: &str,
 ) -> Option<(String, String, i64, String)> {
-    let url = format!("{}/mods/{}/files/{}", CF_API_MIRROR, project_id, file_id);
-    eprintln!("[CurseForge] 单个文件信息查询: {}", url);
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
         .ok()?;
-    let res = client
-        .get(&url)
-        .header("x-api-key", cf_api_key)
-        .send()
-        .await
-        .ok()?;
-    if !res.status().is_success() {
-        eprintln!("[CurseForge] 单个文件查询失败 status={}", res.status());
-        return None;
+    // 镜像优先，失败则回退官方接口：镜像偶发不可用时仍能拿到文件信息
+    for base in [CF_API_MIRROR, CF_API_OFFICIAL] {
+        let url = format!("{}/mods/{}/files/{}", base, project_id, file_id);
+        eprintln!("[CurseForge] 单个文件信息查询: {}", url);
+        let res = match client
+            .get(&url)
+            .header("x-api-key", cf_api_key)
+            .send()
+            .await
+        {
+            Ok(res) => res,
+            Err(e) => {
+                eprintln!("[CurseForge] 单个文件查询异常: {} ({})", url, e);
+                continue;
+            }
+        };
+        if !res.status().is_success() {
+            eprintln!(
+                "[CurseForge] 单个文件查询失败 status={} ({})",
+                res.status(),
+                url
+            );
+            continue;
+        }
+        let Ok(data) = res.json::<CfFileResponse>().await else {
+            continue;
+        };
+        let dl_url = data.download_url.clone().unwrap_or_default();
+        let sha1 = data
+            .hashes
+            .as_ref()
+            .and_then(|h| h.iter().find(|x| x.algo == 1))
+            .map(|h| h.value.clone())
+            .unwrap_or_default();
+        return Some((dl_url, data.file_name, data.file_length.unwrap_or(0), sha1));
     }
-    let data: CfFileResponse = res.json().await.ok()?;
-    let dl_url = data.download_url.clone().unwrap_or_default();
-    let sha1 = data
-        .hashes
-        .as_ref()
-        .and_then(|h| h.iter().find(|x| x.algo == 1))
-        .map(|h| h.value.clone())
-        .unwrap_or_default();
-    Some((dl_url, data.file_name, data.file_length.unwrap_or(0), sha1))
+    None
 }
 
 /// 下载单个模组文件

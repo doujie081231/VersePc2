@@ -759,7 +759,7 @@ const PageVersionSettings = {
             <div class="vset-section">
               <div class="vset-section-title">高级管理</div>
               <div class="vset-btn-group">
-                <button class="btn btn-secondary btn-sm win-only" @click="exportLaunchScript()">导出启动脚本</button>
+                <button class="btn btn-secondary btn-sm" @click="exportLaunchScript()">导出启动脚本</button>
                 <button class="btn btn-secondary btn-sm" @click="repairFiles()">补全文件</button>
                 <button class="btn btn-secondary btn-sm" @click="diagnoseVersion()">诊断</button>
                 <button class="btn btn-danger btn-sm" @click="deleteCurrentVersion()">删除版本</button>

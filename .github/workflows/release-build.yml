@@ -72,6 +72,18 @@ jobs:
           cp winstubs/libkernel32.a winstubs/libshell32.a
           echo "RUSTFLAGS=-L $(pwd)/winstubs" >> "$GITHUB_ENV"
 
+      # sponsor-orders.json is not in the repo (kept out to avoid leaking sponsor ids), but sponsor.rs embeds it at compile time via include_str!.
+      # If missing in CI, write an empty whitelist placeholder so the build passes.
+      - name: Ensure sponsor-orders.json exists
+        run: |
+          if [ ! -f src-tauri/data/sponsor-orders.json ]; then
+            mkdir -p src-tauri/data
+            printf %s eyJvcmRlcnMiOltdfQ== | base64 -d > src-tauri/data/sponsor-orders.json
+            echo placeholder-written
+          else
+            echo sponsor-orders-found
+          fi
+
       - name: Build release binary
         run: |
           TARGET="${{ matrix.target }}"
@@ -82,6 +94,8 @@ jobs:
           if [ -n "$TARGET" ]; then echo "BUILD_BIN=src-tauri/target/$TARGET/release/verse-tauri" >> "$GITHUB_ENV"; else echo "BUILD_BIN=src-tauri/target/release/verse-tauri" >> "$GITHUB_ENV"; fi
 
       - name: Package & upload installers
+        # 手动触发（分支构建验证）时不打包上传，只验证编译
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -e
           VERSION="${GITHUB_REF_NAME#v}"
@@ -97,6 +111,9 @@ jobs:
             mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
             cp "$BIN" "${APP}/Contents/MacOS/VersePC2"
             cp src-tauri/Info.plist "${APP}/Contents/Info.plist"
+            # 版本号跟随 tag，避免 Info.plist 静态版本与安装包不一致
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" \
+              -c "Set :CFBundleVersion ${VERSION}" "${APP}/Contents/Info.plist"
             # 拷贝打包进编译产物的图标（若有）
             [ -f src-tauri/icons/icon.icns ] && cp src-tauri/icons/icon.icns "${APP}/Contents/Resources/icon.icns"
             ARCH="aarch64"; [ -n "${{ matrix.target }}" ] && ARCH="x86_64"

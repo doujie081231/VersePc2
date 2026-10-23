@@ -647,6 +647,14 @@
 .dark-theme .acct-skin-item.active {
     border-color: rgba(255, 255, 255, 0.4);
 }
+/* 披风操作按钮行（导入 / 获取官方 / 卸下） */
+.acct-cape-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 .acct-skin-import-btn {
     display: inline-flex;
     align-items: center;
@@ -2829,7 +2837,8 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 16px 24px;
+    /* 顶部 56px：避开全局窗口拖拽带(0-48px)与左上角悬浮球，否则返回键被遮无法点击 */
+    padding: 56px 24px 16px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     background: var(--bg-glass);
@@ -4576,4 +4585,269 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
         right: -12px;
     }
 }
+
+/* ====================================================================== */
+/* Verse云盘页（page-cloud）                                               */
+/* ====================================================================== */
+.cloud-container {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 960px;
+}
+
+.cloud-login-tip {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 12px;
+}
+
+.cloud-login-tip a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.cloud-login-tip a:hover {
+    text-decoration: underline;
+}
+
+/* 容量卡 */
+.cloud-cap-card {
+    padding: 16px 18px;
+}
+
+.cloud-cap-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.cloud-cap-title {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.cloud-cap-nums {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.cloud-cap-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.cloud-order-chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(var(--accent-rgb), 0.12);
+    color: var(--accent);
+    border: 1px solid rgba(var(--accent-rgb), 0.25);
+    white-space: nowrap;
+}
+
+.cloud-order-chip.cloud-order-free {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-color: var(--border);
+}
+
+.cloud-cap-track {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.cloud-cap-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), rgba(var(--accent-rgb), 0.65));
+    transition: width 0.4s var(--ease-out-expo, ease);
+}
+
+.cloud-cap-bar.cloud-bar-active {
+    background: linear-gradient(90deg, var(--accent), #7ee787);
+}
+
+.cloud-cap-pool {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* 工具行与进度 */
+.cloud-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cloud-progress {
+    margin-top: 12px;
+}
+
+.cloud-progress-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+/* 文件表 */
+.cloud-file-list .cloud-empty {
+    padding: 26px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.cloud-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.cloud-table th {
+    text-align: left;
+    padding: 8px 10px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.cloud-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.cloud-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.cloud-table tbody tr:hover td {
+    background: var(--bg-hover);
+}
+
+.cloud-fname {
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.cloud-fops {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.cloud-btn-danger:hover {
+    color: #ff6b6b !important;
+    border-color: rgba(255, 107, 107, 0.5) !important;
+}
+
+/* 选择弹层 */
+.cloud-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: cloudFadeIn 0.15s ease;
+}
+
+@keyframes cloudFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.cloud-dialog {
+    width: min(520px, 86vw);
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary, #16181f);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    padding: 18px;
+}
+
+.cloud-dialog-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.cloud-dialog-body {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.cloud-dialog-foot {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.cloud-version-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.cloud-version-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    color: var(--text-primary, inherit);
+    font-size: 13px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cloud-version-item:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.cloud-version-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-version-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.cloud-warn {
+    color: #ffb020;
+}
+
 

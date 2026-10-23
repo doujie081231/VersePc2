@@ -152,6 +152,13 @@
       <line x1="12.5" y1="7.5" x2="12.5" y2="12"/>
       <circle cx="12.5" cy="15" r="0.9" fill="currentColor" stroke="none"/>
     </symbol>
+
+    <!-- Verse云盘 - 云朵加箭头 -->
+    <symbol id="icon-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 16.6A4.5 4.5 0 0 0 17.5 8.5h-1.8A7 7 0 1 0 4 15.3"/>
+      <polyline points="8 17 12 21 16 17"/>
+      <line x1="12" y1="12" x2="12" y2="21"/>
+    </symbol>
   </svg>
 
   <!-- 启动画面 -->
@@ -226,6 +233,10 @@
   <div id="global-drag-strip" data-tauri-drag-region class="global-drag-strip"></div>
   <!-- 浮动窗口控制栏：最顶层，不占空间，右上角 -->
   <div class="floating-window-bar">
+    <div id="window-update-pill" class="window-update-pill" style="display:none" role="button" onclick="handleWindowUpdatePillClick()">
+      <span class="window-update-pill__spinner" id="window-update-pill-spinner"></span>
+      <span id="window-update-pill-text"></span>
+    </div>
     <div class="floating-window-controls" id="window-controls" style="display:none">
       <button class="win-btn win-btn-minimize" id="win-btn-minimize" title="最小化">
         <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
@@ -357,6 +368,10 @@
             <svg class="nav-icon-svg"><use href="#icon-plugins"/></svg>
             <span>插件</span>
           </button>
+          <button class="nav-btn" data-page="cloud" title="Verse云盘">
+            <svg class="nav-icon-svg"><use href="#icon-cloud"/></svg>
+            <span>云盘</span>
+          </button>
         </div>
         <div class="sidebar-footer">
           <button class="nav-btn" data-page="feedback" title="问题反馈">
@@ -373,6 +388,22 @@
 
         <div id="page-versions" class="page">
           <!-- Vue 渐进式改造：内容由 PageVersions 组件渲染 -->
+        </div>
+
+        <!-- 功能关闭提示页：下载/联机入口保持可见，进入后展示合规提示 -->
+        <div id="page-legal-notice" class="page">
+          <div class="legal-notice-card">
+            <div class="legal-notice-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7.5V13"/>
+                <circle cx="12" cy="16.6" r="0.6" fill="currentColor" stroke="none"/>
+              </svg>
+            </div>
+            <h2 class="legal-notice-title">功能暂不可用</h2>
+            <p class="legal-notice-text">根据相关法律法规，中国大陆地区暂不支持在启动器内下载游戏，以及使用任何联机，非常抱歉！</p>
+            <p class="legal-notice-sub">已安装的游戏版本仍可正常启动。</p>
+          </div>
         </div>
 
       <div id="page-installed-versions" class="page">
@@ -579,6 +610,10 @@
         <div id="page-feedback" class="page">
           <!-- Vue 渐进式改造：内容由 PageFeedback 组件渲染 -->
         </div>
+
+        <div id="page-cloud" class="page">
+          <!-- Vue 渐进式改造：内容由 PageCloud 组件渲染 -->
+        </div>
       </div>
     </div>
 
@@ -664,7 +699,9 @@
   <script src="js/app/java-mgr.js" defer></script>
   <script src="js/app/console-log.js" defer></script>
   <script src="js/app/feedback.js" defer></script>
+  <script src="js/app/cloud.js" defer></script>
   <script src="js/app/settings-load-save.js" defer></script>
+  <script src="js/app/feature-flags.js" defer></script>
   <script src="js/app/init-setup.js" defer></script>
   <script src="js/app.js" defer></script>
   <script src="js/mod-slug-map.js" defer></script>
@@ -707,6 +744,7 @@
   <script src="js/vue/page-java.js" defer></script>
   <script src="js/vue/page-downloads.js" defer></script>
   <script src="js/vue/page-feedback.js" defer></script>
+  <script src="js/vue/page-cloud.js" defer></script>
   <script>
     // 挂载 Vue 到所有页面容器（分批挂载，避免阻塞主线程导致窗口卡顿）
     // 主页立即同步挂载（用户最先看到），其他页面用 requestIdleCallback 分批挂载
@@ -744,6 +782,7 @@
         ['PageSettingsLaunch', '#page-settings-launch'],
         ['PageSettingsPersonalize', '#page-settings-personalize'],
         ['PageSettingsOther', '#page-settings-other'],
+        ['PageCloud', '#page-cloud'],
         ['PageJava', '#page-java'],
         ['PageDownloads', '#page-downloads'],
         ['PageFeedback', '#page-feedback']

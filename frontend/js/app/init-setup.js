@@ -3,6 +3,17 @@
  * @description 应用初始化 - 页面加载完成后的启动流程
  */
 async function init() {
+  // 禁用 WebView2 浏览器默认右键菜单（刷新/另存为/检查等），输入区域保留复制粘贴
+  document.addEventListener('contextmenu', function (e) {
+    var t = e.target;
+    var editable = t && (
+      (t.tagName && /^(INPUT|TEXTAREA)$/i.test(t.tagName)) ||
+      t.isContentEditable ||
+      (t.closest && t.closest('input, textarea, [contenteditable="true"]'))
+    );
+    if (!editable) e.preventDefault();
+  });
+
   const splashProgress = document.getElementById('splash-progress');
   const splashOverlay = document.getElementById('splash-overlay');
   const startTime = Date.now();
@@ -457,9 +468,14 @@ function loadWallpaperSettings() {
 
 function setupNavigation() {
   // 完成导航后收起悬浮胶囊（安卓抽屉式：选中即收起）
+  // 「侧边栏单点不自动回收」开启时（body.sidebar-keep-open）跳过自动收起，保留遮罩/Esc/关闭按钮手动收起
   const collapseSidebar = () => {
+    if (document.body.classList.contains('sidebar-keep-open')) return;
     if (typeof window.closeSidebarPanel === 'function') window.closeSidebarPanel();
   };
+
+  // 版本下载功能开关：入口保留，进入后由 navigateToPage 跳转到合规提示页
+  const versionDownloadOn = !!(window.VERSE_FEATURES && window.VERSE_FEATURES.versionDownload);
 
   document.querySelectorAll('.nav-btn:not(.nav-submenu-toggle)').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -467,6 +483,11 @@ function setupNavigation() {
       if (!page) return;
 
       if (page === 'versions') {
+        if (!versionDownloadOn) {
+          navigateToPage(page);
+          collapseSidebar();
+          return;
+        }
         loadVersions(false);
       }
 
@@ -624,27 +645,25 @@ function setupAccountButtons() {
   if (addCta) addCta.addEventListener('click', () => showModal('add-account-modal'));
   const closeAddModal = document.getElementById('close-add-account-modal');
   if (closeAddModal) closeAddModal.addEventListener('click', () => {
-    const m = document.getElementById('add-account-modal');
-    if (m) m.style.display = 'none';
+    // 必须走 hideModal 重置 data-state/.modal-visible；只设 display:none 会让
+    // body:has(.modal[data-state="open"]) 持续匹配，导致侧边栏胶囊被永久隐藏
+    hideModal('add-account-modal');
   });
 
   // 新版添加账号弹窗里的三卡片
   const addA = document.getElementById('add-acct-ms');
   if (addA) addA.addEventListener('click', () => {
-    const m = document.getElementById('add-account-modal');
-    if (m) m.style.display = 'none';
+    hideModal('add-account-modal');
     startMsAuth();
   });
   const addB = document.getElementById('add-acct-offline');
   if (addB) addB.addEventListener('click', () => {
-    const m = document.getElementById('add-account-modal');
-    if (m) m.style.display = 'none';
+    hideModal('add-account-modal');
     showModal('offline-account-modal');
   });
   const addC = document.getElementById('add-acct-thirdparty');
   if (addC) addC.addEventListener('click', () => {
-    const m = document.getElementById('add-account-modal');
-    if (m) m.style.display = 'none';
+    hideModal('add-account-modal');
     showModal('thirdparty-account-modal');
   });
   const createOfflineBtn = document.getElementById('create-offline-btn');

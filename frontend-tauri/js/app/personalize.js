@@ -61,6 +61,11 @@ async function applyWallpaperByName(mode) {
 
   await _ensureWallpaperEngine();
 
+  // 离开 WE 壁纸：清掉 WE 视频流/场景标记，避免自定义壁纸误用 wewp 本地协议
+  if (typeof wallpaperEngine !== 'undefined' && wallpaperEngine) {
+    wallpaperEngine.weVideo = null;
+  }
+
   // 普通自定义视频保持静音（仅 WE 视频壁纸开启音频）
   if (mode === 'customVideo' && typeof setWeVideoAudio === 'function') {
     setWeVideoAudio(false);
@@ -115,8 +120,13 @@ async function applyWallpaperByName(mode) {
 async function _applyWeDispatch(sel) {
   if (!sel || typeof wallpaperEngine === 'undefined' || !wallpaperEngine) return;
   const type = sel.type;
+  // WE 壁纸没有单独的模糊/透明度/适配控件，渲染时忽略自定义壁纸遗留的值，
+  // 否则之前设置的背景模糊会叠加到 WE 视频/场景上，看起来“非常模糊”。
+  // 只清视频流标记，不修改 wallpaperBlur/opacity/fit，避免切回自定义壁纸时丢失设置。
+  wallpaperEngine.weVideo = null;
   if (type === 'video' && sel.filePath) {
     if (typeof setWeVideoAudio === 'function') setWeVideoAudio(true);
+    wallpaperEngine.weVideo = { id: sel.id, file: sel.file };
     wallpaperEngine.customVideoPath = sel.filePath;
     if (wallpaperEngine.currentMode === 'customVideo' && wallpaperEngine.renderer && wallpaperEngine.renderer.loadVideo) {
       wallpaperEngine.renderer.loadVideo(sel.filePath);
@@ -134,12 +144,27 @@ async function _applyWeDispatch(sel) {
       switchWallpaperMode('webWallpaper');
     }
   } else if (type === 'scene') {
-    // 场景壁纸：启动离屏渲染进程，<img> 显示本地 MJPEG 流
-    if (typeof startSceneWallpaper === 'function') {
-      const ok = await startSceneWallpaper(sel.id);
-      if (!ok && typeof showToast === 'function') {
-        showToast('场景壁纸渲染失败，请查看数据目录 logs/scene-renderer.log', 'error');
+    // 场景壁纸暂时只显示预览图，避免外部渲染组件启动超时/报错。
+    // 原生固定分辨率渲染器完成后，再在这里切换回动态场景。
+    wallpaperEngine._sceneWorkshopId = null;
+    wallpaperEngine.scenePort = 0;
+
+    let preview = sel.previewPath;
+    if (!preview && sel.preview && sel.dir) {
+      const sep = (window.bridge && window.bridge.isWindows === false) ? '/' : '\\';
+      preview = String(sel.dir).replace(/[\\/][^\\/]+$/, '') + sep + sel.preview;
+    }
+
+    if (preview) {
+      wallpaperEngine.customImagePath = preview;
+      if (wallpaperEngine.currentMode === 'customImage' && wallpaperEngine.renderer && wallpaperEngine.renderer.loadImage) {
+        wallpaperEngine.renderer.loadImage(preview);
+      } else if (typeof switchWallpaperMode === 'function') {
+        switchWallpaperMode('customImage');
       }
+    } else if (typeof switchWallpaperMode === 'function') {
+      // 没有预览图时保持无背景，也不弹错误
+      switchWallpaperMode('none');
     }
   } else {
     // application / 未知类型：用预览图静态占位，并明确提示限制
@@ -247,6 +272,22 @@ function applyLiquidGlassEffectValue(enabled) {
   window.electronAPI.store.set('versepc_liquid_glass', enabled ? '1' : '0').catch(() => {});
   const st = getPersonalizeState();
   if (st) st.liquidGlass = !!enabled;
+}
+
+/** 应用侧边栏固定（选中后不自动收起）：body 类 + 持久化 */
+function applySidebarPinValue(enabled) {
+  document.body.classList.toggle('sidebar-keep-open', !!enabled);
+  window.electronAPI.store.set('versepc_sidebar_pin', enabled ? '1' : '0').catch(() => {});
+  const st = getPersonalizeState();
+  if (st) st.sidebarPin = !!enabled;
+}
+
+/** 应用侧边栏按钮底部名称显示（body 类 + 持久化） */
+function applySidebarLabelsValue(enabled) {
+  document.body.classList.toggle('show-nav-labels', !!enabled);
+  window.electronAPI.store.set('versepc_sidebar_labels', enabled ? '1' : '0').catch(() => {});
+  const st = getPersonalizeState();
+  if (st) st.sidebarLabels = !!enabled;
 }
 
 /** 侧边栏胶囊与左上角圆形开关按钮：开启时挂上 SDF 折射，关闭时摘除 */
@@ -531,7 +572,7 @@ async function loadPersonalizeStateIntoStore() {
     if (saved) legacy = JSON.parse(saved);
   } catch (e) { /* 忽略旧数据解析错误 */ }
 
-  const [savedTheme, savedWallpaper, glassSaved, liquidGlassSaved, customColor, customLight, weWallpaperSaved] = await Promise.all([
+  const [savedTheme, savedWallpaper, glassSaved, liquidGlassSaved, customColor, customLight, weWallpaperSaved, sidebarLabelsSaved, sidebarPinSaved] = await Promise.all([
     window.electronAPI?.store?.get('versepc_theme'),
     window.electronAPI?.store?.get('versepc_wallpaper'),
     window.electronAPI?.store?.get('versepc_glass_effect'),
@@ -539,6 +580,8 @@ async function loadPersonalizeStateIntoStore() {
     window.electronAPI?.store?.get('versepc_custom_theme_color'),
     window.electronAPI?.store?.get('versepc_custom_theme_light'),
     window.electronAPI?.store?.get('versepc_we_wallpaper'),
+    window.electronAPI?.store?.get('versepc_sidebar_labels'),
+    window.electronAPI?.store?.get('versepc_sidebar_pin'),
   ]);
 
   // ── 主题：单项键优先，其次旧复合键，最后默认浅色 ──
@@ -564,6 +607,16 @@ async function loadPersonalizeStateIntoStore() {
     ? (liquidGlassSaved === '1' || liquidGlassSaved === true)
     : (legacy && legacy.liquidGlass !== undefined ? !!legacy.liquidGlass : false);
 
+  // ── 侧边栏按钮名称：单项键优先，其次旧复合键，默认关闭 ──
+  st.sidebarLabels = sidebarLabelsSaved !== null && sidebarLabelsSaved !== undefined
+    ? (sidebarLabelsSaved === '1' || sidebarLabelsSaved === true)
+    : (legacy && legacy.sidebarLabels !== undefined ? !!legacy.sidebarLabels : false);
+
+  // ── 侧边栏固定：单项键优先，默认关闭 ──
+  st.sidebarPin = sidebarPinSaved !== null && sidebarPinSaved !== undefined
+    ? (sidebarPinSaved === '1' || sidebarPinSaved === true)
+    : false;
+
   if (customColor) st.customColor = customColor;
   if (customLight !== null && customLight !== undefined) {
     st.customLight = customLight === true || customLight === 'true' || customLight === '1';
@@ -587,13 +640,17 @@ async function savePersonalizeSettings() {
         theme: st.theme,
         wallpaper: st.wallpaper,
         glassEffect: st.glassEffect,
-        liquidGlass: st.liquidGlass
+        liquidGlass: st.liquidGlass,
+        sidebarLabels: st.sidebarLabels,
+        sidebarPin: st.sidebarPin
       }
     : {
         theme: document.querySelector('.theme-option.active')?.dataset.theme || 'light',
         wallpaper: document.querySelector('.wallpaper-option.active')?.dataset.wallpaper || 'none',
         glassEffect: document.getElementById('setting-glass-effect')?.checked ?? false,
-        liquidGlass: document.getElementById('setting-liquid-glass')?.checked ?? false
+        liquidGlass: document.getElementById('setting-liquid-glass')?.checked ?? false,
+        sidebarLabels: document.body.classList.contains('show-nav-labels'),
+        sidebarPin: document.body.classList.contains('sidebar-keep-open')
       };
 
   try {
@@ -603,6 +660,8 @@ async function savePersonalizeSettings() {
     await window.electronAPI.store.set('versepc_wallpaper', settings.wallpaper);
     await window.electronAPI.store.set('versepc_glass_effect', settings.glassEffect ? '1' : '0');
     await window.electronAPI.store.set('versepc_liquid_glass', settings.liquidGlass ? '1' : '0');
+    await window.electronAPI.store.set('versepc_sidebar_labels', settings.sidebarLabels ? '1' : '0');
+    await window.electronAPI.store.set('versepc_sidebar_pin', settings.sidebarPin ? '1' : '0');
     showToast('个性化设置已保存', 'success');
   } catch (e) {
     showToast('保存失败: ' + e.message, 'error');
@@ -619,6 +678,8 @@ async function resetPersonalizeSettings() {
     st.wallpaper = 'none';
     st.glassEffect = false;
     st.liquidGlass = false;
+    st.sidebarLabels = false;
+    st.sidebarPin = false;
     st.customColor = '#4c8dff';
     st.customLight = false;
     st.customColorGroupVisible = false;
@@ -635,6 +696,8 @@ async function resetPersonalizeSettings() {
   await applyWallpaperByName('none');
   applyGlassEffectValue(false);
   applyLiquidGlassEffectValue(false);
+  applySidebarLabelsValue(false);
+  applySidebarPinValue(false);
 
   if (typeof clearCustomThemeVars === 'function') clearCustomThemeVars();
   if (typeof syncCustomThemeColorUI === 'function') syncCustomThemeColorUI('#4c8dff');
@@ -659,6 +722,8 @@ async function resetPersonalizeSettings() {
     await window.electronAPI.store.set('versepc_panorama_theme', 'overworld');
     await window.electronAPI.store.set('versepc_glass_effect', '0');
     await window.electronAPI.store.set('versepc_liquid_glass', '0');
+    await window.electronAPI.store.set('versepc_sidebar_labels', '0');
+    await window.electronAPI.store.set('versepc_sidebar_pin', '0');
     _updateCustomImagePreview(null);
     const nameEl = document.getElementById('custom-wallpaper-file-name');
     if (nameEl) nameEl.textContent = '未选择';
@@ -679,4 +744,6 @@ async function loadPersonalizeSettings() {
   await applyWallpaperByName(st.wallpaper);
   applyGlassEffectValue(st.glassEffect);
   applyLiquidGlassEffectValue(st.liquidGlass);
+  applySidebarLabelsValue(st.sidebarLabels);
+  applySidebarPinValue(st.sidebarPin);
 }

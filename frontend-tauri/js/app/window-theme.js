@@ -91,7 +91,8 @@ function setupWindowControls() {
   if (isMac) {
     document.body.classList.add('is-mac');
   }
-  if (windowControls && !isMac) windowControls.style.display = 'flex';
+  // macOS 窗口同样是无边框（decorations:false），必须显示自绘的最小化/最大化/关闭按钮
+  if (windowControls) windowControls.style.display = 'flex';
 
   // 侧边栏悬浮胶囊：左上角圆形按钮切换展开/收起，遮罩点击与 Esc 收起
   const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
@@ -111,7 +112,11 @@ function setupWindowControls() {
     });
 
     if (overlay) {
-      overlay.addEventListener('click', () => setSidebarOpen(false));
+      overlay.addEventListener('click', () => {
+        // 「侧边栏单点不自动回收」开启时，点击遮罩/页面区域不收起，保持常驻展开
+        if (document.body.classList.contains('sidebar-keep-open')) return;
+        setSidebarOpen(false);
+      });
     }
 
     document.addEventListener('keydown', (e) => {
@@ -249,7 +254,7 @@ function updateWindowButtons() {
   const maximizeBtn = document.getElementById('win-btn-maximize');
   const restoreBtn = document.getElementById('win-btn-restore');
 
-  if (!controls || window.electronAPI?.isMac === true) return;
+  if (!controls) return;
 
   controls.style.display = 'flex';
   if (isWindowMode) {

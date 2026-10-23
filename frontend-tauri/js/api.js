@@ -530,8 +530,8 @@ const API = {
         apiPost('/api/version/export-modpack', { versionId, name, version, author, description, selectedKeys }),
 
     // === 模组依赖递归/版本查询 ===
-    getDependenciesRecursive: (versionId, source = 'modrinth', gameVersion = '', loader = '') =>
-        apiPost('/api/mods/get-dependencies-recursive', { versionId, source, gameVersion, loader }),
+    getDependenciesRecursive: (versionId, source = 'modrinth', gameVersion = '', loader = '', projectId = '') =>
+        apiPost('/api/mods/get-dependencies-recursive', { versionId, source, gameVersion, loader, projectId }),
     getProjectVersions: (projectId, source = 'modrinth', gameVersion = '', loader = '') =>
         apiGet('/api/mods/project-versions', { projectId, source, gameVersion, loader }),
 

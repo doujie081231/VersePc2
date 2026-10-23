@@ -14,3 +14,15 @@ run_diag.ps1
 stderr.log
 stdout.log
 tauri-build-log.txt
+
+src-tauri/.cf_api_key
+src-tauri/data/
+
+# 服务器凭据（只保留本地，禁止入库）
+scripts/_sshwork/
+.target-msvc/
+
+.next/
+.trae/
+.trae-html-share-packages/
+scripts/_androidwork/

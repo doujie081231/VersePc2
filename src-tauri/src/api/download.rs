@@ -9,6 +9,9 @@ use crate::install;
 use crate::storage;
 use crate::utils;
 
+/// 版本下载功能开关（false=关闭；安装代码全部保留，置回 true 即恢复）
+const VERSION_DOWNLOAD_ENABLED: bool = true;
+
 /// 处理下载/安装相关路由
 /// 返回 Some(ApiResult) 表示已处理，None 表示不匹配
 pub async fn handle(
@@ -23,6 +26,9 @@ pub async fn handle(
     match key.as_str() {
         // ===== 安装入口 =====
         "POST /api/install-start" => {
+            if !VERSION_DOWNLOAD_ENABLED {
+                return Some(ApiResult::err(403, "版本下载功能暂时关闭，已安装版本可正常启动"));
+            }
             let body = body.as_ref().or(params.as_ref())?;
             let version_id = body.get("versionId").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let version_url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();

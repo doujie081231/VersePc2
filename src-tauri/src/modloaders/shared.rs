@@ -610,9 +610,10 @@ pub fn find_java_for_install(min_major: u32) -> Option<std::path::PathBuf> {
         }
     }
 
-    // 3. PATH 中的 java
+    // 3. PATH 中的 java（Windows 用分号，macOS/Linux 用冒号）
     if let Ok(path) = std::env::var("PATH") {
-        for dir in path.split(';') {
+        let sep = if cfg!(target_os = "windows") { ';' } else { ':' };
+        for dir in path.split(sep) {
             let java_exe = std::path::PathBuf::from(dir).join("java.exe");
             if java_exe.exists() {
                 return Some(java_exe);

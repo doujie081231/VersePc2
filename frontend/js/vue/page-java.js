@@ -18,8 +18,8 @@ const PageJava = {
               <button id="import-directory-btn" class="btn btn-secondary">导入文件夹</button>
             </div>
             <p class="hint" style="margin-top: 8px; font-size: 12px;">
-              「手动添加」：选择电脑上已有的 java.exe 加入列表（原位引用，不复制文件）<br>
-              「导入压缩包」：导入 .zip 格式的 Java 压缩包到启动器目录<br>
+              「手动添加」：选择电脑上已有的 java 可执行文件加入列表（原位引用，不复制文件）<br>
+              「导入压缩包」：导入 .zip / .tar.gz / .tgz 格式的 Java 压缩包到启动器目录<br>
               「导入文件夹」：导入已解压好的 Java 文件夹到启动器目录
             </p>
           </div>

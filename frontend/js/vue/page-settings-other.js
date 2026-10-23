@@ -273,7 +273,7 @@ const PageSettingsOther = {
                   安装并重启
                 </button>
                 <button class="btn btn-secondary" onclick="showUpdateAnnouncement()">查看更新公告</button>
-                <button class="btn btn-secondary win-only" onclick="createDesktopShortcut()">创建桌面快捷方式</button>
+                <button class="btn btn-secondary" onclick="createDesktopShortcut()">创建桌面快捷方式</button>
               </div>
             </div>
 

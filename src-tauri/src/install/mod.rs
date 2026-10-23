@@ -43,6 +43,21 @@ fn calc_progress(current_stage: &session::InstallStage, stage_pct: u32) -> u32 {
     (total * 99 / total_weight.max(1)).min(99)
 }
 
+/// 追加一行到 logs/install-download.log（安装流程下载日志）
+fn append_install_log(data_dir: &std::path::Path, line: &str) {
+    let log_dir = data_dir.join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_path = log_dir.join("install-download.log");
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        let _ = writeln!(f, "{}", line);
+    }
+}
+
+fn log_now() -> String {
+    chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
 /// 安装入口
 pub async fn perform_installation(
     app: AppHandle,
@@ -63,8 +78,10 @@ pub async fn perform_installation(
     let libraries_dir = data_dir.join("libraries");
     let assets_dir = data_dir.join("assets");
 
-    // 实际版本 ID（支持自定义名，如 "26.2-Forge-65.1.0"）
-    let actual_version_id = custom_name.unwrap_or_else(|| version_id.clone());
+    // 实际版本 ID（支持自定义名，如 "26.2-Forge-65.1.0"；空字符串视为未自定义）
+    let actual_version_id = custom_name
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| version_id.clone());
 
     macro_rules! update {
         ($stage:expr, $pct:expr, $msg:expr) => {{
@@ -99,6 +116,7 @@ pub async fn perform_installation(
     let version_details = match fetch_json(&version_json_url, &download_source).await {
         Ok(v) => v,
         Err(e) => {
+            append_install_log(&data_dir, &format!("[{}] 获取版本信息失败: {} — {}", log_now(), version_id, e));
             session::update_session(&app, &session_id, |s| {
                 s.stage = session::InstallStage::Failed;
                 s.message = format!("获取版本信息失败: {}", e);
@@ -121,6 +139,7 @@ pub async fn perform_installation(
     let version_dir = versions_dir.join(&game_version);
     let version_json_path = version_dir.join(format!("{}.json", game_version));
     if let Err(e) = tokio::fs::create_dir_all(&version_dir).await {
+        append_install_log(&data_dir, &format!("[{}] 创建版本目录失败: {} — {}", log_now(), version_dir.display(), e));
         session::update_session(&app, &session_id, |s| {
             s.stage = session::InstallStage::Failed;
             s.message = format!("创建版本目录失败: {}", e);
@@ -129,6 +148,8 @@ pub async fn perform_installation(
     }
     let json_str = serde_json::to_string_pretty(&version_details).unwrap_or_default();
     if let Err(e) = tokio::fs::write(&version_json_path, &json_str).await {
+        let _ = tokio::fs::remove_dir_all(&version_dir).await;
+        append_install_log(&data_dir, &format!("[{}] 写入版本 JSON 失败: {} — {}", log_now(), version_json_path.display(), e));
         session::update_session(&app, &session_id, |s| {
             s.stage = session::InstallStage::Failed;
             s.message = format!("写入版本 JSON 失败: {}", e);
@@ -183,10 +204,22 @@ pub async fn perform_installation(
         ).await {
             Ok(()) => update!(session::InstallStage::ClientJar, 100, "客户端文件已下载"),
             Err(e) => {
+                let _ = tokio::fs::remove_dir_all(&version_dir).await;
+                let cancelled = e.contains("已取消");
+                if cancelled {
+                    append_install_log(&data_dir, &format!("[{}] 安装取消: {}", log_now(), actual_version_id));
+                } else {
+                    append_install_log(&data_dir, &format!("[{}] 客户端下载失败: {} — {}", log_now(), game_version, e));
+                }
                 session::update_session(&app, &session_id, |s| {
-                    s.stage = session::InstallStage::Failed;
-                    s.message = format!("下载客户端文件失败: {}", e);
-                    s.errors.push(e);
+                    if cancelled {
+                        s.stage = session::InstallStage::Cancelled;
+                        s.message = "已取消".to_string();
+                    } else {
+                        s.stage = session::InstallStage::Failed;
+                        s.message = format!("下载客户端文件失败: {}", e);
+                        s.errors.push(e);
+                    }
                 });
                 return;
             }
@@ -214,6 +247,7 @@ pub async fn perform_installation(
             let completed = completed_libs.clone();
             let failed = failed_libs.clone();
             let cancel_flag = cancel_flag.clone();
+            let data_dir_for_log = data_dir.clone();
             async move {
                 if session::is_cancelled(&cancel_flag) {
                     return;
@@ -229,6 +263,7 @@ pub async fn perform_installation(
                 });
                 if let Err(e) = download_library(&lib, &libraries_dir, &download_source, &app, &session_id).await {
                     failed.fetch_add(1, AtomicOrdering::SeqCst);
+                    append_install_log(&data_dir_for_log, &format!("[{}] 库下载失败: {} — {}", log_now(), name, e));
                     session::update_session(&app, &session_id, |s| {
                         s.errors.push(format!("库 {} 下载失败: {}", name, e));
                     });
@@ -239,9 +274,22 @@ pub async fn perform_installation(
         .collect()
         .await;
     drop(lib_results);
+    // 取消同样清理未完成的版本目录
+    if session::is_cancelled(&cancel_flag) {
+        let _ = tokio::fs::remove_dir_all(&version_dir).await;
+        append_install_log(&data_dir, &format!("[{}] 安装取消: {}", log_now(), actual_version_id));
+        session::update_session(&app, &session_id, |s| {
+            s.stage = session::InstallStage::Cancelled;
+            s.progress = 0;
+            s.message = "已取消".to_string();
+        });
+        return;
+    }
     let failed_total = failed_libs.load(AtomicOrdering::SeqCst);
     if failed_total > 0 {
         let fail_msg = format!("依赖库下载失败 {} 个，请检查网络或稍后重试", failed_total);
+        let _ = tokio::fs::remove_dir_all(&version_dir).await;
+        append_install_log(&data_dir, &format!("[{}] 安装失败: {} — {}", log_now(), actual_version_id, fail_msg));
         session::update_session(&app, &session_id, |s| {
             s.stage = session::InstallStage::Failed;
             s.progress = calc_progress(&session::InstallStage::Libraries, 100);
@@ -465,6 +513,7 @@ pub async fn perform_installation(
         s.message = "安装完成".to_string();
         s.current_file = String::new();
     });
+    append_install_log(&data_dir, &format!("[{}] 安装完成: {}", log_now(), actual_version_id));
 
     // 5 秒后清理会话
     let sid = session_id.clone();
@@ -587,6 +636,60 @@ fn evaluate_rules(lib: &Value) -> bool {
     allowed
 }
 
+/// 当前平台 OS 名（与版本 JSON natives 规则中的键一致）
+fn current_os_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "osx"
+    } else {
+        "linux"
+    }
+}
+
+/// 解析库的当前平台 native classifier 条目：
+/// 取 lib.natives[os]（展开 ${arch} 为 64/32）后查 downloads.classifiers。
+/// 1.7.10 的 twitch/lwjgl-platform/jinput-platform 等库只有 classifiers、没有 artifact。
+fn native_classifier_target<'a>(lib: &'a Value, os_name: &str, arch: &str) -> Option<&'a Value> {
+    let key = lib
+        .get("natives")?
+        .as_object()?
+        .get(os_name)?
+        .as_str()?
+        .replace("${arch}", arch);
+    lib.pointer("/downloads/classifiers")?.get(&key)
+}
+
+/// 按 downloads 节点（artifact 或 classifier 条目）下载到 libraries 目录
+async fn download_downloads_node(
+    node: &Value,
+    libraries_dir: &PathBuf,
+    download_source: &str,
+) -> Result<(), String> {
+    let url = node.get("url").and_then(|v| v.as_str()).unwrap_or("");
+    let path = node.get("path").and_then(|v| v.as_str()).unwrap_or("");
+    let sha1 = node.get("sha1").and_then(|v| v.as_str()).unwrap_or("");
+    let size = node.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+    if url.is_empty() || path.is_empty() {
+        return Ok(());
+    }
+    let dest = libraries_dir.join(path);
+    // 安全检查：路径不能逃出 libraries_dir
+    if !dest.starts_with(libraries_dir) {
+        return Err("路径越界".to_string());
+    }
+    download::download_with_mirror(
+        url,
+        &dest,
+        if sha1.is_empty() { None } else { Some(sha1) },
+        if size > 0 { Some(size) } else { None },
+        download_source,
+        120,
+        None,
+    )
+    .await
+}
+
 /// 下载单个库文件
 async fn download_library(
     lib: &Value,
@@ -595,35 +698,41 @@ async fn download_library(
     _app: &AppHandle,
     _session_id: &str,
 ) -> Result<(), String> {
+    let os_name = current_os_name();
+    let arch = if cfg!(target_pointer_width = "64") { "64" } else { "32" };
+
     // 优先用 downloads.artifact
     if let Some(artifact) = lib.pointer("/downloads/artifact") {
         let url = artifact.get("url").and_then(|v| v.as_str()).unwrap_or("");
         let path = artifact.get("path").and_then(|v| v.as_str()).unwrap_or("");
-        let sha1 = artifact.get("sha1").and_then(|v| v.as_str()).unwrap_or("");
-        let size = artifact.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
 
         if url.is_empty() || path.is_empty() {
-            return Ok(()); // 跳过无 URL 的库
+            // artifact 节点无 URL：若存在当前平台的 native classifier 则下载它，否则跳过
+            match native_classifier_target(lib, os_name, arch) {
+                Some(nd) => return download_downloads_node(nd, libraries_dir, download_source).await,
+                None => return Ok(()),
+            }
         }
 
-        let dest = libraries_dir.join(path);
-        // 安全检查：路径不能逃出 libraries_dir
-        if !dest.starts_with(libraries_dir) {
-            return Err("路径越界".to_string());
-        }
+        download_downloads_node(artifact, libraries_dir, download_source).await?;
 
-        return download::download_with_mirror(
-            url,
-            &dest,
-            if sha1.is_empty() { None } else { Some(sha1) },
-            if size > 0 { Some(size) } else { None },
-            download_source,
-            120,
-            None,
-        ).await;
+        // 主 jar 之外，有 natives 规则的库还需下载对应 native classifier（启动期解压用）
+        if let Some(nd) = native_classifier_target(lib, os_name, arch) {
+            return download_downloads_node(nd, libraries_dir, download_source).await;
+        }
+        return Ok(());
     }
 
-    // 无 artifact，按 maven 坐标构造 URL
+    // 无 artifact：有 natives 规则时下载对应 native classifier
+    if let Some(nd) = native_classifier_target(lib, os_name, arch) {
+        return download_downloads_node(nd, libraries_dir, download_source).await;
+    }
+    // classifiers 存在但当前平台无可用条目，跳过
+    if lib.pointer("/downloads/classifiers").is_some() {
+        return Ok(());
+    }
+
+    // 无 artifact/classifiers，按 maven 坐标构造 URL
     let name = lib.get("name").and_then(|v| v.as_str()).unwrap_or("");
     if name.is_empty() {
         return Ok(());

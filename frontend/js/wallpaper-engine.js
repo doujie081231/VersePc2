@@ -11,6 +11,17 @@ function wpfilePath(filePath) {
     return 'wpfile:///' + normalized.split('/').map(encodeURIComponent).join('/');
 }
 
+/** WE 视频壁纸走 wewp 本地协议流式读取（支持 Range），避免整文件经 IPC 读入内存 */
+function wewpVideoPath(workshopId, relFile) {
+    if (!workshopId || !relFile) return '';
+    const segs = String(relFile).split(/[\\/]/).map(encodeURIComponent).join('/');
+    // WebView2 会把自定义协议映射成 http://<scheme>.localhost；
+    // <video> 不能直接吃 wewp://，必须用映射后的 http 地址（Windows 专属功能）。
+    const isWindows = !window.bridge || window.bridge.isWindows;
+    const origin = isWindows ? 'http://wewp.localhost' : 'wewp://localhost';
+    return origin + '/' + encodeURIComponent(workshopId) + '/' + segs;
+}
+
 class WallpaperEngine {
     constructor(canvas) {
         this.canvas = canvas;
@@ -94,19 +105,30 @@ class WallpaperEngine {
         }
     }
 
+    // 场景渲染器输出分辨率：跟随窗口物理像素，避免固定 720p 被放大发虚
+    _sceneRenderSize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        return {
+            width: Math.max(640, Math.min(3840, Math.round(window.innerWidth * dpr))),
+            height: Math.max(360, Math.min(2160, Math.round(window.innerHeight * dpr)))
+        };
+    }
+
     // 启动场景壁纸离屏渲染进程（后端 scene_renderer_start），成功后切入 sceneWallpaper 模式
     async _startSceneProcess(workshopId) {
         try {
+            const size = this._sceneRenderSize();
+            const startArgs = { workshopId: workshopId, width: size.width, height: size.height };
             let res = null;
             if (window.bridge && window.bridge.invoke) {
-                res = await window.bridge.invoke('scene_renderer_start', { workshopId: workshopId });
+                res = await window.bridge.invoke('scene_renderer_start', startArgs);
             }
             // 组件未安装：引导下载后重试一次
             if (!res || res.missing) {
                 const installed = await ensureSceneRendererInstalled();
                 if (!installed) return false;
                 if (window.bridge && window.bridge.invoke) {
-                    res = await window.bridge.invoke('scene_renderer_start', { workshopId: workshopId });
+                    res = await window.bridge.invoke('scene_renderer_start', startArgs);
                 }
             }
             if (!res || !res.ok || !res.port) {
@@ -163,6 +185,7 @@ class WallpaperEngine {
         if (this.currentMode === 'sceneWallpaper' && this._sceneWorkshopId && !this.scenePort) {
             this._startSceneProcess(this._sceneWorkshopId);
         }
+
         // 仅在非 none 模式下恢复 RAF，避免无壁纸时空转
         if (this.isRunning && !this.animationId && this.currentMode !== 'none') {
             this.lastTime = performance.now();
@@ -256,7 +279,6 @@ class WallpaperEngine {
         if (sceneContainer) {
             sceneContainer.style.display = isSceneMode ? 'block' : 'none';
         }
-
         if (isNone) {
             this.renderer = null;
             const app = document.getElementById('app');
@@ -758,9 +780,14 @@ class CustomVideoRenderer {
             this._brightnessCheckInterval = null;
         }
 
-        // 通过 IPC 读取文件 buffer，转 blob URL
-        let videoUrl = filePath;
-        if (filePath && !filePath.startsWith('blob:') && !filePath.startsWith('wpfile://')) {
+        // WE 视频壁纸：直接用 wewp 本地协议按 Range 流式读取原文件，
+        // 不再把整个视频经 IPC 序列化成字节数组（大文件会失败/崩溃，且会损失画质）。
+        const weVideo = this.engine.weVideo;
+        const isWeStream = !!(weVideo && weVideo.id && weVideo.file);
+        let videoUrl = isWeStream
+            ? wewpVideoPath(weVideo.id, weVideo.file)
+            : filePath;
+        if (videoUrl && filePath && !isWeStream && !filePath.startsWith('blob:') && !filePath.startsWith('wpfile://')) {
             try {
                 if (window.electronAPI && window.electronAPI.readFileBuffer) {
                     const buffer = await window.electronAPI.readFileBuffer(filePath);
@@ -794,6 +821,7 @@ class CustomVideoRenderer {
         this.video.style.width = '100%';
         this.video.style.height = '100%';
         this.video.style.objectFit = 'cover';
+        this.video.style.imageRendering = 'auto';
         this.video.style.pointerEvents = 'none';
 
         this.video.oncanplay = () => {
@@ -820,9 +848,12 @@ class CustomVideoRenderer {
 
     _updateStyle() {
         if (!this.video) return;
-        const opacity = this.engine.wallpaperOpacity != null ? this.engine.wallpaperOpacity : 1;
-        const blur = this.engine.wallpaperBlur || 0;
-        const fitMode = this.engine.wallpaperFitMode || 'cover';
+        // WE 视频壁纸没有模糊/透明度/适配控件：强制原始清晰度和 cover，
+        // 避免自定义壁纸的 blur 设置叠加到 WE 视频上。
+        const isWe = !!this.engine.weVideo;
+        const opacity = isWe ? 1 : (this.engine.wallpaperOpacity != null ? this.engine.wallpaperOpacity : 1);
+        const blur = isWe ? 0 : (this.engine.wallpaperBlur || 0);
+        const fitMode = isWe ? 'cover' : (this.engine.wallpaperFitMode || 'cover');
 
         this.video.style.opacity = opacity;
         // CSS filter blur 由 GPU 加速，性能远优于 Canvas filter
@@ -949,6 +980,7 @@ class SceneWallpaperRenderer {
         this.engine = engine;
         this.img = null;
         this.loaded = false;
+        this._retry = 0;
         this._container = document.getElementById('wallpaper-scene-container');
         if (engine.scenePort) {
             this.loadStream(engine.scenePort);
@@ -974,7 +1006,24 @@ class SceneWallpaperRenderer {
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.pointerEvents = 'none';
-        img.src = 'http://127.0.0.1:' + port + '/';
+        img.style.imageRendering = 'auto';
+        // 渲染器实际输出路由是 /scene_frame（不是 /），并加时间戳避免复用失败连接
+        img.src = 'http://127.0.0.1:' + port + '/scene_frame?t=' + Date.now();
+        img.onload = () => { this._retry = 0; };
+        img.onerror = () => {
+            if (this.img !== img) return;
+            if (this._retry >= 10) {
+                console.error('[Wallpaper] scene stream unavailable on port', port);
+                if (typeof showToast === 'function') {
+                    showToast('场景壁纸渲染失败，请查看数据目录 logs/scene-renderer.log', 'error');
+                }
+                return;
+            }
+            this._retry++;
+            setTimeout(() => {
+                if (this.img === img) this.loadStream(port);
+            }, 500);
+        };
         this.img = img;
         this.loaded = true;
         if (this._container) {
@@ -985,9 +1034,10 @@ class SceneWallpaperRenderer {
 
     _updateStyle() {
         if (!this.img) return;
-        const opacity = this.engine.wallpaperOpacity != null ? this.engine.wallpaperOpacity : 1;
-        const blur = this.engine.wallpaperBlur || 0;
-        const fitMode = this.engine.wallpaperFitMode || 'cover';
+        // 场景壁纸没有模糊/透明度/适配控件，固定原始清晰度 + cover
+        const opacity = 1;
+        const blur = 0;
+        const fitMode = 'cover';
         this.img.style.opacity = opacity;
         this.img.style.filter = blur > 0 ? 'blur(' + blur + 'px)' : 'none';
         this.img.style.transform = blur > 0 ? 'scale(1.05)' : 'none';
@@ -1155,7 +1205,7 @@ function hideGlobalDownloadProgress() {
 }
 
 /**
- * 确保场景渲染器组件已安装（约 314MB，可选下载到 <数据目录>/scene-renderer/）。
+ * 确保场景渲染器组件已安装（约 104MB，可选下载到 <数据目录>/scene-renderer/）。
  * 返回 true 表示已就绪；用户取消或失败返回 false。
  */
 async function ensureSceneRendererInstalled() {
@@ -1167,7 +1217,7 @@ async function ensureSceneRendererInstalled() {
     } catch (e) { /* 继续走确认下载流程 */ }
 
     const confirmed = typeof showConfirmDialog === 'function'
-        ? await showConfirmDialog('下载场景渲染器', '场景壁纸需要额外的渲染组件（约 314MB）。是否现在下载并安装？', '下载', '取消')
+        ? await showConfirmDialog('下载场景渲染器', '场景壁纸需要额外的渲染组件（约 104MB）。是否现在下载并安装？', '下载', '取消')
         : true;
     if (!confirmed) return false;
 

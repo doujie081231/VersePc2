@@ -87,6 +87,39 @@
         modal._escCleanup = function () { modal.removeEventListener('keydown', onKeyDown); };
     }
 
+    // ============== 顶栏更新胶囊（最小化按钮左侧，黑底白字，Trae/VS Code 同款） ==============
+    let _pillReady = false;
+
+    function showUpdatePill(text, opts) {
+        const pill = document.getElementById('window-update-pill');
+        if (!pill) return;
+        const textEl = document.getElementById('window-update-pill-text');
+        const spinner = document.getElementById('window-update-pill-spinner');
+        if (textEl) textEl.textContent = text;
+        if (spinner) spinner.style.display = (opts && opts.spinner) ? '' : 'none';
+        pill.classList.toggle('is-ready', !!(opts && opts.ready));
+        pill.title = (opts && opts.ready) ? '重启并安装更新' : '';
+        _pillReady = !!(opts && opts.ready);
+        pill.style.display = 'flex';
+    }
+
+    function hideUpdatePill() {
+        const pill = document.getElementById('window-update-pill');
+        if (pill) pill.style.display = 'none';
+        _pillReady = false;
+    }
+
+    window.handleWindowUpdatePillClick = async function () {
+        if (!_pillReady) return;
+        showUpdatePill('正在重启安装…', { spinner: true });
+        try {
+            await api.updater.installUpdate();
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('安装失败: ' + e.message, 'error');
+            hideUpdatePill();
+        }
+    };
+
     function resetButtons() {
         document.getElementById('updater-check-btn').style.display = '';
         document.getElementById('updater-check-btn').disabled = false;
@@ -140,6 +173,7 @@
             case 'checking-for-update':
                 statusArea.innerHTML = '<div class="update-status update-status--loading"><span class="update-status__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></span><span class="update-status__body">正在检查更新...</span></div>';
                 checkBtn.disabled = true;
+                hideUpdatePill();
                 break;
 
             case 'update-available':
@@ -154,6 +188,7 @@
                 showReleaseNotes(data.releaseNotes);
                 // 自动更新：发现新版本后由后端自动下载，不再弹出"发现新版本"弹窗卡片。
                 addUpdateDots();
+                showUpdatePill('发现新版本 v' + data.version, { spinner: true });
                 break;
 
             case 'update-not-available':
@@ -161,11 +196,13 @@
                 checkBtn.disabled = false;
                 skipBtn.style.display = 'none';
                 releaseBtn.style.display = 'none';
+                hideUpdatePill();
                 break;
 
             case 'update-skipped':
                 statusArea.innerHTML = '<div class="update-status update-status--loading"><span class="update-status__icon"></span><span class="update-status__body">已跳过 v' + escapeHtml(data.version) + '</span></div>';
                 checkBtn.disabled = false;
+                hideUpdatePill();
                 break;
 
             case 'update-error':
@@ -183,7 +220,9 @@
                     '<div class="update-status__body"><div class="update-status__title">检查更新失败</div>' +
                     '<div class="update-status__desc">' + escapeHtml(data.message || '未知错误') + '</div>' +
                     hintHtml + mirrorBar + '</div></div>';
+                hideUpdatePill();
                 checkBtn.disabled = false;
+                hideUpdatePill();
                 break;
 
             case 'start-download':
@@ -191,6 +230,7 @@
                 statusArea.innerHTML = '<div class="update-status update-status--loading"><span class="update-status__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></span><span class="update-status__body">正在下载更新...</span></div>';
                 downloadBtn.disabled = true;
                 downloadBtn.textContent = '下载中...';
+                showUpdatePill('正在下载更新 0%', { spinner: true });
                 break;
 
             case 'download-progress': {
@@ -207,6 +247,7 @@
                     '<div class="update-progress__header"><span class="update-progress__label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>正在下载更新...</span><span class="update-progress__percent">' + pct + '%</span></div>' +
                     '<div class="update-progress__track"><div class="update-progress__fill" style="width:' + pct + '%;"></div></div>' +
                     '<div class="update-progress__info"><span>' + speed + '/s</span><span>' + transferred + ' / ' + total + '</span></div></div>';
+                showUpdatePill('正在下载更新 ' + pct + '%', { spinner: true });
                 break;
             }
 
@@ -218,6 +259,7 @@
                 releaseBtn.style.display = 'none';
                 downloadBtn.style.display = 'none';
                 installBtn.style.display = '';
+                showUpdatePill('重启以更新', { ready: true });
                 break;
         }
     });

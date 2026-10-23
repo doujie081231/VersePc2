@@ -1,18 +1,18 @@
 [package]
 name = "verse-tauri"
-version = "1.5.0"
-description = "VersePC - Minecraft 启动器"
+version = "1.7.2"
+description = "VersePC - Minecraft ???"
 license = "GPL-3.0"
 edition = "2024"
-# 通过 rust-version 说明需要较新的编译器；let-chains 语法在 2024 edition 下可用
+# ?? rust-version ???????????let-chains ??? 2024 edition ???
 rust-version = "1.95"
 default-run = "verse-tauri"
 
 [lib]
 name = "verse_tauri_lib"
-# 桌面端只用 rlib 即可。cdylib/staticlib 仅用于 iOS/mobile 锚点；
-# 它们在 Linux/macOS 上会以 cdylib 强制链接所有依赖里的 #[link]（含 Windows 库），
-# 导致 "unable to find library -lkernel32" 的跨平台链接失败，故不再声明。
+# ????? rlib ???cdylib/staticlib ??? iOS/mobile ???
+# ??? Linux/macOS ??? cdylib ?????????? #[link]?? Windows ???
+# ?? "unable to find library -lkernel32" ???????????????
 crate-type = ["rlib"]
 
 [build-dependencies]
@@ -45,7 +45,7 @@ http = "1"
 axum = { version = "0.7", features = [] }
 tokio-tungstenite = { version = "0.21", features = ["rustls"] }
 
-# theseus 整合包下载生态依赖
+# theseus ?????????
 async_zip = { version = "0.0.17", features = ["full", "tokio", "deflate", "chrono"] }
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -63,16 +63,16 @@ tracing = "0.1"
 futures = "0.3"
 sysinfo = "0.30"
 
-# Windows 专属依赖：仅注册表读取（JavaSoft 扫描、WebView2 检测）用到，
-# 声明为 windows target 专属，保证 macOS/Linux 也能顺利编译
+# Windows ????????????JavaSoft ???WebView2 ??????
+# ??? windows target ????? macOS/Linux ??????
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 
-# ============== Release 体积优化 ==============
-# 通过 LTO + strip + 单 codegen-unit 大幅缩小 exe 体积
+# ============== Release ???? ==============
+# ?? LTO + strip + ? codegen-unit ???? exe ??
 [profile.release]
-opt-level = "z"          # 优先体积优化（比默认的 3 小很多）
-lto = true               # 链接时优化，跨 crate 内联去冗余
-codegen-units = 1        # 单单元编译，更好的全局优化
-strip = true             # 移除调试符号
-panic = "unwind"         # 后台任务/命令异常时只回滚该任务，软件不整体崩溃（配合崩溃日志定位）
+opt-level = "z"          # ??????????? 3 ????
+lto = true               # ??????? crate ?????
+codegen-units = 1        # ?????????????
+strip = true             # ??????
+panic = "unwind"         # ????/?????????????????????????????

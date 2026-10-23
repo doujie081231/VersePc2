@@ -171,6 +171,15 @@ pub async fn do_launch(
             );
             let _ = std::fs::write(&debug_log, exit_msg);
 
+            // 从 stderr 提取关键异常，直接展示给用户（避免只看到"请检查 Java 版本"）
+            let stderr_hint = stderr_text
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .take(12)
+                .collect::<Vec<_>>()
+                .join("\n");
+
             // 移除实例
             let _ = remove_instance(&session_id);
 
@@ -183,6 +192,7 @@ pub async fn do_launch(
                     "code": code,
                     "reason": "游戏进程启动后立即退出",
                     "suggestion": "请查看 launch-debug.log 获取详细启动参数",
+                    "stderr": &stderr_hint,
                     "isCrash": true
                 }),
             );
@@ -193,6 +203,7 @@ pub async fn do_launch(
                 "code": code,
                 "reason": "游戏进程启动后立即退出",
                 "suggestion": "请查看 launch-debug.log 获取详细启动参数",
+                "stderr": &stderr_hint,
                 "isCrash": true,
                 "versionId": version_id.clone(),
                 "launchInfo": {
@@ -202,7 +213,11 @@ pub async fn do_launch(
                 "logBuffer": exit_logs
             }));
 
-            return Err(format!("游戏进程启动后立即退出（退出码: {}），请检查 Java 版本和游戏文件是否完整", code));
+            return Err(if stderr_hint.is_empty() {
+                format!("游戏进程启动后立即退出（退出码: {}），请检查 Java 版本和游戏文件是否完整", code)
+            } else {
+                format!("游戏进程启动后立即退出（退出码: {}）：\n{}", code, stderr_hint)
+            });
         }
         Err(_) => {
             // 3 秒内未退出，进程仍在运行，正常继续

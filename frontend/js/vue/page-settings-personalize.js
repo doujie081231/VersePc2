@@ -18,6 +18,8 @@
       customColorGroupVisible: false,
       glassEffect: false,
       liquidGlass: false,
+      sidebarLabels: false,
+      sidebarPin: false,
       panoramaTheme: 'overworld',
       panoramaSpeed: 5,
       panoramaFollow: false,
@@ -224,7 +226,7 @@
         const st = this.state;
         if (st.weRendererDownloading) return;
         const confirmed = typeof showConfirmDialog === 'function'
-          ? await showConfirmDialog('下载场景渲染器', '场景壁纸需要额外的渲染组件（约 314MB）。是否现在下载并安装？', '下载', '取消')
+          ? await showConfirmDialog('下载场景渲染器', '场景壁纸需要额外的渲染组件（约 104MB）。是否现在下载并安装？', '下载', '取消')
           : true;
         if (!confirmed) return;
         st.weRendererDownloading = true;
@@ -357,7 +359,7 @@
                 <span>场景壁纸渲染组件：
                   <span v-if="state.weRendererInstalled === null">检测中...</span>
                   <span v-else-if="state.weRendererInstalled" style="color:var(--success,#3dd68c);">已安装</span>
-                  <span v-else>未安装（约 314MB）</span>
+                  <span v-else>未安装（约 104MB）</span>
                 </span>
                 <button v-if="!state.weRendererInstalled && state.weRendererInstalled !== null" class="btn btn-primary btn-sm" :disabled="state.weRendererDownloading" @click="downloadRenderer">
                   {{ state.weRendererDownloading ? '下载中...' : '下载组件' }}
@@ -457,6 +459,12 @@
       },
       onLiquidChange(enabled) {
         if (typeof applyLiquidGlassEffectValue === 'function') applyLiquidGlassEffectValue(enabled);
+      },
+      onSidebarLabelsChange(enabled) {
+        if (typeof applySidebarLabelsValue === 'function') applySidebarLabelsValue(enabled);
+      },
+      onSidebarPinChange(enabled) {
+        if (typeof applySidebarPinValue === 'function') applySidebarPinValue(enabled);
       }
     },
     template: `
@@ -476,6 +484,20 @@
               </label>
               <span class="form-hint">更通透鲜艳的水晶质感，仅作用于标题栏、侧边栏、卡片、弹窗等重要区域</span>
             </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-sidebar-labels" :checked="state.sidebarLabels" @change="onSidebarLabelsChange($event.target.checked)">
+                <span>侧边栏按钮显示名称</span>
+              </label>
+              <span class="form-hint">在侧边栏导航按钮底部显示页面名称，默认关闭</span>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-sidebar-pin" :checked="state.sidebarPin" @change="onSidebarPinChange($event.target.checked)">
+                <span>侧边栏单点不自动回收</span>
+              </label>
+              <span class="form-hint">开启后点击侧边栏导航不会自动收起，可手动点关闭按钮或遮罩收起，默认关闭</span>
+            </div>
           </div>
   `
   };
@@ -484,6 +506,9 @@
 
   const PageSettingsPersonalize = {
     name: 'PageSettingsPersonalize',
+    data() {
+      return { resettingHome: false };
+    },
     components: {
       ThemeAppearanceCard: ThemeAppearanceCard,
       BackgroundCard: BackgroundCard,
@@ -497,6 +522,13 @@
             <theme-appearance-card></theme-appearance-card>
             <background-card></background-card>
             <visual-effects-card></visual-effects-card>
+            <div class="card">
+              <h3>主页布局</h3>
+              <p class="form-hint" style="color:#6b7280;font-size:13px;margin:0 0 12px;">恢复主页控件（软件名 / 头像 / 版本卡 / 启动按钮 / 存档坞）的默认位置与头像缩放</p>
+              <button class="btn btn-secondary" @click="resetHomeLayout" :disabled="resettingHome">
+                {{ resettingHome ? '已恢复' : '恢复主页默认布局' }}
+              </button>
+            </div>
             <div class="form-actions">
               <button class="btn btn-primary" @click="save">保存设置</button>
               <button class="btn btn-secondary" @click="reset">重置默认</button>
@@ -515,6 +547,16 @@
       },
       reset() {
         if (typeof resetPersonalizeSettings === 'function') resetPersonalizeSettings();
+      },
+      resetHomeLayout() {
+        if (this.resettingHome) return;
+        try { localStorage.removeItem('versepc_home_layout_v1'); } catch (e) {}
+        // 通知主页立即回到默认布局（主页为常驻挂载，不会自动重读存储）
+        window.dispatchEvent(new CustomEvent('versepc-home-layout-reset'));
+        this.resettingHome = true;
+        if (typeof showToast === 'function') showToast('主页布局已恢复默认', 'success');
+        const self = this;
+        setTimeout(function () { self.resettingHome = false; }, 1500);
       }
     }
   };
