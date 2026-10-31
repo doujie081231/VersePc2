@@ -77,6 +77,21 @@ describe('CustomSelect 基础行为', () => {
     expect(items[2].querySelector('.custom-select-option-icon').innerHTML).toBe('<b>N</b>');
   });
 
+  it('setOptions 后 setValue 会更新触发器文字与选中态', () => {
+    buildWrapper();
+    const select = create();
+    select.setOptions(OPTIONS);
+
+    select.setValue('forge');
+
+    const value = document.querySelector('.custom-select-value');
+    expect(value.textContent).toBe('Forge');
+    expect(value.classList.contains('placeholder')).toBe(false);
+    expect(select.getValue()).toBe('forge');
+    const selected = document.querySelector('.custom-select-option.selected');
+    expect(selected?.dataset.value).toBe('forge');
+  });
+
   it('点击选项更新值并回调 onChange', () => {
     buildWrapper();
     const onChange = vi.fn();

@@ -77,7 +77,7 @@ const PageServerHost = {
         <div class="sh-create-actions">
           <VButton variant="accent" id="server-host-create-btn" @click="serverHostCreate()">创建并准备服务端</VButton>
           <VButton variant="ghost" id="server-host-cancel-btn" @click="serverHostCancelCreate()">取消创建</VButton>
-          <VButton variant="ghost" @click="serverHostRefreshVersions()">刷新版本</VButton>
+          <VButton variant="ghost" @click="serverHostRefreshVersions(true)">刷新版本</VButton>
         </div>
 
         <div class="sh-progress" id="server-host-progress" aria-hidden="true">
