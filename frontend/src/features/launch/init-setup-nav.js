@@ -4,9 +4,10 @@ import { closeSidebarPanel as closeSidebarPanel } from '../settings/window-theme
 import { handleLaunch as handleLaunch } from './launch.js';
 import { CustomSelect as CustomSelect } from '../misc/custom-select.js';
 import { showToast as showToast } from '../misc/ui-components.js';
-import { loadVersions as loadVersions, renderHomeCurrentVersionCard as renderHomeCurrentVersionCard, renderVersions as renderVersions } from '../versions/versions-list.js';
-import { navigateToPage as navigateToPage } from '../../core/navigation.js';
+import { loadResourcePage as loadResourcePage } from '../mods/resource.js';
+import { loadVersions as loadVersions, renderHomeCurrentVersionCard as renderHomeCurrentVersionCard, renderVersions as renderVersions, navigateToPage as navigateToPage, loadModLoaderVersions as loadModLoaderVersions } from '../versions/versions.js';
 import { appState as appState } from '../../core/app-state.js';
+import { resetBedrockCache } from '../versions/versions-bedrock.js';
 
 function setupNavigation() {
   // 完成导航后收起悬浮胶囊（安卓抽屉式：选中即收起）
@@ -68,13 +69,11 @@ function setupTabs() {
       parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
 
-      if (tab === 'release' || tab === 'snapshot' || tab === 'special' || tab === 'old' || tab === 'installed') {
+      if (tab === 'release' || tab === 'snapshot' || tab === 'special' || tab === 'old' || tab === 'installed' || tab === 'bedrock') {
         appState.currentVersionTab = tab;
         renderVersions();
       } else if (tab === 'browse-modpacks') {
-        import('../mods/resource.js')
-          .then((m) => m.loadResourcePage('modpack'))
-          .catch((e) => console.error('[setup] 资源页模块加载失败:', e));
+        loadResourcePage('modpack');
       }
     });
   });
@@ -84,9 +83,7 @@ function setupTabs() {
       document.querySelectorAll('.loader-type-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       appState.currentLoaderType = btn.dataset.loader;
-      import('../versions/versions-loaders.js')
-        .then((m) => m.loadModLoaderVersions())
-        .catch((e) => console.error('[setup] 加载器模块加载失败:', e));
+      loadModLoaderVersions();
     });
   });
 }
@@ -129,6 +126,7 @@ function setupLaunchBar() {
   const refreshBtn = document.getElementById('refresh-versions-btn');
   if (refreshBtn) refreshBtn.addEventListener('click', async () => {
     showToast('正在刷新版本列表...', 'info');
+    resetBedrockCache();
     await loadVersions(true);
     showToast('版本列表已刷新', 'success');
   });

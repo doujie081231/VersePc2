@@ -3,18 +3,15 @@ import { API as API } from '../../core/api.js';
 import { bridge as bridge } from '../../core/tauri-bridge.js';
 import { escapeHtml as escapeHtml, formatDate as formatDate } from '../../core/utils.js';
 import { showToast as showToast, getVersionTypeLabel as getVersionTypeLabel } from '../misc/ui-components.js';
-import { updateHomeStats as updateHomeStats } from './home-stats.js';
+import { populateModVersionFilter as populateModVersionFilter } from '../mods/mod-browse.js';
+import { updateHomeStats as updateHomeStats } from '../settings/window-theme.js';
 import { appState as appState } from '../../core/app-state.js';
 import { isPinned as isPinned, PIN_ICONS as PIN_ICONS } from './pinned-store.js';
 import { actionAttrs as actionAttrs, actionAttrsStop as actionAttrsStop } from '../../core/actions.js';
 import { getVersionCardStyle as getVersionCardStyle } from './version-card-utils.js';
-import { versionsState as S, getSelectedFolder } from './versions-state.js';
-import { requestLazyLoad } from '../../core/lazy-loaders.js';
-
-// 模组页签的版本筛选器由模组模块负责填充，此处按需触发，避免拖进启动包
-function refreshModVersionFilter() {
-  requestLazyLoad('mods:populate-version-filter');
-}
+import { versionsState as S } from './versions-state.js';
+import { getSelectedFolder } from './versions-external.js';
+import { renderBedrockVersions } from './versions-bedrock.js';
 
 async function loadVersions(forceRefresh = false) {
   if (!forceRefresh && S._versionsLoadTime > 0 &&
@@ -35,7 +32,7 @@ async function loadVersions(forceRefresh = false) {
     await updateVersionSelects();
     renderVersions();
     updateHomeStats();
-    refreshModVersionFilter();
+    populateModVersionFilter();
   } catch (e) {
     console.error('[Versions] Load failed:', e.message);
     S.versionsLoadFailed = true;
@@ -57,7 +54,7 @@ async function loadVersions(forceRefresh = false) {
           </svg> 重试
         </button>`;
     }
-    refreshModVersionFilter();
+    populateModVersionFilter();
 
     if (!forceRefresh && !S.versionsRetryTimer) {
       S.versionsRetryTimer = setTimeout(() => {
@@ -100,7 +97,10 @@ async function updateVersionSelects() {
     let baseName = v.isExternal ? v.id.replace(/ \[外部\d*\]/, '') : v.id;
     let text = customName || baseName;
     let subtext = customName ? baseName : '';
-    if (v.isModpack) { text += ` [${v.modpackLoader || '整合包'}]`; subtext = (subtext ? subtext + ' · ' : '') + (v.modpackLoader || '整合包'); }
+    const platformTag = v.isBedrock ? '[基岩]' : '[Java]';
+    text = `${platformTag} ${text}`;
+    if (v.isBedrock) { subtext = (subtext ? subtext + ' · ' : '') + '基岩版'; }
+    else if (v.isModpack) { text += ` [${v.modpackLoader || '整合包'}]`; subtext = (subtext ? subtext + ' · ' : '') + (v.modpackLoader || '整合包'); }
     else if (v.isFabric) { text += ' [Fabric]'; subtext = (subtext ? subtext + ' · ' : '') + 'Fabric Loader'; }
     else if (v.isForge) { text += ' [Forge]'; subtext = (subtext ? subtext + ' · ' : '') + 'Forge'; }
     else if (v.isNeoForge) { text += ' [NeoForge]'; subtext = (subtext ? subtext + ' · ' : '') + 'NeoForge'; }
@@ -164,7 +164,8 @@ function renderHomeCurrentVersionCard() {
   const iconDataAttrs = `data-vi-id="${escapeHtml(v.id)}" data-vi-type="release" data-vi-forge="${v.isForge ? '1' : '0'}" data-vi-fabric="${v.isFabric ? '1' : '0'}" data-vi-neoforge="${v.isNeoForge ? '1' : '0'}" data-vi-modpack="${v.isModpack ? '1' : '0'}" data-vi-extdir="${v.externalVersionDir ? escapeHtml(v.externalVersionDir) : ''}"`;
 
   let badge = '原版', badgeClass = '';
-  if (v.isModpack) { badge = v.modpackLoader || '整合包'; badgeClass = 'modpack'; }
+  if (v.isBedrock) { badge = '基岩版'; badgeClass = 'bedrock'; }
+  else if (v.isModpack) { badge = v.modpackLoader || '整合包'; badgeClass = 'modpack'; }
   else if (v.isFabric) { badge = 'Fabric'; badgeClass = 'fabric'; }
   else if (v.isForge) { badge = 'Forge'; badgeClass = 'forge'; }
   else if (v.isNeoForge) { badge = 'NeoForge'; badgeClass = 'forge'; }
@@ -265,7 +266,7 @@ function renderInstalledVersionsInto(container) {
   const renderVersionItem = (v) => {
     const iconClass = v.type === 'snapshot' ? 'snapshot' : v.type === 'special' ? 'special' : 'installed';
     const iconDataAttrs = `data-vi-id="${escapeHtml(v.id)}" data-vi-type="${v.type || 'release'}" data-vi-forge="${v.isForge ? '1' : '0'}" data-vi-fabric="${v.isFabric ? '1' : '0'}" data-vi-neoforge="${v.isNeoForge ? '1' : '0'}" data-vi-modpack="${v.isModpack ? '1' : '0'}" data-vi-extdir="${v.externalVersionDir ? escapeHtml(v.externalVersionDir) : ''}"`;
-    const externalBadgeHtml = v.isExternal ? '<span style="display:inline-block;background:color-mix(in srgb, var(--orange) 15%, transparent);color:var(--orange);font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px">外部文件夹</span>' : '';
+    const externalBadgeHtml = v.isExternal ? '<span style="display:inline-block;background:rgba(255,165,0,0.15);color:#ffa500;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px">外部文件夹</span>' : '';
     const externalPathHtml = v.isExternal && v.externalPath ? `<span style="color:var(--text-muted);font-size:11px;margin-left:4px" title="${escapeHtml(v.externalPath)}">${escapeHtml(v.externalPath)}</span>` : '';
     const displayName = v.isExternal ? (v.customName || v.id.replace(/ \[外部\d*\]/, '')) : (v.customName || v.id);
     const deleteBtnHtml = `<button class="btn btn-danger btn-sm"${actionAttrsStop('deleteVersion', v.id)}>${v.isExternal ? '移除' : '删除'}</button>`;
@@ -273,7 +274,7 @@ function renderInstalledVersionsInto(container) {
     const starBtnHtml = `<button class="pin-btn pin-btn-star${isPinned('version', v.id) ? ' active' : ''}"
       title="${isPinned('version', v.id) ? '取消置顶' : '置顶版本'}"${actionAttrsStop('pinVersion', v.id, displayName, loaderText)}>
       ${PIN_ICONS.star}</button>`;
-    const settingsBtnHtml = `<button class="version-item-settings-btn" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置"${actionAttrsStop('openVersionSettings', v.id, displayName)}>
+    const settingsBtnHtml = v.isBedrock ? '' : `<button class="version-item-settings-btn" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置"${actionAttrsStop('openVersionSettings', v.id, displayName)}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
     </button>`;
     const selectedClass = appState.currentLaunchVersionId === v.id ? ' selected' : '';
@@ -301,6 +302,7 @@ function renderInstalledVersionsInto(container) {
   };
 
   const renderCardItem = (v) => {
+    const iconClass = v.type === 'snapshot' ? 'snapshot' : v.type === 'special' ? 'special' : 'installed';
     const iconDataAttrs = `data-vi-id="${escapeHtml(v.id)}" data-vi-type="${v.type || 'release'}" data-vi-forge="${v.isForge ? '1' : '0'}" data-vi-fabric="${v.isFabric ? '1' : '0'}" data-vi-neoforge="${v.isNeoForge ? '1' : '0'}" data-vi-modpack="${v.isModpack ? '1' : '0'}" data-vi-extdir="${v.externalVersionDir ? escapeHtml(v.externalVersionDir) : ''}"`;
     const displayName = v.isExternal ? (v.customName || v.id.replace(/ \[外部\d*\]/, '')) : (v.customName || v.id);
     const loaderText = getVersionTypeLabel(v);
@@ -314,7 +316,7 @@ function renderInstalledVersionsInto(container) {
     const starBtnHtml = `<button class="pin-btn pin-btn-star${isPinned('version', v.id) ? ' active' : ''}"
       title="${isPinned('version', v.id) ? '取消置顶' : '置顶版本'}"${actionAttrsStop('pinVersion', v.id, displayName, loaderText)}>
       ${PIN_ICONS.star}</button>`;
-    const settingsBtnHtml = `<button class="pin-btn ver-dl-card-settings" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置"${actionAttrsStop('openVersionSettings', v.id, displayName)}>
+    const settingsBtnHtml = v.isBedrock ? '' : `<button class="pin-btn ver-dl-card-settings" data-version-id="${escapeHtml(v.id)}" data-custom-name="${escapeHtml(v.customName || '')}" title="版本设置"${actionAttrsStop('openVersionSettings', v.id, displayName)}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
     </button>`;
     const deleteBtnHtml = `<button class="ver-dl-card-del" title="${v.isExternal ? '移除' : '删除'}"${actionAttrsStop('deleteVersion', v.id)}>
@@ -443,6 +445,10 @@ function renderVersions() {
   if (!container) return;
   if (appState.currentVersionTab === 'installed') {
     renderInstalledVersionsInto(container);
+    return;
+  }
+  if (appState.currentVersionTab === 'bedrock') {
+    renderBedrockVersions(container);
     return;
   }
 
@@ -584,3 +590,5 @@ function _loadVersionIcons(container) {
 }
 
 export { loadVersions, retryLoadVersions, updateVersionSelects, renderHomeCurrentVersionCard, selectLaunchVersion, quickDeleteErrorVersion, toggleErrorVersions, renderInstalledVersionsInto, fetchVersionBanners, getVersionBannerUrl, syncVersionCardSwitches, toggleVersionCardStyle, renderVersions, _loadVersionIcons };
+
+document.addEventListener('versepc:bedrock-installed', () => { loadVersions(true); });
