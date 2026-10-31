@@ -880,7 +880,7 @@ pub(crate) async fn prefetch_installer_libraries(
     let mut handled = 0usize;
     for (name, path, url, sha1, size) in &libs {
         let dest = libs_dir.join(path);
-        match crate::download::single::download_with_mirror(
+        let internal_err = match crate::download::single::download_with_mirror(
             url,
             &dest,
             sha1.as_deref(),
@@ -891,11 +891,38 @@ pub(crate) async fn prefetch_installer_libraries(
         )
         .await
         {
-            Ok(()) => handled += 1,
-            Err(e) => {
-                return Err(format!("{} 支持库下载失败: {} ({})", label, name, e));
+            Ok(()) => {
+                handled += 1;
+                continue;
             }
+            Err(e) => e,
+        };
+        // 与 PCL 一致：程序内下载失败时改用系统 curl 再试一次官方源，
+        // 覆盖 reqwest 连不上/被代理拦截、但系统网络可用的环境（反馈中的 404 多半来自
+        // 最后一个 Maven 公共镜像，真正可用的 Forge 官方源没有被系统网络验证过）。
+        let sha_ok = |path: &Path, expected: Option<&str>| -> bool {
+            match expected {
+                Some(sha) if !sha.is_empty() => crate::mods::jar::compute_sha1_file(path)
+                    .map(|h| h.eq_ignore_ascii_case(sha))
+                    .unwrap_or(false),
+                _ => true,
+            }
+        };
+        if download_with_curl(url, &dest, 300).await.is_ok() && sha_ok(&dest, sha1.as_deref()) {
+            handled += 1;
+            continue;
         }
+        if let Some(mirror) = crate::download::mirror::to_mirror_url(url)
+            && mirror != *url
+            && download_with_curl(&mirror, &dest, 300).await.is_ok()
+            && sha_ok(&dest, sha1.as_deref()) {
+                handled += 1;
+                continue;
+            }
+        return Err(format!(
+            "{} 支持库下载失败: {}（程序内: {}；系统 curl 也无法下载或校验失败）",
+            label, name, internal_err
+        ));
     }
     Ok(handled)
 }
