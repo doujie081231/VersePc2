@@ -397,7 +397,7 @@ describe('initSkinViewer', () => {
     });
   });
 
-  it('使用解析出的模型创建查看器并挂载画布', async () => {
+  it('使用解析出的模型创建查看器并挂载画布，模型按纹理自动识别', async () => {
     const container = addSkinViewerContainer();
     S._currentDetailAccount = { username: 'Steve', skinModel: 'default' };
 
@@ -405,7 +405,7 @@ describe('initSkinViewer', () => {
 
     const viewer = MockSkinViewer.instance;
     expect(viewer.options.skin).toBe('data:image/png;base64,abc');
-    expect(viewer.options.model).toBe('default');
+    expect(viewer.options.model).toBe('auto-detect');
     expect(viewer.options.width).toBe(800);
     expect(viewer.canvas.parentElement).toBe(container);
     expect(viewer.zoom).toBe(0.85);
@@ -422,7 +422,7 @@ describe('initSkinViewer', () => {
     await mod.initSkinViewer('', '');
 
     expect(MockSkinViewer.instance.options.skin).toBe('img/skin_alex.png');
-    expect(MockSkinViewer.instance.options.model).toBe('slim');
+    expect(MockSkinViewer.instance.options.model).toBe('auto-detect');
   });
 
   it('查看器初始化失败时展示失败提示', async () => {

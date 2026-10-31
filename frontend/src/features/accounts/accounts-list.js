@@ -576,11 +576,14 @@ async function initSkinViewer(skinUrl, resolvedModel) {
     const ch = container.clientHeight || 420;
     // 拿不到皮肤时用本地内置皮肤兜底，保证模型一定显示（离线账户无皮肤等）
     const finalSkinUrl = skinUrl || (skinModel === 'slim' ? 'img/skin_alex.png' : 'img/steve_skin.png');
+    // 模型交给 skinview3d 按皮肤纹理自动识别（与 PCL 的皮肤预览一致）：
+    // 外置登录/第三方皮肤的 account.skinModel 经常缺失或标成 default，
+    // 直接传 'default' 会把 Alex 细手臂皮肤渲染成 Steve 粗手臂。
     S._skinViewer = new skinview3d.SkinViewer({
       width: cw,
       height: ch,
       skin: finalSkinUrl,
-      model: skinModel
+      model: 'auto-detect'
     });
     container.appendChild(S._skinViewer.canvas);
     S._skinViewer.fov = 30;
