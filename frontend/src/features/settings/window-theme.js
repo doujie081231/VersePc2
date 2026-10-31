@@ -269,6 +269,21 @@ function setupWindowControls() {
       const width = parseInt(raw, 10);
       return Number.isFinite(width) && width > 0 ? width : 80;
     };
+    // 已安装版本页的返回按钮在左上角，与导航呼出热区重叠：鼠标停在返回按钮附近时
+    // 不呼出侧栏，否则探出的侧栏会盖住返回键导致点不到。
+    const isInstalledVersionsPage = () => {
+      const page = document.getElementById('page-installed-versions');
+      return !!(page && page.classList.contains('active'));
+    };
+    // 避让带取导航「主页」到「下载」两项的纵向范围，正好覆盖返回按钮所在高度
+    const inBackButtonGuard = (y) => {
+      const homeBtn = document.querySelector('.nav-btn[data-page="home"]');
+      const downloadBtn = document.querySelector('.nav-btn[data-page="versions"]');
+      if (!homeBtn || !downloadBtn) return false;
+      const top = homeBtn.getBoundingClientRect().top;
+      const bottom = downloadBtn.getBoundingClientRect().bottom;
+      return y >= top && y <= bottom;
+    };
     document.addEventListener('mousemove', (e) => {
       if (!isClassicNav() || !canPeek()) {
         peekSuppressed = false;
@@ -279,6 +294,12 @@ function setupWindowControls() {
       if (e.clientX > navWidth) {
         peekSuppressed = false;
         if (!peekTimer) schedulePeekHide(80);
+        return;
+      }
+      // 已安装版本页返回按钮避让带：不呼出；已探出时保持显示，避免鼠标移到
+      //「主页」「下载」时侧栏反被收回
+      if (isInstalledVersionsPage() && inBackButtonGuard(e.clientY)) {
+        if (document.body.classList.contains(CLASSIC_PEEK)) cancelPeekHide();
         return;
       }
       // 仍处于刚收起时的抑制期：鼠标未离开判定区前不呼出

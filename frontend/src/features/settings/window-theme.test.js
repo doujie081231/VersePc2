@@ -311,6 +311,61 @@ describe('setupWindowControls', () => {
     vi.useRealTimers();
   });
 
+  // 已安装版本页的返回按钮落在导航呼出热区里：探出的侧栏会盖住返回键
+  function mountBackButtonPage(active = true) {
+    document.body.insertAdjacentHTML('beforeend', `<div id="page-installed-versions" class="page${active ? ' active' : ''}"></div>`);
+    const home = document.createElement('button');
+    home.className = 'nav-btn';
+    home.dataset.page = 'home';
+    home.getBoundingClientRect = () => ({ top: 56, bottom: 112 });
+    const download = document.createElement('button');
+    download.className = 'nav-btn';
+    download.dataset.page = 'versions';
+    download.getBoundingClientRect = () => ({ top: 114, bottom: 170 });
+    document.body.append(home, download);
+  }
+
+  it('已安装版本页返回按钮区域不呼出导航栏，已探出时保持显示', () => {
+    vi.useFakeTimers();
+    document.body.classList.add('classic-nav', 'classic-sidebar-collapsed');
+    mountBackButtonPage(true);
+    mod.setupWindowControls();
+
+    // 返回按钮中心（约 y=94）落在「主页」项高度内：不呼出
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 48, clientY: 94 }));
+    expect(document.body.classList.contains('classic-sidebar-peek')).toBe(false);
+
+    // 「下载」项高度内同样不呼出
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 48, clientY: 150 }));
+    expect(document.body.classList.contains('classic-sidebar-peek')).toBe(false);
+
+    // 避让带下方恢复呼出，避免整条左侧热区失效
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 48, clientY: 220 }));
+    expect(document.body.classList.contains('classic-sidebar-peek')).toBe(true);
+
+    // 已探出后移到「主页」项：保持显示，否则导航项点不到
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 48, clientY: 94 }));
+    vi.advanceTimersByTime(200);
+    expect(document.body.classList.contains('classic-sidebar-peek')).toBe(true);
+
+    // 离开左侧判定区后仍正常收回
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 400, clientY: 94 }));
+    vi.advanceTimersByTime(100);
+    expect(document.body.classList.contains('classic-sidebar-peek')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('其他页面返回按钮同一位置仍正常呼出导航栏', () => {
+    vi.useFakeTimers();
+    document.body.classList.add('classic-nav', 'classic-sidebar-collapsed');
+    mountBackButtonPage(false);
+    mod.setupWindowControls();
+
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 48, clientY: 94 }));
+    expect(document.body.classList.contains('classic-sidebar-peek')).toBe(true);
+    vi.useRealTimers();
+  });
+
   it('侧栏按钮在简约模式切换展开', () => {
     mod.setupWindowControls();
     document.getElementById('sidebar-toggle-btn').click();
