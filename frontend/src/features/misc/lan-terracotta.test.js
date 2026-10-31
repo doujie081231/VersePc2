@@ -37,7 +37,7 @@ function buildDom() {
     </div>
     <div id="terracotta-hint"></div>
     <div id="terracotta-roomcode">--</div>
-    <div id="terracotta-connect-addr">等待分配...</div>
+    <div id="terracotta-connect-row"><div id="terracotta-connect-addr">等待分配...</div></div>
     <div id="terracotta-onboarding">
       <div id="terracotta-ob-dl"></div>
       <div id="terracotta-ob-spinner" style="display:none"></div>
@@ -717,6 +717,26 @@ describe('terracottaStartPolling', () => {
 
     expect(document.getElementById('terracotta-roomcode').textContent).toBe('OBJ-7');
     expect(document.getElementById('terracotta-hint').textContent).toBe('将房间码发送给朋友即可联机');
+  });
+
+  it('有虚拟 IP 时显示连接地址，没有时隐藏整行', async () => {
+    S.terracottaState = { mode: 'host', connected: true };
+    mockApiRoute('/api/easytier/status', {
+      running: true,
+      stateIndex: 4,
+      virtualIP: '10.0.0.2',
+      gamePort: 25565,
+      state: { state: 'host-ok', room: 'ROOM-1' },
+    });
+
+    mod.terracottaStartPolling();
+    await settle();
+
+    expect(document.getElementById('terracotta-connect-addr').textContent).toBe('10.0.0.2:25565');
+    expect(document.getElementById('terracotta-connect-row').style.display).toBe('');
+
+    mod.terracottaBackToHome();
+    expect(document.getElementById('terracotta-connect-row').style.display).toBe('none');
   });
 
   it('主机异常展示错误提示', async () => {

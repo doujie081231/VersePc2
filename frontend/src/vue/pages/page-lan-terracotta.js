@@ -124,7 +124,7 @@ const PageLanTerracotta = {
                   <span class="terracotta-info-value" id="terracotta-roomcode">--</span>
                   <button class="terracotta-copy-btn" @click="terracottaCopyRoomCode()" title="复制房间码">复制</button>
                 </div>
-                <div class="terracotta-info-row">
+                <div class="terracotta-info-row" id="terracotta-connect-row" style="display:none">
                   <span class="terracotta-info-label">连接地址</span>
                   <span class="terracotta-info-value" id="terracotta-connect-addr">--</span>
                   <button class="terracotta-copy-btn" @click="terracottaCopyAddr()" title="复制连接地址">复制</button>

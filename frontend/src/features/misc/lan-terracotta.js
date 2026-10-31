@@ -154,6 +154,10 @@ function terracottaBackToHome() {
     document.getElementById('terracotta-join-panel').style.display = 'none';
     document.getElementById('terracotta-hint').style.display = 'none';
     document.getElementById('terracotta-home').style.display = '';
+    const connectRow = document.getElementById('terracotta-connect-row');
+    const connectAddr = document.getElementById('terracotta-connect-addr');
+    if (connectRow) connectRow.style.display = 'none';
+    if (connectAddr) connectAddr.textContent = '--';
     updateTerracottaStatus('未连接', '启动游戏后可创建房间或加入房间', 'disconnected');
     S.terracottaState = { mode: null, connected: false };
 }
@@ -381,6 +385,17 @@ function terracottaStartPolling() {
                     const roomObj = state.room;
                     const roomCode = (typeof roomObj === 'object' && roomObj !== null) ? (roomObj.code || '') : (roomObj || result.roomCode || '');
                     document.getElementById('terracotta-roomcode').textContent = roomCode;
+
+                    // Terracotta 主机的“连接地址”来自内核下发的虚拟 IP + 游戏端口；
+                    // 只有拿到地址时才显示这一行，避免一直显示“--”造成“连接地址不可用”的误解。
+                    const virtualIp = result.virtualIP || state.virtualIP || '';
+                    const gamePort = result.gamePort || state.gamePort || '';
+                    const connectAddr = virtualIp && gamePort ? `${virtualIp}:${gamePort}` : '';
+                    const connectRow = document.getElementById('terracotta-connect-row');
+                    const connectAddrEl = document.getElementById('terracotta-connect-addr');
+                    if (connectAddrEl) connectAddrEl.textContent = connectAddr || '--';
+                    if (connectRow) connectRow.style.display = connectAddr ? '' : 'none';
+
                     const profileText = profiles.length > 0 ? ` (${profiles.length}人已连接)` : '';
                     document.getElementById('terracotta-hint').textContent = '将房间码发送给朋友即可联机' + profileText;
                     document.getElementById('terracotta-hint').style.display = '';
