@@ -729,6 +729,87 @@ mod tests {
         let (min, _) = get_java_version_range_from_json("26.2", &version_json);
         assert_eq!(min, 25, "26.2 应要求 Java 25，实际 min={}", min);
     }
+
+    /// 重命名整合包（香草纪元-2.7.1）携带 Forge 1.20.1-47.3.33：
+    /// 不能把整合包版本 2.7.1 当成 MC 2.7.1，也不能因为 id 里没有 forge 就允许 Java 25
+    #[test]
+    fn java_range_for_renamed_forge_modpack_is_17_to_21() {
+        let version_json = json!({
+            "id": "香草纪元-2.7.1",
+            "mainClass": "cpw.mods.bootstraplauncher.BootstrapLauncher",
+            "libraries": [
+                { "name": "net.minecraftforge:forge:1.20.1-47.3.33" },
+                { "name": "net.minecraftforge:fmlloader:1.20.1-47.3.33" }
+            ]
+        });
+        let (min, max) = get_java_version_range_from_json("香草纪元-2.7.1", &version_json);
+        assert_eq!(min, 17, "Forge 1.20.1 下限应为 Java 17，实际 min={}", min);
+        assert_eq!(max, 21, "Forge 1.20.1 上限应为 Java 21，实际 max={}", max);
+    }
+
+    /// 1.16.5 整合包（1.16.5-jojo）Forge 36.2.42：上限 Java 23，避免选中 Java 25
+    #[test]
+    fn java_range_for_forge_1_16_5_36_2_42_is_8_to_23() {
+        let version_json = json!({
+            "id": "1.16.5-jojo",
+            "libraries": [
+                { "name": "net.minecraftforge:forge:1.16.5-36.2.42" }
+            ]
+        });
+        let (min, max) = get_java_version_range_from_json("1.16.5-jojo", &version_json);
+        assert_eq!(min, 8);
+        assert_eq!(max, 23, "Forge 36.2.42 上限应为 Java 23，实际 max={}", max);
+    }
+
+    /// Forge 36.2.25 及更早的 1.16.5 版本最高 Java 8
+    #[test]
+    fn java_range_for_forge_36_2_25_is_java_8() {
+        let version_json = json!({
+            "id": "1.16.5-forge-36.2.25",
+            "libraries": [
+                { "name": "net.minecraftforge:forge:1.16.5-36.2.25" }
+            ]
+        });
+        let (min, max) = get_java_version_range_from_json("1.16.5-forge-36.2.25", &version_json);
+        assert_eq!(min, 8);
+        assert_eq!(max, 8, "Forge 36.2.25 最高应为 Java 8，实际 max={}", max);
+    }
+
+    /// NeoForge 1.20.1 最高 Java 21
+    #[test]
+    fn java_range_for_neoforge_1_20_1_is_max_21() {
+        let version_json = json!({
+            "id": "1.20.1-neoforge-47.1.106",
+            "libraries": [
+                { "name": "net.neoforged:neoforge:47.1.106" }
+            ]
+        });
+        let (min, max) = get_java_version_range_from_json("1.20.1-neoforge-47.1.106", &version_json);
+        assert_eq!(min, 17);
+        assert_eq!(max, 21, "NeoForge 1.20.1 上限应为 Java 21，实际 max={}", max);
+    }
+
+    /// Fabric Loader 0.16.x 最高 Java 24
+    #[test]
+    fn java_range_for_old_fabric_loader_is_max_24() {
+        let version_json = json!({
+            "id": "1.20.1-fabric-0.16.14",
+            "libraries": [
+                { "name": "net.fabricmc:fabric-loader:0.16.14" }
+            ]
+        });
+        let (min, max) = get_java_version_range_from_json("1.20.1-fabric-0.16.14", &version_json);
+        assert_eq!(min, 17);
+        assert_eq!(max, 24, "Fabric 0.16.x 上限应为 Java 24，实际 max={}", max);
+    }
+
+    /// 没有加载器坐标时，不应把整合包版本 2.7.1 当成 MC 2.7.1
+    #[test]
+    fn extract_mc_version_rejects_modpack_version() {
+        assert_eq!(extract_mc_version("香草纪元-2.7.1"), "");
+        assert_eq!(extract_mc_version("1.20.1-Forge-47.3.33"), "1.20.1");
+        assert_eq!(extract_mc_version("26.2"), "26.2");
+    }
 }
 
 

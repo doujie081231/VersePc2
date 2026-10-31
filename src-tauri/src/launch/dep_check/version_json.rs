@@ -383,7 +383,159 @@ pub(crate) fn evaluate_rules(
     allowed.unwrap_or(!has_allow_rule)
 }
 
+/// 从版本 JSON 中识别到的加载器信息
+#[derive(Default)]
+struct LoaderInfo {
+    forge: Option<String>,
+    neoforge: Option<String>,
+    fabric: Option<String>,
+    optifine: bool,
+    liteloader: bool,
+    /// 加载器版本号自带的 MC 版本前缀（Forge/FML 的 "1.20.1-47.3.33"）
+    mc_version: String,
+}
+
+static FORGE_COORD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:net\.minecraftforge:(?:forge|fmlloader):|net/minecraftforge/(?:forge|fmlloader)/)([^/:\s]+)").unwrap()
+});
+static NEOFORGE_COORD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:net\.neoforged:(?:neoforge|fancymodloader):|net/neoforged/(?:neoforge|fancymodloader)/)([^/:\s]+)").unwrap()
+});
+static FABRIC_COORD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:net\.fabricmc:fabric-loader:|net/fabricmc/fabric-loader/)([^/:\s]+)").unwrap()
+});
+
+/// 是否为可信的 Minecraft 版本号：
+/// - 旧体系必须是 1.x（1.0 ~ 1.21 等）
+/// - 新体系从 26.x 开始；2.x ~ 19.x 不可能是 MC 版本，避免把整合包版本（如 2.7.1）误判成 MC 2.7.1
+fn is_plausible_mc_version(version: &str) -> bool {
+    let (major, minor, _) = parse_version_triple(version);
+    if major == 1 {
+        return minor <= 50;
+    }
+    major >= 20
+}
+
+/// 从加载器坐标里取出 MC 版本前缀与加载器自身版本
+/// 例如 Forge "1.16.5-36.2.42" → ("1.16.5", "36.2.42")
+fn split_forge_version(value: &str) -> (String, String) {
+    if let Some((mc, forge)) = value.split_once('-')
+        && is_plausible_mc_version(mc) {
+            return (mc.to_string(), forge.to_string());
+        }
+    (String::new(), value.to_string())
+}
+
+/// 从版本 JSON 的 libraries 中识别 Forge / NeoForge / Fabric / OptiFine / LiteLoader。
+/// 不能只依赖版本 id 或 inheritsFrom 里的 "forge" 字样：整合包重命名后（如“香草纪元-2.7.1”）
+/// 这些字样可能完全不存在，但 libraries 里仍有确定的加载器坐标。
+fn detect_loaders(version_json: &Value) -> LoaderInfo {
+    let mut info = LoaderInfo::default();
+    if let Some(libs) = version_json.get("libraries").and_then(|v| v.as_array()) {
+        for lib in libs {
+            let mut texts = Vec::new();
+            if let Some(name) = lib.get("name").and_then(|v| v.as_str()) {
+                texts.push(name.to_string());
+            }
+            if let Some(path) = lib.pointer("/downloads/artifact/path").and_then(|v| v.as_str()) {
+                texts.push(path.to_string());
+            }
+            if let Some(url) = lib.pointer("/downloads/artifact/url").and_then(|v| v.as_str()) {
+                texts.push(url.to_string());
+            }
+            for text in &texts {
+                let lower = text.to_lowercase();
+                if info.forge.is_none()
+                    && let Some(cap) = FORGE_COORD_RE.captures(text) {
+                        let raw = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+                        let (mc, forge) = split_forge_version(raw);
+                        if !mc.is_empty() && info.mc_version.is_empty() {
+                            info.mc_version = mc;
+                        }
+                        if !forge.is_empty() {
+                            info.forge = Some(forge);
+                        }
+                    }
+                if info.neoforge.is_none()
+                    && let Some(cap) = NEOFORGE_COORD_RE.captures(text)
+                    && let Some(ver) = cap.get(1) {
+                        info.neoforge = Some(ver.as_str().to_string());
+                    }
+                if info.fabric.is_none()
+                    && let Some(cap) = FABRIC_COORD_RE.captures(text)
+                    && let Some(ver) = cap.get(1) {
+                        info.fabric = Some(ver.as_str().to_string());
+                    }
+                if lower.contains("optifine") {
+                    info.optifine = true;
+                }
+                if lower.contains("liteloader") {
+                    info.liteloader = true;
+                }
+            }
+        }
+    }
+    // 兜底：libraries 缺失时仍可从 inheritsFrom / id 的 "forge-版本" 里识别
+    let inherited = utils::get_str(version_json, "inheritsFrom").to_lowercase();
+    let json_id = utils::get_str(version_json, "id").to_lowercase();
+    for text in [inherited, json_id] {
+        if info.forge.is_none()
+            && let Some(pos) = text.find("forge-") {
+                let forge = text[pos + "forge-".len()..]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                if !forge.is_empty() {
+                    info.mc_version = extract_mc_version(&text[..pos]);
+                    info.forge = Some(forge);
+                }
+            }
+        if info.neoforge.is_none()
+            && let Some(pos) = text.find("neoforge-") {
+                let ver = text[pos + "neoforge-".len()..]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                if !ver.is_empty() {
+                    info.neoforge = Some(ver);
+                }
+            }
+    }
+    info
+}
+
+/// 解析版本号为数字段，用于加载器版本区间比较
+fn version_numbers(value: &str) -> Vec<u64> {
+    value
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse::<u64>().ok())
+        .collect()
+}
+
+fn version_ge(a: &str, b: &str) -> bool {
+    let av = version_numbers(a);
+    let bv = version_numbers(b);
+    for i in 0..av.len().max(bv.len()) {
+        let x = av.get(i).copied().unwrap_or(0);
+        let y = bv.get(i).copied().unwrap_or(0);
+        if x != y {
+            return x > y;
+        }
+    }
+    true
+}
+
+fn version_lt(a: &str, b: &str) -> bool {
+    !version_ge(a, b)
+}
+
 /// 获取 Java 主版本范围（综合 JSON 声明、MC 版本、加载器约束）
+///
+/// 加载器规则对齐 PCL：Forge 只按“Forge 自身版本区间 + MC 版本”限制上限，
+/// 不能靠版本 id 是否包含 "forge" 决定，否则重命名整合包会误选过高 Java。
 pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &Value) -> (u32, u32) {
     let mut min: u32 = 8;
     let mut max: u32 = 999;
@@ -406,9 +558,12 @@ pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &
             }
         }
 
-    // 2. 解析基础 MC 版本：优先 inheritsFrom，其次版本 id / version_id
+    // 2. 解析基础 MC 版本：加载器坐标最可靠，其次 inheritsFrom，最后版本 id / version_id
+    let loaders = detect_loaders(version_json);
     let inherits_from = utils::get_str(version_json, "inheritsFrom");
-    let base_mc = if !inherits_from.is_empty() {
+    let base_mc = if !loaders.mc_version.is_empty() {
+        loaders.mc_version.clone()
+    } else if !inherits_from.is_empty() {
         extract_mc_version(&inherits_from)
     } else {
         let id = utils::get_str(version_json, "id");
@@ -416,6 +571,7 @@ pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &
         extract_mc_version(&from_id)
     };
     let (major, minor, patch) = parse_version_triple(&base_mc);
+    let is_old_mc = major == 1 && minor <= 12;
 
     // 3. 按 MC 版本设定 Java 下限
     if major >= 2 {
@@ -429,29 +585,52 @@ pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &
         min = min.max(16); // 1.17 → Java 16
     }
 
-    // 4. Forge / NeoForge 且 MC ≤1.12.2：必须 Java 8（launchwrapper 与 Java 9+ 不兼容）
-    let version_id_lower = version_id.to_lowercase();
-    let inherits_lower = inherits_from.to_lowercase();
-    let is_neo = inherits_lower.contains("neoforge") || inherits_lower.contains("neoforged")
-        || version_json.to_string().to_lowercase().contains("neoforged");
-    let is_forge = (version_id_lower.contains("forge")
-        || inherits_lower.contains("forge")
-        || version_json.to_string().to_lowercase().contains("minecraftforge"))
-        && !is_neo;
-    if is_forge && (major == 1 && minor <= 12) {
-        min = min.max(8);
+    // 4. Forge：按 PCL 的 Forge 版本区间限制，而不是猜测版本 id
+    if let Some(forge) = &loaders.forge {
+        if is_old_mc || base_mc.is_empty() {
+            // <=1.12 / 非标准版本：Forge launchwrapper 只兼容 Java 8
+            max = max.min(8);
+        } else if major == 1 && minor <= 14 {
+            max = max.min(10); // 1.13 - 1.14
+        } else if major == 1 && minor == 15 {
+            max = max.min(15); // 1.15
+        } else if version_ge(forge, "34.0.0") && version_ge("36.2.25", forge) {
+            max = max.min(8); // 1.16.3 ~ 1.16.5，Forge 34.0.0 ~ 36.2.25
+        } else if version_ge(forge, "36.2.26") && version_lt(forge, "37.0.0") {
+            max = max.min(23); // 1.16.5，Forge 36.2.26+
+        } else if version_ge(forge, "37.0.0") && version_ge("37.0.79", forge) {
+            max = max.min(16); // 1.17.1
+        } else if version_ge(forge, "45.0.21") && version_ge("45.0.65", forge) {
+            max = max.min(19); // 1.19.4
+        } else if version_ge(forge, "45.0.66") && version_ge("47.4.8", forge) {
+            max = max.min(21); // 1.19.4 ~ 1.20.1
+        }
+    }
+
+    // 5. NeoForge：1.20.1 与 1.20.2 早期版本最高 Java 21
+    if let Some(neo) = &loaders.neoforge
+        && ((major == 1 && minor == 20 && patch == 1)
+            || !version_ge(neo, "20.2.63-beta")) {
+            max = max.min(21);
+        }
+
+    // 6. Fabric Loader 0.16.x 及更早版本的 Mixin/ASM 不兼容 Java 25
+    if let Some(fabric) = &loaders.fabric
+        && version_lt(fabric, "0.17.0") {
+            max = max.min(24);
+        }
+
+    // 7. OptiFine / LiteLoader
+    if loaders.optifine
+        && major == 1
+        && (minor < 7 || (8..=12).contains(&minor)) {
+            max = max.min(8);
+        }
+    if loaders.liteloader {
         max = max.min(8);
     }
 
-    // 5. Forge 1.18-1.20.4：官方推荐 Java 17，最高兼容到 Java 21。
-    //    Java 22+ 会触发 modlauncher 模块导出冲突（如 "Modules ... and minecraft export
-    //    package ... to module fancymenu"）导致启动崩溃，因此把上限限制在 21，
-    //    避免误选过新的 Java。
-    if is_forge && (major == 1 && minor >= 18 && (minor < 20 || (minor == 20 && patch <= 4))) {
-        max = max.min(21);
-    }
-
-    // 6. launchwrapper 主类：与 Java 9+ 不兼容，强制最高 Java 8（最高优先级安全约束）
+    // 8. launchwrapper 主类：与 Java 9+ 不兼容，强制最高 Java 8（最高优先级安全约束）
     let main_class = utils::get_str(version_json, "mainClass").to_lowercase();
     if main_class == "net.minecraft.launchwrapper.launch" || main_class.contains("launchwrapper") {
         max = max.min(8);
@@ -463,14 +642,14 @@ pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &
     (min, max)
 }
 
-/// 从版本 ID 提取 Minecraft 版本号（如 "1.20.1-Forge-47.3.0" → "1.20.1"）
+/// 从版本 ID 提取 Minecraft 版本号（如 "1.20.1-Forge-47.3.0" → "1.20.1"）。
+/// 只接受可信 MC 版本，避免把整合包自身版本 2.7.1 当成 MC 2.7.1。
 pub(crate) fn extract_mc_version(version_id: &str) -> String {
-    for part in version_id.split('-') {
-        let segs: Vec<&str> = part.split('.').collect();
-        if segs.len() >= 2
-            && segs[0].parse::<u32>().is_ok() && segs[1].parse::<u32>().is_ok() {
-                return part.to_string();
-            }
+    for part in version_id.split(['-', ' ', '_', '+', '(', ')']) {
+        let candidate = part.trim();
+        if is_plausible_mc_version(candidate) {
+            return candidate.to_string();
+        }
     }
     String::new()
 }

@@ -154,24 +154,21 @@ pub(crate) async fn install_mojang_runtime(
         }
         let expected_size = if file_size > 0 { Some(file_size) } else { None };
 
-        let url_official = file_url.to_string();
-        let url_mirror = crate::download::mirror::to_mirror_url(&url_official)
-            .filter(|m| m != &url_official)
-            .unwrap_or_else(|| url_official.clone());
-        let mut last_err = String::new();
-        let mut downloaded = false;
-        for url in &[url_official, url_mirror] {
-            match crate::download::download_single(
-                url, &dest, if file_sha1.is_empty() { None } else { Some(file_sha1) },
-                expected_size, 120,
-            ).await {
-                Ok(()) => { downloaded = true; break; }
-                Err(e) => { last_err = e; }
-            }
-        }
-        if !downloaded {
-            return Err(if last_err.is_empty() { format!("下载失败: {}", file_url) } else { last_err });
-        }
+        // 走镜像测速 + 3 轮 cache-buster 重试：Java 运行时由大量小文件组成，
+        // 单个镜像偶发限速/截断时直接判整次安装失败，容易出现“下载到一半失败”。
+        let download_source = crate::storage::load_settings()
+            .get("downloadSource")
+            .and_then(|v| v.as_str())
+            .unwrap_or("china-first")
+            .to_string();
+        crate::download::download_with_mirror_retry(
+            file_url,
+            &dest,
+            if file_sha1.is_empty() { None } else { Some(file_sha1) },
+            expected_size,
+            &download_source,
+            300,
+        ).await.map_err(|e| format!("下载失败 {}: {}", file_path, e))?;
         // Mojang manifest 用 executable 标记 bin/java 等可执行文件；
         // macOS/Linux 必须补上执行权限，否则运行时无法启动。
         if info.get("executable").and_then(|v| v.as_bool()).unwrap_or(false) {
