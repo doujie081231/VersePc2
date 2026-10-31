@@ -135,17 +135,34 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
 
     let version_id = utils::get_str(&settings, "selectedVersion");
     let versions_dir = data_dir.join("versions");
-    let version_dir = if !version_id.is_empty() {
-        versions_dir.join(&version_id)
+    // 外部版本必须定位到 external-folders.json 里的真实目录；
+    // 否则“打开模组/存档/日志目录”会错误打开启动器内部 data/versions/<id>。
+    let external_dir = if version_id.is_empty() {
+        None
     } else {
-        minecraft_dir.clone()
+        crate::versions::resolve_external_version_dir(&version_id)
+            .map(PathBuf::from)
     };
+    let version_dir = external_dir.clone().unwrap_or_else(|| {
+        if version_id.is_empty() {
+            minecraft_dir.clone()
+        } else {
+            versions_dir.join(&version_id)
+        }
+    });
+    // 外部版本目录结构为 <root>/versions/<id>，其父父目录即外部 Minecraft 根
+    let external_root = external_dir.as_ref().and_then(|p| {
+        p.parent().and_then(|versions| versions.parent()).map(|root| root.to_path_buf())
+    });
     eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={}",
         version_id, versions_dir.display(), version_dir.display());
 
     let path = match folder {
-        "minecraft" | "game" => minecraft_dir,
-        "versions" => versions_dir,
+        "minecraft" | "game" => external_root.clone().unwrap_or(minecraft_dir),
+        "versions" => external_root
+            .as_ref()
+            .map(|root| root.join("versions"))
+            .unwrap_or(versions_dir),
         "mods" => version_dir.join("mods"),
         "assets" => version_dir.join("assets"),
         "logs" => version_dir.join("logs"),
