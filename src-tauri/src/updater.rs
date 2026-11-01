@@ -437,8 +437,10 @@ pub fn pending_downloaded_path() -> Option<PathBuf> {
         .and_then(|s| s.downloaded_path.clone())
 }
 
-/// 用户关闭程序时调用：若已有下载完成的更新包，写入一次性"已更新"提示后执行替换退出。
+/// 用户关闭程序时调用：若已有下载完成的更新包，执行替换退出。
 /// 返回 true 表示已进入更新替换流程，调用方应跳过正常的关闭动画/关闭逻辑（进程由安装脚本负责退出并重启）。
+/// 安装脚本启动失败时返回 false，让调用方继续正常关闭——与 PCL 一致：
+/// 更新失败只记录错误，绝不把“关闭程序”一起卡住。
 pub fn auto_install_on_close(app: &tauri::AppHandle) -> bool {
     let Some(p) = pending_downloaded_path() else {
         return false;
@@ -446,10 +448,16 @@ pub fn auto_install_on_close(app: &tauri::AppHandle) -> bool {
     if !p.exists() {
         return false;
     }
+    // 先写一次性"已更新"提示：安装脚本要等本进程退出后才替换并启动新版本，
+    // 必须保证文件在退出前落盘；安装失败时再删掉，避免下次启动误报已更新
     if let Some(s) = UPDATE_STATE.lock().unwrap().as_ref() {
         write_pending_notice(&s.release.tag_ver, &s.release.body);
     }
-    let _ = install_and_restart(app, &p);
+    if let Err(e) = install_and_restart(app, &p) {
+        let _ = fs::remove_file(pending_notice_path());
+        log_download(&format!("[install] 关闭时安装更新失败，改为正常退出: {}", e));
+        return false;
+    }
     true
 }
 
@@ -466,11 +474,16 @@ pub async fn updater_install_update(app: AppHandle) -> Result<Value, String> {
     if !path.exists() {
         return Err("更新文件不存在，请重新下载".into());
     }
-    // 升级前写入一次性提示，重启启动时前端据此显示"软件已更新至 xxx 版本"
+    // 先写一次性"已更新"提示（重启启动时前端据此显示"软件已更新至 xxx 版本"），
+    // 安装脚本要等本进程退出后才执行，因此必须在退出前落盘
     if let Some(r) = &release {
         write_pending_notice(&r.tag_ver, &r.body);
     }
-    install_and_restart(&app, &path)?;
+    if let Err(e) = install_and_restart(&app, &path) {
+        // 安装未启动时删掉提示，避免下次启动误报已更新
+        let _ = fs::remove_file(pending_notice_path());
+        return Err(e);
+    }
     Ok(json!({ "success": true }))
 }
 

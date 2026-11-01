@@ -143,6 +143,14 @@ pub fn to_mirror_url(original: &str) -> Option<String> {
         original.replace("https://meta.fabricmc.net/", "https://bmclapi2.bangbang93.com/fabric-meta/")
     } else if original.starts_with("https://maven.minecraftforge.net/") {
         original.replace("https://maven.minecraftforge.net/", "https://bmclapi2.bangbang93.com/maven/")
+    } else if original.starts_with("https://maven.neoforged.net/releases/") {
+        // NeoForge 官方仓库路径带 releases 段，BMCLAPI 的镜像树没有该段：
+        // 与 PCL 一致，把 maven.neoforged.net/releases 整体映射为 bmclapi/maven，
+        // 否则会请求 bmclapi/maven/releases/... 而 404（反馈中的 earlydisplay 4.0.45）
+        original.replace(
+            "https://maven.neoforged.net/releases/",
+            "https://bmclapi2.bangbang93.com/maven/",
+        )
     } else if original.starts_with("https://maven.neoforged.net/") {
         original.replace("https://maven.neoforged.net/", "https://bmclapi2.bangbang93.com/maven/")
     } else if original.starts_with("https://maven.fabricmc.net/") {
@@ -181,6 +189,29 @@ mod tests {
             Some("https://mod.mcimirror.top/data/x.jar")
         );
         assert_eq!(to_mirror_url("https://example.com/file"), None);
+    }
+
+    #[test]
+    fn neoforge_releases_use_bmclapi_maven_root() {
+        // NeoForge 官方仓库固定在 /releases/ 下，BMCLAPI 镜像树没有 releases 段；
+        // 映射时必须去掉该段，否则请求 bmclapi/maven/releases/... 会 404
+        let official = "https://maven.neoforged.net/releases/net/neoforged/fancymodloader/earlydisplay/4.0.45/earlydisplay-4.0.45.jar";
+        assert_eq!(
+            to_mirror_url(official).as_deref(),
+            Some(
+                "https://bmclapi2.bangbang93.com/maven/net/neoforged/fancymodloader/earlydisplay/4.0.45/earlydisplay-4.0.45.jar"
+            )
+        );
+        // 不带 releases 的旧式地址仍按原规则映射到 maven 根
+        let legacy = "https://maven.neoforged.net/net/neoforged/neoforge/maven-metadata.xml";
+        assert_eq!(
+            to_mirror_url(legacy).as_deref(),
+            Some("https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/maven-metadata.xml")
+        );
+        // china-first 下镜像排在官方源之前
+        mirror_success();
+        let urls = get_mirror_urls(official, "china-first");
+        assert!(urls[0].starts_with("https://bmclapi2.bangbang93.com/maven/net/neoforged/"));
     }
 
     #[test]
