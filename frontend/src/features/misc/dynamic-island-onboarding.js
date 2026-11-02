@@ -115,7 +115,7 @@ import { _ensureHoverZone, dismiss, preview } from './dynamic-island-view.js';
             var p = AI_PROVIDERS[id];
             var card = document.createElement('div');
             card.className = 'v-island-onboarding-provider-card';
-            card.innerHTML = '<img src="img/providers/' + p.icon + '.png" alt="" onerror="this.style.visibility=\'hidden\'"><span>' + p.name + '</span>';
+            card.innerHTML = '<img src="img/providers/' + p.icon + '.png" alt="" data-img-fallback="visibility"><span>' + p.name + '</span>';
             card.onclick = function () {
                 var all = grid.querySelectorAll('.v-island-onboarding-provider-card');
                 for (var j = 0; j < all.length; j++) all[j].classList.remove('v-island-onboarding-provider-card--active');

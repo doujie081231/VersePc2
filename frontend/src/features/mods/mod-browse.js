@@ -43,7 +43,7 @@ async function loadInstalledMods() {
                 const hash = isApiIcon && icon.match(/hash=([^&]+)/) ? decodeURIComponent(icon.match(/hash=([^&]+)/)[1]) : '';
                 let iconHtml;
                 if (icon && !isApiIcon) {
-                    iconHtml = '<div class="mod-icon"><img src="' + escapeHtml(icon) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'mod-icon--fallback\')"></div>';
+                    iconHtml = '<div class="mod-icon"><img src="' + escapeHtml(icon) + '" alt="" loading="lazy" data-img-fallback="modicon"></div>';
                 } else {
                     iconHtml = '<div class="mod-icon mod-icon--fallback"' + (hash ? ' data-sh="' + escapeHtml(hash) + '"' : '') + '></div>';
                 }
@@ -166,7 +166,7 @@ async function loadMods() {
                 var pinBtnHtml = '<button class="pin-btn' + (isPin ? ' active' : '') + '" title="' + (isPin ? '取消置顶' : '置顶模组') + '"' + actionAttrsStop('pinMod', mod.id, formatModNameWithChinese(mod.slug || mod.id, mod.title), mod.source || 'modrinth', mod.icon || '') + '>' + PIN_ICONS.pin + '</button>';
                 return '<div class="mod-item mod-item-clickable' + (appState.modMultiSelectMode ? ' mod-multiselect-active' : '') + '"' + actionAttrs('openModDetail', mod.id, mod.source) + ' data-preload-mod="' + escapeHtml(mod.id) + '" data-preload-source="' + escapeHtml(mod.source) + '">' +
                     (appState.modMultiSelectMode ? '<div class="mod-checkbox' + (isSelected ? ' checked' : '') + '" data-mod-id="' + mod.id + '"' + actionAttrsStop('toggleModSelect', mod.id) + '><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>' : '') +
-                    '<div class="mod-icon"><img src="' + escapeHtml(normalizeIconUrl(mod.icon || '')) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'mod-icon--fallback\')"></div>' +
+                    '<div class="mod-icon"><img src="' + escapeHtml(normalizeIconUrl(mod.icon || '')) + '" alt="" loading="lazy" data-img-fallback="modicon"></div>' +
                     '<div class="mod-info">' +
                         '<div class="mod-name">' + escapeHtml(formatModNameWithChinese(mod.slug || mod.id, mod.title)) +
                             (sourceFilter === 'any' ? ' <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:' + (mod.source === 'curseforge' ? 'color-mix(in srgb, var(--orange) 14%, transparent);color:var(--orange);border:1px solid color-mix(in srgb, var(--orange) 24%, transparent)' : 'color-mix(in srgb, var(--green) 14%, transparent);color:var(--green);border:1px solid color-mix(in srgb, var(--green) 24%, transparent)') + ';font-weight:500;vertical-align:middle">' + (mod.source === 'curseforge' ? 'CF' : 'MR') + '</span>' : '') +

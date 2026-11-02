@@ -144,6 +144,12 @@ function renderPrivateServerPage() {
 
   container.innerHTML = topTabsHtml + bodyHtml;
 
+  // 图片失败兜底：CSP 禁止内联 onerror，渲染后统一绑定
+  container.querySelectorAll('.ps-card-icon[data-img-icon]').forEach((img) => {
+    const icon = img.getAttribute('data-img-icon') || '';
+    img.onerror = () => loadPrivateServerIcon(img, icon);
+  });
+
   // 绑定顶级 tab 切换
   container.querySelectorAll('.ps-top-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -211,8 +217,7 @@ function renderMyServersInner() {
   // 列表
   const cardsHtml = pageItems.map(server => {
     const iconSrc = server.icon ? escapeHtml(server.icon) : 'img/icon.svg';
-    const iconEsc = String(server.icon || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const iconHtml = `<img src="${iconSrc}" alt="" class="ps-card-icon" onerror="loadPrivateServerIcon(this,'${iconEsc}')">`;
+    const iconHtml = `<img src="${iconSrc}" alt="" class="ps-card-icon" data-img-icon="${escapeHtml(server.icon || '')}">`;
     const modpackBtn = server.modpackUrl
       ? `<button class="btn btn-ghost btn-sm"${actionAttrs('openWindow', server.modpackUrl)}>下载整合包</button>`
       : '';

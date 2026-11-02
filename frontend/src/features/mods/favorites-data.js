@@ -96,7 +96,7 @@ async function renderFavPage() {
           html += '<input type="checkbox" class="fav-item-checkbox"' + (isChecked ? ' checked' : '') + actionAttrsStop('toggleFavItemSelect', p.id) + '>';
         }
         if (p.icon) {
-          html += '<img class="fav-item-icon" src="' + escapeHtml(normalizeIconUrl(p.icon)) + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="fav-item-icon-placeholder" style="display:none">' + escapeHtml((p.title || '?')[0]) + '</div>';
+          html += '<img class="fav-item-icon" src="' + escapeHtml(normalizeIconUrl(p.icon)) + '" data-img-fallback="sibling"><div class="fav-item-icon-placeholder" style="display:none">' + escapeHtml((p.title || '?')[0]) + '</div>';
         } else {
           html += '<div class="fav-item-icon-placeholder">' + escapeHtml((p.title || '?')[0]) + '</div>';
         }
@@ -230,7 +230,7 @@ async function renderFavSubList() {
       const source = p.source || 'modrinth';
       return '<div class="mod-item mod-item-clickable' + (favSubState.multiSelect ? ' mod-multiselect-active' : '') + '"' + actionAttrs('openModDetail', p.id, source) + '>' +
         (favSubState.multiSelect ? '<div class="mod-checkbox' + (isChecked ? ' checked' : '') + '" data-mod-id="' + escapeHtml(p.id) + '"' + actionAttrsStop('toggleFavSubItemSelect', p.id) + '><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>' : '') +
-        '<div class="mod-icon"><img src="' + escapeHtml(normalizeIconUrl(p.icon || '')) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'mod-icon--fallback\')"></div>' +
+        '<div class="mod-icon"><img src="' + escapeHtml(normalizeIconUrl(p.icon || '')) + '" alt="" loading="lazy" data-img-fallback="modicon"></div>' +
         '<div class="mod-info">' +
           '<div class="mod-name">' + escapeHtml(formatModNameWithChinese(p.slug || p.id, p.title)) + '</div>' +
           '<div class="mod-desc">' + escapeHtml(p.description || '') + '</div>' +

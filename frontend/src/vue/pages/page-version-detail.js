@@ -96,7 +96,7 @@ const PageVersionDetail = {
               <div class="verdetail-section-title" style="display:flex;align-items:center;justify-content:space-between">
                 <span>Fabric API（可选）</span>
               </div>
-              <div class="fabric-api-card-detail" id="fabric-api-card-detail" @click="openFabricApiDetailPicker()" style="padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-secondary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:border-color 0.2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div class="fabric-api-card-detail" id="fabric-api-card-detail" @click="openFabricApiDetailPicker()" style="padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-secondary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:border-color 0.2s">
                 <div style="display:flex;align-items:center;gap:10px;min-width:0">
                   <span style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>
                   <span id="fabric-api-card-text-detail" style="font-size:14px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">不安装</span>

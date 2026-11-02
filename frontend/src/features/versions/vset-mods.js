@@ -127,7 +127,7 @@ function renderModMgrList(mods) {
         : '';
       let iconHtml;
       if (iconUrl && !isApiIcon) {
-        iconHtml = `<div class="modmgr-icon"><img src="${normalizeIconUrl(iconUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('modmgr-icon--fallback')"></div>`;
+        iconHtml = `<div class="modmgr-icon"><img src="${normalizeIconUrl(iconUrl)}" alt="" loading="lazy" data-img-fallback="modmgr"></div>`;
       } else {
         iconHtml = `<div class="modmgr-icon modmgr-icon--fallback"${iconHash ? ` data-icon-hash="${escapeHtml(iconHash)}"` : ''}></div>`;
       }

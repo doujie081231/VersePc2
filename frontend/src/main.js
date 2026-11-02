@@ -8,6 +8,7 @@ import './features/misc/rose-loader.js';
 import './features/registry.js';
 import './features/misc/translate-modal-tabs.js';
 import './core/plugin-compat.js';
+import { installImageFallback } from './core/image-fallback.js';
 import './vue/mount.js';
 import { init } from './features/launch/init-setup.js';
 import { initSettingsPages } from './features/settings/settings-misc.js';
@@ -21,6 +22,7 @@ import { mountStaticIcons } from './core/static-icons.js';
 import { startGameClock } from './core/game-store.js';
 
 installActionDelegation();
+installImageFallback();
 setApiNotifier(showToast);
 registerActions({
   openExternal: (event, el, url) => bridge.openExternal(url),

@@ -30,7 +30,8 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'sha256-hrKnFShQxk4tMcu0tgioyuaFnTl0XNWtT1vbOXtgvmY=' 'sha256-4yzuRcxXz8ir0/Fp7mVJA1ZEV2rWT2CZPT0Vps7sFdM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http: wpfile: wewp:; media-src 'self' data: blob: https: http: wpfile: wewp:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https: http: blob: data:; frame-src 'self' wewp: http://wewp.localhost data:; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'",
+      "dangerousDisableAssetCspModification": ["style-src"]
     }
   },
   "bundle": {

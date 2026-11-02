@@ -191,7 +191,7 @@ function renderFabricApiList() {
     const date = v.datePublished ? v.datePublished.substring(0, 10) : '';
     const isRecommended = v.versionId === S._fabricApiRecommendedId;
     items.push(`
-      <div class="fabric-api-item${isSelected ? ' selected' : ''}"${actionAttrs('selectFabricApiVersion', v.versionId)} style="padding:12px 14px;border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-secondary)'};cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s" onmouseover="if(!this.classList.contains('selected'))this.style.borderColor='var(--accent)'" onmouseout="if(!this.classList.contains('selected'))this.style.borderColor='var(--border)'">
+      <div class="fabric-api-item${isSelected ? ' selected' : ''}"${actionAttrs('selectFabricApiVersion', v.versionId)} style="padding:12px 14px;border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-secondary)'};cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s">
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${escapeHtml(v.versionNumber)}</span>
@@ -414,7 +414,7 @@ function renderFabricApiDetailList() {
     const date = v.datePublished ? v.datePublished.substring(0, 10) : '';
     const isRecommended = v.versionId === S._fabricApiDetailRecommendedId;
     items.push(`
-      <div class="fabric-api-item${isSelected ? ' selected' : ''}"${actionAttrs('selectFabricApiDetailVersion', v.versionId, v.versionNumber + ' (' + typeLabel + ')')} style="padding:12px 14px;border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-secondary)'};cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s" onmouseover="if(!this.classList.contains('selected'))this.style.borderColor='var(--accent)'" onmouseout="if(!this.classList.contains('selected'))this.style.borderColor='var(--border)'">
+      <div class="fabric-api-item${isSelected ? ' selected' : ''}"${actionAttrs('selectFabricApiDetailVersion', v.versionId, v.versionNumber + ' (' + typeLabel + ')')} style="padding:12px 14px;border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-secondary)'};cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s">
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${escapeHtml(v.versionNumber)}</span>

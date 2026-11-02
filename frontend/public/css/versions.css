@@ -1465,3 +1465,8 @@ select.custom-select option {
     width: 14px;
     height: 14px;
 }
+
+/* CSP 友好：替代 Fabric API 卡片的内联 onmouseover/onmouseout */
+.fabric-api-item:hover:not(.selected) { border-color: var(--accent) !important; }
+#fabric-api-card:hover,
+#fabric-api-card-detail:hover { border-color: var(--accent) !important; }

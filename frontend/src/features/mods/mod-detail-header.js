@@ -1,4 +1,5 @@
 import { API as API } from '../../core/api.js';
+import DOMPurify from 'dompurify';
 import { escapeHtml as escapeHtml, formatDate as formatDate, _lazyLoadScript as _lazyLoadScript } from '../../core/utils.js';
 import { showToast as showToast, formatNumber as formatNumber } from '../misc/ui-components.js';
 import { installModpackVersion as installModpackVersion, installModFile as installModFile, quickInstallResourceVersion as quickInstallResourceVersion } from './mod-install.js';
@@ -67,7 +68,8 @@ async function renderModDescription(detail) {
       html = body.replace(/\n/g, '<br>');
     }
   }
-  container.innerHTML = proxifyBodyHtml(html);
+  // 模组描述来自 Modrinth / CurseForge，必须消毒后再进 DOM（审计 P0-5 / P1-3）
+  container.innerHTML = DOMPurify.sanitize(proxifyBodyHtml(html));
   hydrateBodyImages(container);
 }
 

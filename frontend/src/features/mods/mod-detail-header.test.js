@@ -288,6 +288,20 @@ describe('renderModDescription', () => {
     expect(hydrateMock).toHaveBeenCalled();
   });
 
+  it('CurseForge 描述中的危险 HTML 会被消毒', async () => {
+    appState.currentModDetailId = 'p1';
+    appState.currentModDetailSource = 'curseforge';
+
+    await mod.renderModDescription(detail({
+      body: '<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>',
+    }));
+
+    const html = document.getElementById('md-body-content').innerHTML;
+    expect(html).not.toContain('onerror');
+    expect(html).not.toContain('<script');
+    expect(window.__xss).toBeUndefined();
+  });
+
   it('Markdown 不可用时按换行转 br', async () => {
     appState.currentModDetailId = 'p1';
 
