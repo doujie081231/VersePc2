@@ -202,6 +202,17 @@ fn save_skipped_version(version: &str) {
 
 // ============== 检查更新 ==============
 
+/// 更新包地址白名单：只接受本项目在 Gitee / GitHub 的 release 直链。
+/// update.json 会经过第三方加速代理，不能信任其中任意 URL（审计 P1-1）。
+fn is_trusted_update_asset(url: &str) -> bool {
+    url.starts_with("https://github.com/doujie081231/VersePc2/releases/download/")
+        || url.starts_with("https://gitee.com/doujie081231/verse-pc2/releases/download/")
+}
+
+fn is_valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// 并发请求单个 update.json 源，成功且数据有效时返回 Some(UpdateRelease)
 async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRelease>, ()> {
     let resp = client
@@ -226,6 +237,15 @@ async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRel
 
     // 依据当前运行平台选择 update.json 中对应的文件键，macOS/Linux 也能拉到各自的更新包
     let files = v.get("files").and_then(|x| x.get(current_update_key()));
+    if let Some(f) = files {
+        let asset_url = f.get("url").and_then(|x| x.as_str()).unwrap_or("");
+        let sha = f.get("sha256").and_then(|x| x.as_str()).unwrap_or("");
+        // 不可信的下载地址或缺失哈希：整份清单位于第三方代理链路上，直接换源/失败关闭
+        if !is_trusted_update_asset(asset_url) || !is_valid_sha256(sha) {
+            log_download(&format!("[check] 拒绝不可信的更新包: url={} sha256={}", asset_url, sha));
+            return Ok(None);
+        }
+    }
     let asset = files.map(|f| UpdateAsset {
         url: f.get("url").and_then(|x| x.as_str()).unwrap_or("").to_string(),
         size: f.get("size").and_then(|x| x.as_u64()).unwrap_or(0),
@@ -497,5 +517,37 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
     match download_update_inner(&app, &release).await {
         Ok(()) => Ok(json!({ "success": true })),
         Err(e) => Ok(json!({ "success": false, "error": e })),
+    }
+}
+
+#[cfg(test)]
+mod update_asset_tests {
+    use super::*;
+
+    #[test]
+    fn only_project_release_urls_are_trusted() {
+        assert!(is_trusted_update_asset(
+            "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.5/VersePC2.exe"
+        ));
+        assert!(is_trusted_update_asset(
+            "https://github.com/doujie081231/VersePc2/releases/download/v1.8.5/VersePC2.exe"
+        ));
+        assert!(!is_trusted_update_asset("https://evil.example.com/VersePC2.exe"));
+        assert!(!is_trusted_update_asset(
+            "https://github.com/other/repo/releases/download/v1/VersePC2.exe"
+        ));
+        assert!(!is_trusted_update_asset("http://gitee.com/doujie081231/verse-pc2/releases/download/v1/x"));
+    }
+
+    #[test]
+    fn sha256_must_be_64_hex_chars() {
+        assert!(is_valid_sha256(
+            "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a325"
+        ));
+        assert!(!is_valid_sha256(""));
+        assert!(!is_valid_sha256("abc"));
+        assert!(!is_valid_sha256(
+            "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a32Z"
+        ));
     }
 }

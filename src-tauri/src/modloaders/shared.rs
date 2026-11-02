@@ -51,6 +51,55 @@ pub async fn fetch_json(url: &str) -> Result<Value, String> {
         .map_err(|e| format!("JSON 解析失败: {}", e))
 }
 
+/// 严格 TLS 客户端：用于从官方 Maven 源读取 `.sha1`。
+/// 官方源证书链正常；校验值必须走可信通道，不能复用跳过证书校验的下载客户端。
+static STRICT_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+
+fn strict_client() -> &'static reqwest::Client {
+    STRICT_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .user_agent("VersePC/1.0")
+            .build()
+            .expect("failed to build strict reqwest client")
+    })
+}
+
+async fn fetch_text_strict(url: &str, timeout_secs: u64) -> Result<String, String> {
+    let resp = strict_client()
+        .get(url)
+        .timeout(Duration::from_secs(timeout_secs))
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    resp.text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))
+}
+
+/// 解析 Maven `.sha1` 文本：兼容纯哈希与 `hash  filename` 两种格式
+pub fn parse_sha1_text(text: &str) -> Option<String> {
+    let hash = text.split_whitespace().next()?.trim().to_ascii_lowercase();
+    if hash.len() == 40 && hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(hash)
+    } else {
+        None
+    }
+}
+
+/// 从官方 Maven 源获取安装器 sha1。
+/// 镜像只负责带宽，真实性由官方源锚定（审计 P0-4）；官方源不可达时返回 None，
+/// 调用方退回现有的 ZIP 魔数校验，避免国内网络下安装器完全不可用。
+pub async fn fetch_maven_sha1(url: &str, timeout_secs: u64) -> Option<String> {
+    let text = fetch_text_strict(&format!("{}.sha1", url), timeout_secs)
+        .await
+        .ok()?;
+    parse_sha1_text(&text)
+}
+
 /// 拉取文本
 pub async fn fetch_text(url: &str, timeout_secs: u64) -> Result<String, String> {
     let client = shared_client();
@@ -992,3 +1041,20 @@ pub async fn download_with_curl(url: &str, dest: &Path, timeout_secs: u64) -> Re
 #[cfg(test)]
 #[path = "shared_tests.rs"]
 mod merge_install_tests;
+
+#[cfg(test)]
+mod sha1_parse_tests {
+    use super::*;
+
+    #[test]
+    fn parses_plain_and_annotated_sha1() {
+        let plain = "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fa";
+        assert_eq!(parse_sha1_text(plain).as_deref(), Some(plain));
+        assert_eq!(
+            parse_sha1_text(&format!("{plain}  forge-installer.jar")).as_deref(),
+            Some(plain)
+        );
+        assert_eq!(parse_sha1_text(""), None);
+        assert_eq!(parse_sha1_text("not-a-sha1"), None);
+    }
+}
