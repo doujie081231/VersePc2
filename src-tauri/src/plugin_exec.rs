@@ -1,7 +1,7 @@
 // plugin_exec.rs - 可信插件「安全执行外部进程」能力
-// 说明：仅对 plugin.json 显式声明 permissions.native 含 "exec" 的插件开放。
-// 前端沙箱对声明并确认过的插件放行；后端这里以磁盘上 <plugins>/<id>/plugin.json 再次硬校验，
-// 防止绕过前端直接调用。
+// 说明：授权记录存放在宿主侧 <plugins>/.grants.json（安装时用户确认后写入）。
+// 插件自己在 plugin.json 声明 permissions.native 含 "exec" 只是“可申请”，
+// 后端必须同时满足：id 合法 + 已安装且声明 exec + 宿主授权表已授权，才允许执行外部进程。
 // 子进程 stdout/stderr 逐行回传 plugin:<id>:exec-log，进程退出回传 plugin:<id>:exec-exit。
 
 use std::collections::HashMap;
@@ -29,22 +29,6 @@ fn proc_init() {
     if g.is_none() {
         *g = Some(HashMap::new());
     }
-}
-
-/// 校验插件是否声明了 native:exec 权限（以磁盘 plugin.json 为准）
-fn has_native_exec(id: &str) -> bool {
-    let dir = plugins::plugin_dir(id);
-    let Ok(content) = std::fs::read_to_string(dir.join("plugin.json")) else {
-        return false;
-    };
-    let Ok(m) = serde_json::from_str::<Value>(&content) else {
-        return false;
-    };
-    m.get("permissions")
-        .and_then(|p| p.get("native"))
-        .and_then(|a| a.as_array())
-        .map(|arr| arr.iter().any(|v| v.as_str() == Some("exec")))
-        .unwrap_or(false)
 }
 
 fn err(code: i32, msg: &str) -> Value {
@@ -84,8 +68,9 @@ pub async fn plugin_process_exec(
     ini: Option<String>,
     config_name: Option<String>,
 ) -> Value {
-    if !has_native_exec(&plugin_id) {
-        return err(403, &format!("插件 {} 未声明 native:exec 权限", plugin_id));
+    // 授权以宿主侧 .grants.json 为准：插件自己改 plugin.json 声明 exec 不再生效
+    if !plugins::can_native_exec(&plugin_id) {
+        return err(403, &format!("插件 {} 未获得 native:exec 授权", plugin_id));
     }
     if exe.trim().is_empty() {
         return err(400, "缺少可执行文件路径");
