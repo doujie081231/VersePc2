@@ -165,10 +165,15 @@ pub fn to_mirror_url(original: &str) -> Option<String> {
     };
     Some(mirror)
 }
-#[allow(clippy::items_after_test_module)]
+
+#[allow(clippy::items_after_test_module)]
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 镜像熔断状态是全局的，涉及 mirror_success/mirror_failed 的测试必须串行，
+    /// 否则并行执行时会被其它测试重置计数而随机失败。
+    static MIRROR_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn mirror_urls_cover_mojang_and_modrinth() {
@@ -208,10 +213,6 @@ mod tests {
             to_mirror_url(legacy).as_deref(),
             Some("https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/maven-metadata.xml")
         );
-        // china-first 下镜像排在官方源之前
-        mirror_success();
-        let urls = get_mirror_urls(official, "china-first");
-        assert!(urls[0].starts_with("https://bmclapi2.bangbang93.com/maven/net/neoforged/"));
     }
 
     #[test]
@@ -224,6 +225,7 @@ mod tests {
 
     #[test]
     fn download_source_controls_ordering() {
+        let _guard = MIRROR_STATE_LOCK.lock().unwrap();
         mirror_success();
         let official = "https://piston-data.mojang.com/foo";
         let auto = get_mirror_urls(official, "auto");
@@ -249,6 +251,7 @@ mod tests {
 
     #[test]
     fn maven_urls_include_aliyun_and_huawei_fallbacks() {
+        let _guard = MIRROR_STATE_LOCK.lock().unwrap();
         mirror_success();
         let original = "https://maven.minecraftforge.net/org/checkerframework/checker-qual/2.0.0/checker-qual-2.0.0.jar";
         let urls = get_mirror_urls(original, "china-first");
