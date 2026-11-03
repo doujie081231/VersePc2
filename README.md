@@ -147,11 +147,32 @@ npm run verify         # ESLint + Vitest + Vite 构建 + 架构护栏
 
 ## 自动更新机制
 
-- 更新清单：仓库 `update.json`（含版本号、下载 URL、文件大小、SHA-256）
+- 更新清单：仓库 `update.json`（含版本号、发布说明、各平台下载 URL、文件大小、SHA-256）
+- 签名：清单使用 Ed25519 签名，公钥硬编码在程序内；未签名或验签失败的清单一律拒绝
 - 检查：启动时自动检查，或手动触发
 - 下载：多镜像加速（国内直连 + GitHub 镜像）
 - 安装：下载新 exe → 写替换脚本 → 退出自身 → 脚本替换 exe → 重启
 - 校验：下载后校验 SHA-256，确保文件完整
+
+### 发布新版本流程
+
+1. 修改版本号：`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`
+2. 构建并上传各平台产物到 Gitee / GitHub Release
+3. 用上传后的每个平台产物计算 `size` 与 `sha256`，写入 `update.json`
+4. 用本机私钥签名清单：
+
+```powershell
+$env:VERSE_UPDATE_KEY='D:\VerseTools\verse-update-private.pem'
+node scripts/sign-update.mjs
+```
+
+5. 推送 `update.json` 到远端 `main` 分支
+
+注意事项：
+
+- 签名私钥只保存在发布者本机，禁止提交或上传到仓库；私钥丢失后现有客户端会拒绝所有新清单，只能重新编译并更换公钥。
+- 每次修改 `update.json` 都必须重新签名；漏签会导致所有客户端检查更新失败。
+- 清单可以先只写当前平台的条目；缺少某个平台的条目时该平台会跳过更新，不会下载到错误文件。
 
 ## 协议
 

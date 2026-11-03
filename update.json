@@ -1,29 +1,14 @@
 {
-  "version": "1.8.5",
-  "releaseName": "v1.8.5",
-  "releaseDate": "2026-10-26",
-  "releaseNotes": "VersePC2 v1.8.5\n\n修复:\n- 修复导航栏探出时右缘出现黑色硬线\n- 修复账户皮肤预览在收放/固定导航栏时闪烁\n- 修复从其他页面返回主页时控件先错位再跳动的问题\n- 修复收起/固定经典导航栏时主页默认控件横向漂移",
+  "version": "1.8.6",
+  "releaseName": "v1.8.6",
+  "releaseDate": "2026-11-04",
+  "releaseNotes": "VersePC2 v1.8.6\n\n安全加固：\n- 更新清单改用 Ed25519 签名校验，拒绝被篡改的更新内容\n- 插件执行外部程序改由宿主授权表与系统确认控制\n- 收紧文件读取与开服目录校验，修复目录穿越\n- 启用 CSP 并消毒更新说明/模组描述，修复 XSS\n- 账号令牌改用 DPAPI 随机密钥与随机 IV\n- 安装器下载校验官方 SHA-1\n\n说明：本版本先提供 Windows 包，macOS/Linux 构建完成后补充更新清单。",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.5/VersePC2.exe",
-      "size": 71630848,
-      "sha256": "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a325"
-    },
-    "linux-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.5/VersePC2-linux-x86_64",
-      "size": 14358272,
-      "sha256": "7f2d7750937e6923b2218f697ad36187129e9c32dd40b899b506c60caa31e97d"
-    },
-    "macos-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.5/VersePC2-macos-x86_64.zip",
-      "size": 11356854,
-      "sha256": "85cb44c413533156fd85752641236e3080e36e36778942f93ec5164b561a4a61"
-    },
-    "macos-aarch64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.5/VersePC2-macos-aarch64.zip",
-      "size": 10898073,
-      "sha256": "d174b411e59668927506475b8f43c3edfa1416557e13a8b2ac7c12151cb7469b"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.6/VersePC2.exe",
+      "size": 71698432,
+      "sha256": "d23fd71e88f5628cb8f68653ed54337a3318bacc16332bd6384b5c5a9707d915"
     }
   },
-  "signature": "llmBIcS7NodBZPe8lSTdnj3uLXpeQeKBCWkvbU+Vn3jMC83R3Mz6rnSY97Aln4CceT5D05XmcNCmZhM6bO1iAw=="
+  "signature": "Oq2+atSfJto/8rGjNjZaxs6j8JwtERKe5AGM5jP/L24+PoWYygV3Qwg/+C6zw7HgyDo/+loKAmBm8qSIVZLRAA=="
 }

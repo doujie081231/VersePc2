@@ -18,6 +18,9 @@ tauri-build-log.txt
 src-tauri/.cf_api_key
 src-tauri/data/
 
+# 更新签名私钥（只保留本机与桌面备份，禁止入库/上传）
+*.pem
+
 # 服务器凭据（只保留本地，禁止入库）
 scripts/_sshwork/
 .target-msvc/
