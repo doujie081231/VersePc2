@@ -213,6 +213,93 @@ fn is_valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// update.json 发布签名公钥（Ed25519，原始 32 字节的 base64）。
+/// 私钥只保存在发布者本机，绝不进入仓库；对应签名脚本见 scripts/sign-update.mjs。
+const UPDATE_PUBLIC_KEY_B64: &str = "HY8db8m9lz2RZe5gIaUj9ib971FG/L/4/HR3G7U2IZE=";
+
+/// 规范化字段转义：与 scripts/sign-update.mjs 中的 escapeField 完全一致。
+fn canonical_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// 生成签名所覆盖的规范化文本（不依赖 JSON 序列化实现细节）。
+/// 字段按固定顺序输出，files 按平台名排序，避免不同实现/键顺序导致验签失败。
+fn canonical_update_payload(v: &Value) -> Vec<u8> {
+    let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("");
+    let mut out = String::new();
+    out.push_str("verse-update-v1\n");
+    out.push_str(&format!("version={}\n", canonical_escape(field("version"))));
+    out.push_str(&format!(
+        "releaseName={}\n",
+        canonical_escape(field("releaseName"))
+    ));
+    out.push_str(&format!(
+        "releaseDate={}\n",
+        canonical_escape(field("releaseDate"))
+    ));
+    out.push_str(&format!(
+        "releaseNotes={}\n",
+        canonical_escape(field("releaseNotes"))
+    ));
+
+    let files = v.get("files").and_then(|x| x.as_object());
+    let mut platforms: Vec<&String> = files.map(|m| m.keys().collect()).unwrap_or_default();
+    platforms.sort();
+    for p in platforms {
+        let f = files.and_then(|m| m.get(p)).and_then(|x| x.as_object());
+        let url = f
+            .and_then(|m| m.get("url"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("");
+        let sha = f
+            .and_then(|m| m.get("sha256"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        let size = f
+            .and_then(|m| m.get("size"))
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        out.push_str(&format!(
+            "file\t{}\t{}\t{}\t{}\n",
+            canonical_escape(p),
+            canonical_escape(url),
+            canonical_escape(&sha),
+            size
+        ));
+    }
+    out.into_bytes()
+}
+
+/// 校验 update.json 的 Ed25519 签名；缺失或无效一律拒绝（更新链路经过第三方代理）。
+fn verify_update_signature(v: &Value, signature_b64: &str) -> bool {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let (Ok(sig), Ok(key)) = (
+        STANDARD.decode(signature_b64.trim()),
+        STANDARD.decode(UPDATE_PUBLIC_KEY_B64),
+    ) else {
+        return false;
+    };
+    if sig.len() != 64 || key.len() != 32 {
+        return false;
+    }
+    let payload = canonical_update_payload(v);
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key.as_slice())
+        .verify(&payload, &sig)
+        .is_ok()
+}
+
 /// 并发请求单个 update.json 源，成功且数据有效时返回 Some(UpdateRelease)
 async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRelease>, ()> {
     let resp = client
@@ -225,6 +312,14 @@ async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRel
         return Ok(None);
     }
     let v: Value = resp.json().await.map_err(|_| ())?;
+
+    // 更新清单必须携带发布者 Ed25519 签名：清单会经过 ghfast/ghproxy 等第三方代理，
+    // 仅靠 HTTPS/白名单无法防止代理篡改版本号、说明或下载地址（审计 P1-1）。
+    let signature = v.get("signature").and_then(|x| x.as_str()).unwrap_or("");
+    if !verify_update_signature(&v, signature) {
+        log_download(&format!("[check] 拒绝未签名或签名无效的更新清单: {}", url));
+        return Ok(None);
+    }
 
     let version = v
         .get("version")
@@ -549,5 +644,43 @@ mod update_asset_tests {
         assert!(!is_valid_sha256(
             "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a32Z"
         ));
+    }
+
+    const SHIPPED_MANIFEST: &str = include_str!("../../update.json");
+
+    fn shipped_signature(v: &Value) -> String {
+        v.get("signature")
+            .and_then(|x| x.as_str())
+            .expect("update.json 缺少 signature，请先运行 scripts/sign-update.mjs")
+            .to_string()
+    }
+
+    #[test]
+    fn shipped_manifest_signature_verifies() {
+        let v: Value = serde_json::from_str(SHIPPED_MANIFEST).expect("update.json 解析失败");
+        let sig = shipped_signature(&v);
+        assert!(verify_update_signature(&v, &sig));
+    }
+
+    #[test]
+    fn tampered_version_or_asset_url_fails_verification() {
+        let v: Value = serde_json::from_str(SHIPPED_MANIFEST).expect("update.json 解析失败");
+        let sig = shipped_signature(&v);
+
+        let mut changed_version = v.clone();
+        changed_version["version"] = json!("9.9.9");
+        assert!(!verify_update_signature(&changed_version, &sig));
+
+        let mut changed_url = v.clone();
+        changed_url["files"]["win-x64"]["url"] = json!("https://evil.example.com/VersePC2.exe");
+        assert!(!verify_update_signature(&changed_url, &sig));
+    }
+
+    #[test]
+    fn missing_or_malformed_signature_fails_verification() {
+        let v: Value = serde_json::from_str(SHIPPED_MANIFEST).expect("update.json 解析失败");
+        assert!(!verify_update_signature(&v, ""));
+        assert!(!verify_update_signature(&v, "not-base64"));
+        assert!(!verify_update_signature(&v, "AAAA"));
     }
 }
