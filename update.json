@@ -2,13 +2,28 @@
   "version": "1.8.6",
   "releaseName": "v1.8.6",
   "releaseDate": "2026-11-04",
-  "releaseNotes": "VersePC2 v1.8.6\n\n安全加固：\n- 更新清单改用 Ed25519 签名校验，拒绝被篡改的更新内容\n- 插件执行外部程序改由宿主授权表与系统确认控制\n- 收紧文件读取与开服目录校验，修复目录穿越\n- 启用 CSP 并消毒更新说明/模组描述，修复 XSS\n- 账号令牌改用 DPAPI 随机密钥与随机 IV\n- 安装器下载校验官方 SHA-1\n\n说明：本版本先提供 Windows 包，macOS/Linux 构建完成后补充更新清单。",
+  "releaseNotes": "VersePC2 v1.8.6\n\n安全加固：\n- 更新清单改用 Ed25519 签名校验，拒绝被篡改的更新内容\n- 插件执行外部程序改由宿主授权表与系统确认控制\n- 收紧文件读取与开服目录校验，修复目录穿越\n- 启用 CSP 并消毒更新说明/模组描述，修复 XSS\n- 账号令牌改用 DPAPI 随机密钥与随机 IV\n- 安装器下载校验官方 SHA-1",
   "files": {
     "win-x64": {
       "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.6/VersePC2.exe",
       "size": 71698432,
       "sha256": "d23fd71e88f5628cb8f68653ed54337a3318bacc16332bd6384b5c5a9707d915"
+    },
+    "linux-x86_64": {
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.6/VersePC2-linux-x86_64",
+      "size": 14392736,
+      "sha256": "4a6f3fcab95b847a063341eeac254a53c658e910d057f52d834c5de0925d9b57"
+    },
+    "macos-x86_64": {
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.6/VersePC2-macos-x86_64.zip",
+      "size": 11380377,
+      "sha256": "6bb60ab591a4aa485225dda4e4e9e2b4b5f15c3fa7f28d7063fb125d2306c7c8"
+    },
+    "macos-aarch64": {
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.6/VersePC2-macos-aarch64.zip",
+      "size": 10913080,
+      "sha256": "dafbcc319eec42ae0186982c3ea1cad4b2232eb30d968e6611347965bd16fad3"
     }
   },
-  "signature": "Oq2+atSfJto/8rGjNjZaxs6j8JwtERKe5AGM5jP/L24+PoWYygV3Qwg/+C6zw7HgyDo/+loKAmBm8qSIVZLRAA=="
+  "signature": "SXQACVWs6+p+UoYzuXy/a4ZkaUSEUPDZANOKQEkOxdIdaEIMRjx1Iv6SS49T/TFXJEKs54PmrBS9jgF5HQFwBg=="
 }
