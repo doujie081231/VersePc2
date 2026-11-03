@@ -156,6 +156,11 @@ fn current_update_key() -> &'static str {
     }
 }
 
+/// 取当前平台对应的更新包条目；清单可以暂时只包含部分平台。
+fn current_platform_asset(v: &Value) -> Option<&Value> {
+    v.get("files")?.get(current_update_key())
+}
+
 fn parse_version(s: &str) -> (u32, u32, u32) {
     let mut parts = s
         .trim_start_matches('v')
@@ -330,24 +335,27 @@ async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRel
         return Ok(None);
     }
 
-    // 依据当前运行平台选择 update.json 中对应的文件键，macOS/Linux 也能拉到各自的更新包
-    let files = v.get("files").and_then(|x| x.get(current_update_key()));
-    if let Some(f) = files {
-        let asset_url = f.get("url").and_then(|x| x.as_str()).unwrap_or("");
-        let sha = f.get("sha256").and_then(|x| x.as_str()).unwrap_or("");
-        // 不可信的下载地址或缺失哈希：整份清单位于第三方代理链路上，直接换源/失败关闭
-        if !is_trusted_update_asset(asset_url) || !is_valid_sha256(sha) {
-            log_download(&format!("[check] 拒绝不可信的更新包: url={} sha256={}", asset_url, sha));
-            return Ok(None);
-        }
+    // 依据当前运行平台选择对应的文件键；缺失则视为该源不适用于本平台。
+    // 这样可以先发布 Windows，macOS/Linux 构建完成后再补充各自的条目。
+    let Some(f) = current_platform_asset(&v) else {
+        log_download(&format!(
+            "[check] 清单缺少当前平台 {} 的安装包，跳过: {}",
+            current_update_key(),
+            url
+        ));
+        return Ok(None);
+    };
+    let asset_url = f.get("url").and_then(|x| x.as_str()).unwrap_or("");
+    let sha = f.get("sha256").and_then(|x| x.as_str()).unwrap_or("");
+    // 不可信的下载地址或缺失哈希：整份清单位于第三方代理链路上，直接换源/失败关闭
+    if !is_trusted_update_asset(asset_url) || !is_valid_sha256(sha) {
+        log_download(&format!("[check] 拒绝不可信的更新包: url={} sha256={}", asset_url, sha));
+        return Ok(None);
     }
-    let asset = files.map(|f| UpdateAsset {
-        url: f.get("url").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+    let asset = Some(UpdateAsset {
+        url: asset_url.to_string(),
         size: f.get("size").and_then(|x| x.as_u64()).unwrap_or(0),
-        sha256: f
-            .get("sha256")
-            .and_then(|x| x.as_str())
-            .map(String::from),
+        sha256: Some(sha.to_string()),
     });
 
     Ok(Some(UpdateRelease {
@@ -674,6 +682,21 @@ mod update_asset_tests {
         let mut changed_url = v.clone();
         changed_url["files"]["win-x64"]["url"] = json!("https://evil.example.com/VersePC2.exe");
         assert!(!verify_update_signature(&changed_url, &sig));
+    }
+
+    #[test]
+    fn manifest_without_current_platform_asset_is_skipped() {
+        let v = json!({
+            "version": "9.9.9",
+            "files": {
+                "other-platform": {
+                    "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v9.9.9/VersePC2.exe",
+                    "size": 1,
+                    "sha256": "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a325"
+                }
+            }
+        });
+        assert!(current_platform_asset(&v).is_none());
     }
 
     #[test]
