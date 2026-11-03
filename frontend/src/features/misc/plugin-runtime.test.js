@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// plugin-runtime.test.js — 插件 UI 注册、组件挂载与沙箱权限单元测试
+// plugin-runtime.test.js — 插件 UI 注册、组件挂载与权限兼容层单元测试
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCommandCalls, installTauriMock, mockCommand } from '../../test-utils/tauri-mock.js';
 
@@ -70,7 +70,6 @@ beforeEach(() => {
   delete window.__pluginNetDenied;
   delete window.__pluginCmdDenied;
   delete window.__pluginFileDenied;
-  delete window.__pluginWinFetchDenied;
   delete window.__pluginNetOk;
   delete window.VersePC;
 });
@@ -160,11 +159,15 @@ describe('插件 UI 注册', () => {
   });
 });
 
-describe('插件沙箱', () => {
-  it('未授权网络时 fetch 被拒绝', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, marker: 'real' })));
+describe('插件权限兼容层（非安全边界）', () => {
+  it('插件与启动器共享 window/fetch 权限，不做虚假沙箱拦截', async () => {
+    const realFetch = vi.fn(() => Promise.resolve({ ok: true, marker: 'real' }));
+    vi.stubGlobal('fetch', realFetch);
     await mod.reloadPluginUI();
-    await vi.waitFor(() => expect(window.__pluginNetDenied).toBe(true));
+    // 插件脚本直接调用全局 fetch 时不会被替换/拦截
+    await vi.waitFor(() => expect(realFetch).toHaveBeenCalled());
+    expect(window.__pluginNetDenied).toBeUndefined();
+    expect(window.__pluginMainRan).toBe(true);
   });
 
   it('未授权的桥命令与越界文件读取被拒绝', async () => {
@@ -173,26 +176,6 @@ describe('插件沙箱', () => {
       expect(window.__pluginCmdDenied).toBe(true);
       expect(window.__pluginFileDenied).toBe(true);
     });
-  });
-
-  it('无 network 权限时 window.fetch 被替换为拒绝函数', async () => {
-    const realFetch = vi.fn(() => Promise.resolve({ marker: 'real' }));
-    vi.stubGlobal('fetch', realFetch);
-    installPluginMocks([{
-      id: 'p3',
-      installedDir: 'C:\\plugins\\p3',
-      permissions: {},
-      ui: { main: 'main.js' },
-    }]);
-    mockCommand('read_file_buffer', ({ path }) => (
-      path === 'C:\\plugins\\p3\\main.js'
-        ? b64(`window.fetch('https://example.com').catch(function () { window.__pluginWinFetchDenied = true; });`)
-        : ''
-    ));
-    await mod.reloadPluginUI();
-
-    await vi.waitFor(() => expect(window.__pluginWinFetchDenied).toBe(true));
-    expect(realFetch).not.toHaveBeenCalled();
   });
 
   it('声明 network 权限后允许插件访问 fetch', async () => {
