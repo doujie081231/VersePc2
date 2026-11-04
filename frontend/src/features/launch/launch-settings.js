@@ -139,8 +139,13 @@ async function saveLaunchSettings() {
     }
   }
 
+  // 版本隔离是后端 settings.json 的布尔字段（决定资源包/模组等落在版本目录还是共享目录），
+  // 必须写回后端；只存到前端 store 不会影响实际路径。
+  const isolationValue = document.getElementById('launch-version-isolation')?.value;
+  const versionIsolation = isolationValue !== 'none' && isolationValue !== 'off';
+
   const settings = {
-    versionIsolation: document.getElementById('launch-version-isolation')?.value,
+    versionIsolation: isolationValue,
     windowTitle: document.getElementById('launch-window-title')?.value,
     customInfo: document.getElementById('launch-custom-info')?.value,
     launcherVisibility: document.getElementById('launcher-visibility')?.value,
@@ -164,6 +169,9 @@ async function saveLaunchSettings() {
 
   try {
     await bridge.store.set('versepc_launch_settings', JSON.stringify(settings));
+    if (isolationValue) {
+      await API.saveSetting('versionIsolation', versionIsolation);
+    }
     showToast('启动设置已保存', 'success');
 
     // 注意：启动分辨率只作用于游戏窗口，不改变启动器窗口大小
@@ -355,6 +363,15 @@ async function loadLaunchSettings() {
       if (settings.jvmPreheat !== undefined) document.getElementById('jvm-preheat').checked = settings.jvmPreheat;
       if (settings.enableCds !== undefined) document.getElementById('enable-cds').checked = settings.enableCds;
     }
+
+    // 版本隔离以后端 settings.json 为准（决定资源包等实际存储位置），覆盖旧的 store 值
+    try {
+      const backendSettings = await API.getSettings();
+      const isolationEl = document.getElementById('launch-version-isolation');
+      if (isolationEl && backendSettings && typeof backendSettings.versionIsolation === 'boolean') {
+        isolationEl.value = backendSettings.versionIsolation ? 'all' : 'none';
+      }
+    } catch (_) {}
 
     // 游戏运行低调模式开关（独立 store key，默认开启）
     try {

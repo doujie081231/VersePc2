@@ -334,7 +334,8 @@ const API = {
     memoryOptimize: () => bridge?.memoryOptimize?.() || Promise.reject(new Error('记忆优化能力不可用')),
 
     // === 游戏版本管理 ===
-    getVersions: (refresh = false) => apiGet('/api/versions', { refresh: refresh ? 'true' : '' }),
+    getVersions: (refresh = false, installedOnly = false) =>
+        apiGet('/api/versions', { refresh: refresh ? 'true' : '', installed: installedOnly ? 'true' : '' }),
     deleteVersion: (versionId, permanent) => apiPost('/api/version/delete', { versionId, permanent: !!permanent }),
     getDeleteChain: (versionId) => apiPost('/api/version/delete-chain', { versionId }),
     openVersionFolder: (versionId, folderType) => apiGet('/api/version/open-folder', { versionId, folderType }),
@@ -495,8 +496,8 @@ const API = {
     getInstalledJava: () => apiGet('/api/java/installed'),
     getJavaInstallStatus: (sessionId) =>
         apiGet('/api/java/install-status', { sessionId }),
-    autoInstallJava: (requiredVersion = 17) =>
-        apiPost('/api/java/auto-install', { requiredVersion }),
+    autoInstallJava: (requiredVersion = 17, maxVersion = 999) =>
+        apiPost('/api/java/auto-install', { requiredVersion, maxVersion }),
     getJavaDownloadSources: () => apiGet('/api/java/download-sources'),
     downloadJava: (majorVersion) => apiPost('/api/java/download', { majorVersion }),
     cancelJavaDownload: (sessionId) => apiPost('/api/java/cancel', { sessionId }),

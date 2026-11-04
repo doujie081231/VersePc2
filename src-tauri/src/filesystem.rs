@@ -154,8 +154,22 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
     let external_root = external_dir.as_ref().and_then(|p| {
         p.parent().and_then(|versions| versions.parent()).map(|root| root.to_path_buf())
     });
-    eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={}",
-        version_id, versions_dir.display(), version_dir.display());
+    // 实际游戏目录：与启动参数/PCL 的 PathIndie 保持一致。
+    // 版本隔离关闭时，资源包、模组、存档等应落在共享 gameDir，而不是 versions/<id>。
+    let game_dir = if version_id.is_empty() {
+        minecraft_dir.clone()
+    } else {
+        crate::launch::args_builder::resolve_game_dir(
+            &version_id,
+            None,
+            external_dir.as_deref(),
+            &settings,
+            &versions_dir,
+            &data_dir,
+        )
+    };
+    eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={} game_dir={}",
+        version_id, versions_dir.display(), version_dir.display(), game_dir.display());
 
     let path = match folder {
         "minecraft" | "game" => external_root.clone().unwrap_or(minecraft_dir),
@@ -163,14 +177,14 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
             .as_ref()
             .map(|root| root.join("versions"))
             .unwrap_or(versions_dir),
-        "mods" => version_dir.join("mods"),
+        "mods" => game_dir.join("mods"),
         "assets" => version_dir.join("assets"),
-        "logs" => version_dir.join("logs"),
-        "crash-reports" => version_dir.join("crash-reports"),
-        "shaderpacks" => version_dir.join("shaderpacks"),
-        "resourcepacks" => version_dir.join("resourcepacks"),
-        "datapacks" => version_dir.join("datapacks"),
-        "saves" => version_dir.join("saves"),
+        "logs" => game_dir.join("logs"),
+        "crash-reports" => game_dir.join("crash-reports"),
+        "shaderpacks" => game_dir.join("shaderpacks"),
+        "resourcepacks" => game_dir.join("resourcepacks"),
+        "datapacks" => game_dir.join("datapacks"),
+        "saves" => game_dir.join("saves"),
         "data" => data_dir,
         "custom" => {
             if custom_path.is_empty() {

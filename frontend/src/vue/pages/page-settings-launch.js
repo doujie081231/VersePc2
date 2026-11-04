@@ -26,8 +26,7 @@ const PageSettingsLaunch = {
                 <label>默认版本隔离</label>
                 <select id="launch-version-isolation" class="select-input">
                   <option value="all">隔离所有版本</option>
-                  <option value="none">不隔离</option>
-                  <option value="custom">自定义隔离规则</option>
+                  <option value="none">不隔离（资源包/模组等放在共享目录）</option>
                 </select>
               </div>
               <div class="form-group">

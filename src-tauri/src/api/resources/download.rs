@@ -594,25 +594,25 @@ pub(crate) fn handle_download_cancel(body: &Option<Value>) -> ApiResult {
 pub(crate) fn resolve_sub_dir(settings: &Value, version_id: &str, subfolder: &str) -> PathBuf {
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
+    let clean_id = version_id.split(" [外部").next().unwrap_or(version_id).trim();
+    // 空版本 ID 不能去匹配外部文件夹：folder.join("") 会命中文件夹本身
+    let external_dir = if clean_id.is_empty() {
+        None
+    } else {
+        crate::versions::resolve_external_version_dir(clean_id).map(PathBuf::from)
+    };
 
-    // 版本隔离时：versions/<id>/<subfolder>
-    let version_isolation = settings
-        .get("versionIsolation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    if !version_id.is_empty() && version_isolation {
-        return versions_dir.join(version_id).join(subfolder);
-    }
-
-    // 否则：gameDir/<subfolder>
-    let game_dir = settings
-        .get("gameDir")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| data_dir.clone());
-    game_dir.join(subfolder)
+    // 与 PCL 的 PathIndie 一致：隔离时用 versions/<id>，否则用共享 gameDir。
+    // 复用 resolve_game_dir，确保版本级 isolation 设置与启动路径保持一致。
+    crate::launch::args_builder::resolve_game_dir(
+        clean_id,
+        None,
+        external_dir.as_deref(),
+        settings,
+        &versions_dir,
+        &data_dir,
+    )
+    .join(subfolder)
 }
 
 /// 解析版本 mods 目录
@@ -620,23 +620,5 @@ pub(crate) fn resolve_version_mods_dir(settings: &Value, version_id: &str) -> Op
     if version_id.is_empty() {
         return None;
     }
-    let data_dir = storage::resolve_data_dir();
-    let versions_dir = data_dir.join("versions");
-
-    let version_isolation = settings
-        .get("versionIsolation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    if version_isolation {
-        Some(versions_dir.join(version_id).join("mods"))
-    } else {
-        let game_dir = settings
-            .get("gameDir")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data_dir.clone());
-        Some(game_dir.join("mods"))
-    }
+    Some(resolve_sub_dir(settings, version_id, "mods"))
 }

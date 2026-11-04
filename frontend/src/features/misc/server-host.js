@@ -256,7 +256,8 @@ async function serverHostRefreshVersions(force = false) {
       : [];
     if ((!installed || installed.length === 0) && typeof API !== 'undefined' && API.getVersions) {
       // 进入页面或手动刷新时强制重新扫描，避免 appState 缓存为空时一直显示“加载中”
-      const data = await API.getVersions(force || (Array.isArray(installed) && installed.length === 0));
+      // 开服页只需要本地已安装版本：走 installed 模式，避免等待远端清单（最长 8 秒）
+      const data = await API.getVersions(force || (Array.isArray(installed) && installed.length === 0), true);
       installed = data.installed || [];
     }
     _shVersions = Array.isArray(installed) ? installed.slice() : [];

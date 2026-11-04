@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCommandCalls,
   installTauriMock,
+  mockApiRoute,
   resetTauriMock,
 } from '../../test-utils/tauri-mock.js';
 
@@ -101,6 +102,27 @@ describe('版本选择', () => {
     expect(setOptions).toHaveBeenCalled();
     expect(setValue).toHaveBeenCalledWith('1.20.1');
     expect(document.getElementById('server-host-status').textContent).toContain('已加载');
+  });
+
+  it('appState 缓存为空时通过 API 拉取已安装版本', async () => {
+    host = await loadHost();
+    const appState = (await import('../../core/app-state.js')).appState;
+    appState.installedVersions = [];
+    mockApiRoute('/api/versions', { installed: [{ id: '1.20.1' }, { id: '1.21.1' }], versions: [] });
+    const inst = customSelect.customSelectInstances['server-host-version'];
+    const setOptions = vi.fn();
+    const setValue = vi.fn();
+    inst.setOptions = setOptions;
+    inst.setValue = setValue;
+
+    await host.serverHostRefreshVersions();
+
+    expect(getCommandCalls().some((c) => c.cmd === 'api_proxy')).toBe(true);
+    expect(setOptions).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ value: '1.20.1' }),
+    ]));
+    expect(setValue).toHaveBeenCalledWith('1.20.1');
+    expect(document.getElementById('server-host-status').textContent).toContain('已加载 2 个本地版本');
   });
 });
 

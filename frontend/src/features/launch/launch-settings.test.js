@@ -264,10 +264,29 @@ describe('saveLaunchSettings', () => {
     expect(JSON.parse(call.args.value).windowSize).toBe('1366x768');
   });
 
+  it('版本隔离写回后端 settings.json', async () => {
+    mockApiRoute('/api/settings/set', { success: true });
+    document.getElementById('launch-version-isolation').value = 'none';
+
+    await mod.saveLaunchSettings();
+
+    const call = getApiCalls().find((c) => c.path === '/api/settings/set');
+    expect(call).toBeTruthy();
+    expect(call.args.body).toEqual({ key: 'versionIsolation', value: false });
+  });
+
   it('保存失败时提示错误', async () => {
     mockCommand('store_set', () => { throw new Error('磁盘只读'); });
     await mod.saveLaunchSettings();
     expect(document.getElementById('toast-container').textContent).toContain('保存失败: 磁盘只读');
+  });
+});
+
+describe('loadLaunchSettings', () => {
+  it('版本隔离以后端 settings.json 为准', async () => {
+    mockApiRoute('/api/settings', { versionIsolation: false });
+    await mod.loadLaunchSettings();
+    expect(document.getElementById('launch-version-isolation').value).toBe('none');
   });
 });
 

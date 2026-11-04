@@ -747,9 +747,9 @@ mod tests {
         assert_eq!(max, 21, "Forge 1.20.1 上限应为 Java 21，实际 max={}", max);
     }
 
-    /// 1.16.5 整合包（1.16.5-jojo）Forge 36.2.42：上限 Java 23，避免选中 Java 25
+    /// 1.16.5 整合包（1.16.5-jojo）Forge 36.2.42：同一 1.16 FML 栈，上限 Java 8
     #[test]
-    fn java_range_for_forge_1_16_5_36_2_42_is_8_to_23() {
+    fn java_range_for_forge_1_16_5_36_2_42_is_java_8() {
         let version_json = json!({
             "id": "1.16.5-jojo",
             "libraries": [
@@ -758,7 +758,7 @@ mod tests {
         });
         let (min, max) = get_java_version_range_from_json("1.16.5-jojo", &version_json);
         assert_eq!(min, 8);
-        assert_eq!(max, 23, "Forge 36.2.42 上限应为 Java 23，实际 max={}", max);
+        assert_eq!(max, 8, "Forge 36.2.42 上限应为 Java 8，实际 max={}", max);
     }
 
     /// Forge 36.2.25 及更早的 1.16.5 版本最高 Java 8
