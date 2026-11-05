@@ -214,6 +214,9 @@ class CustomSelect {
             if (this.valueEl) {
                 this.valueEl.classList.toggle('placeholder', !opt.text);
             }
+            this.optionsContainer.querySelectorAll('.custom-select-option').forEach(el => {
+                el.classList.toggle('selected', el.dataset.value === value);
+            });
         }
     }
 }

@@ -137,6 +137,14 @@ describe('release notes / resetButtons', () => {
     expect(document.getElementById('updater-release-notes').style.display).toBe('none');
   });
 
+  it('更新日志中的危险 HTML 会被消毒', async () => {
+    await mod.showReleaseNotes('<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>');
+    const html = document.getElementById('updater-release-notes-content').innerHTML;
+    expect(html).not.toContain('onerror');
+    expect(html).not.toContain('<script');
+    expect(window.__xss).toBeUndefined();
+  });
+
   it('重置按钮显示态', () => {
     document.getElementById('updater-check-btn').disabled = true;
     mod.resetButtons();

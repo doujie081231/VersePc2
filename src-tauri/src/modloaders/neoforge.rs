@@ -242,16 +242,22 @@ pub async fn install_neoforge(
         return json!({ "success": false, "error": format!("无法创建临时目录: {}", e) });
     }
 
+    let official_installer_url = format!(
+        "{}/{}/{}/{}-{}-installer.jar",
+        NEOFORGE_MAVEN_OFFICIAL, package_name, neo_version, package_name, neo_version
+    );
     let installer_urls = vec![
         format!(
             "{}/{}/{}/{}-{}-installer.jar",
             NEOFORGE_MAVEN_BMCLAPI, package_name, neo_version, package_name, neo_version
         ),
-        format!(
-            "{}/{}/{}/{}-{}-installer.jar",
-            NEOFORGE_MAVEN_OFFICIAL, package_name, neo_version, package_name, neo_version
-        ),
+        official_installer_url.clone(),
     ];
+    // 官方源取 sha1（严格 TLS），镜像下载后校验，锚定安装器真实性（审计 P0-4）
+    let installer_sha1 = shared::fetch_maven_sha1(&official_installer_url, 5).await;
+    if installer_sha1.is_none() {
+        eprintln!("[NeoForge] 官方源 sha1 不可用，本次仅校验 ZIP 魔数");
+    }
 
     let mut installer_ok = false;
     for url in &installer_urls {
@@ -262,7 +268,7 @@ pub async fn install_neoforge(
         match crate::download::single::download_with_mirror(
             url,
             &installer_path,
-            None,
+            installer_sha1.as_deref(),
             None,
             "libraries",
             180,
@@ -284,7 +290,19 @@ pub async fn install_neoforge(
             eprintln!("[NeoForge] 改用 curl 下载 installer: {}", url);
             match shared::download_with_curl(url, &installer_path, 300).await {
                 Ok(()) => {
-                    downloaded_ok = true;
+                    // curl 不走内部哈希校验，这里按官方 sha1 再验一次
+                    let hash_ok = match installer_sha1.as_deref() {
+                        Some(expected) => crate::mods::jar::compute_sha1_file(&installer_path)
+                            .map(|h| h.eq_ignore_ascii_case(expected))
+                            .unwrap_or(false),
+                        None => true,
+                    };
+                    if hash_ok {
+                        downloaded_ok = true;
+                    } else {
+                        eprintln!("[NeoForge] curl 下载 installer 哈希校验失败: {}", url);
+                        let _ = std::fs::remove_file(&installer_path);
+                    }
                 }
                 Err(e) => {
                     eprintln!("[NeoForge] curl 下载失败 {}: {}", url, e);

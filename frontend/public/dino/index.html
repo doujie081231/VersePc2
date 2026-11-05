@@ -13,7 +13,7 @@
 <body id="t" class="offline">
     <div id="messageBox" class="sendmessage">
          <h1 style="text-align: center;font-family: 'Microsoft YaHei','PingFang SC',system-ui,sans-serif;">按空格键开始</h1>
-         <div class="niokbutton" onclick="okbuttonsend()"></div>
+         <div class="niokbutton"></div>
     </div>
     <div id="main-frame-error" class="interstitial-wrapper">
         <div id="main-content">
@@ -31,14 +31,6 @@
     </div>
 </body>
 
-<script>
-    document.onkeydown = function(evt) {
-    evt = evt || window.event;
-    if (evt.keyCode == 32) {
-        var box = document.getElementById("messageBox");
-        box.style.visibility="hidden";
-    }
-};
-</script>
+<script src="init.js"></script>
     
 </html>

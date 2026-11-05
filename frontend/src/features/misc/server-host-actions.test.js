@@ -82,6 +82,28 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('版本选择', () => {
+  it('刷新版本后主动选中第一个版本，触发器不再停留在加载中', async () => {
+    host = await loadHost();
+    const appState = (await import('../../core/app-state.js')).appState;
+    appState.installedVersions = [
+      { id: '1.21.1' },
+      { id: '1.20.1' },
+    ];
+    const inst = customSelect.customSelectInstances['server-host-version'];
+    const setOptions = vi.fn();
+    const setValue = vi.fn();
+    inst.setOptions = setOptions;
+    inst.setValue = setValue;
+
+    await host.serverHostRefreshVersions();
+
+    expect(setOptions).toHaveBeenCalled();
+    expect(setValue).toHaveBeenCalledWith('1.20.1');
+    expect(document.getElementById('server-host-status').textContent).toContain('已加载');
+  });
+});
+
 describe('列表与控制台', () => {
   it('刷新列表渲染服务器卡片', async () => {
     host = await loadHost();

@@ -298,7 +298,8 @@ async fn download_library(
     let base_url = if group.contains("fabric") || group.contains("fabricmc") {
         "https://maven.fabricmc.net/"
     } else if group.contains("neoforged") {
-        "https://maven.neoforged.net/"
+        // NeoForge 官方仓库路径带 releases 段
+        "https://maven.neoforged.net/releases/"
     } else if group.contains("forge")
         || group.contains("minecraftforge")
         || group.starts_with("net.minecraft")

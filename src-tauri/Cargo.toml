@@ -1,6 +1,6 @@
 [package]
 name = "verse-tauri"
-version = "1.8.5"
+version = "1.8.6"
 description = "VersePC - Minecraft ???"
 license = "GPL-3.0"
 edition = "2024"
@@ -27,6 +27,7 @@ tauri-plugin-dialog = "2"
 dirs = "5"
 md5 = "0.7"
 base64 = "0.22"
+ring = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json", "blocking", "gzip", "deflate"] }
 sha1 = "0.10"
 futures-util = "0.3"

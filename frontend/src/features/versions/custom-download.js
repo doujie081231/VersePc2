@@ -124,7 +124,7 @@ const dlManager = {
         if (iconContainer && t.iconUrl) {
             let img = iconContainer.querySelector('.dl-task-icon-img');
             if (!img) {
-                iconContainer.innerHTML = '<img src="' + escapeHtml(t.iconUrl) + '" alt="" class="dl-task-icon-img" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="dl-task-icon-fallback dl-task-icon-svg" style="display:none">' + (svgIcons[t.type] || svgIcons.other) + '</div>';
+                iconContainer.innerHTML = '<img src="' + escapeHtml(t.iconUrl) + '" alt="" class="dl-task-icon-img" data-img-fallback="sibling"><div class="dl-task-icon-fallback dl-task-icon-svg" style="display:none">' + (svgIcons[t.type] || svgIcons.other) + '</div>';
             } else if (img.src !== t.iconUrl) {
                 img.src = t.iconUrl;
                 img.style.display = '';
@@ -301,7 +301,7 @@ const dlManager = {
             if (!t) return '';
             const iconClass = 'dl-task-icon--' + (t.type || 'other');
             const iconHtml = t.iconUrl
-                ? '<img src="' + t.iconUrl + '" alt="" class="dl-task-icon-img" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="dl-task-icon-fallback dl-task-icon-svg" style="display:none">' + (svgIcons[t.type] || svgIcons.other) + '</div>'
+                ? '<img src="' + t.iconUrl + '" alt="" class="dl-task-icon-img" data-img-fallback="sibling"><div class="dl-task-icon-fallback dl-task-icon-svg" style="display:none">' + (svgIcons[t.type] || svgIcons.other) + '</div>'
                 : svgIcons[t.type] || svgIcons.other;
             const fillClass = t.status === 'completed' ? 'dl-task-progress-fill--completed' : t.status === 'failed' ? 'dl-task-progress-fill--failed' : '';
             const statusText = t.status === 'completed' ? (t.message || '下载完成') : t.status === 'failed' ? (t.message || '下载失败') : (t.message || '下载中...');

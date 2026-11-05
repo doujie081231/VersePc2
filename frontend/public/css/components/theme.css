@@ -341,6 +341,17 @@
     contain: paint;
 }
 
+/* 自定义背景/全景下，页头不要再盖一层不透明底色：
+   主页标题区一直是透出背景的，其他页面也应保持一致（PCL 的页头同样不遮挡背景）。 */
+#app.wp-light .page-header,
+#app.wp-dark .page-header {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
 #app.wp-light .home-hero {
     background: linear-gradient(135deg, rgba(20, 20, 20, 0.75), rgba(30, 30, 30, 0.6));
     backdrop-filter: blur(8px);

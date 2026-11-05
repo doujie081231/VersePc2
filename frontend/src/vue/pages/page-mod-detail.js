@@ -21,7 +21,7 @@ const PageModDetail = {
       </button>
       <div class="moddetail-top-info">
         <div class="moddetail-icon-wrap">
-          <img id="md-icon-img" src="" alt="" onerror="this.style.display='none'">
+          <img id="md-icon-img" src="" alt="" @error="$event.target.style.display='none'">
           <span id="md-icon-fallback" class="icon-fallback" style="display:none"></span>
         </div>
         <div class="moddetail-text-info">

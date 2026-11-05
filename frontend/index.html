@@ -63,24 +63,25 @@
   <link rel="stylesheet" href="css/themes.css">
   <link rel="stylesheet" href="css/classic-nav.css">
   <link rel="stylesheet" href="css/splash.css">
-  <link rel="stylesheet" href="css/versions.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/launch.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/mods.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/settings.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="v-island/dynamic-island.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/file-browser.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/modal.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/private-server.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/server-host.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/plugins.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/redstone.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/sponsor.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/versions.css">
+  <link rel="stylesheet" href="css/launch.css">
+  <link rel="stylesheet" href="css/mods.css">
+  <link rel="stylesheet" href="css/settings.css">
+  <link rel="stylesheet" href="v-island/dynamic-island.css">
+  <link rel="stylesheet" href="css/file-browser.css">
+  <link rel="stylesheet" href="css/modal.css">
+  <link rel="stylesheet" href="css/private-server.css">
+  <link rel="stylesheet" href="css/server-host.css">
+  <link rel="stylesheet" href="css/plugins.css">
+  <link rel="stylesheet" href="css/redstone.css">
+  <link rel="stylesheet" href="css/sponsor.css">
   <link rel="icon" type="image/svg+xml" href="img/icon.svg">
   <link rel="icon" type="image/x-icon" href="img/icon.ico">
 </head>
 <body class="classic-nav">
   <script>
     // 在首屏渲染前恢复导航栏模式，避免已开启「简约导航栏」的用户看到经典侧栏闪一下
+    // 注意：CSP 通过 sha256 hash 放行本段内联脚本；修改内容后必须同步 tauri.conf.json 的 hash
     (function () {
       try {
         if (localStorage.getItem('versepc_nav_minimal') === '1') {
@@ -125,6 +126,7 @@
 
   <!-- 尽早显示窗口：splash 一可见就用 Tauri 全局 API 显示窗口（不等所有脚本加载完），避免黑屏闪一下又不会太慢 -->
   <script>
+    // 注意：CSP 通过 sha256 hash 放行本段内联脚本；修改内容后必须同步 tauri.conf.json 的 hash
     (function(){
       var ids = ['splash-logo','splash-text','splash-progress-container'];
       for (var i=0;i<ids.length;i++){

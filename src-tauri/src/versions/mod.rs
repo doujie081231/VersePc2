@@ -34,6 +34,7 @@ pub(crate) use manifest::fetch_remote_manifest;
 #[cfg(test)]
 pub(crate) use manifest::set_test_manifest_url;
 pub(crate) use scan::{scan_external_versions, scan_local_versions};
+pub(crate) use external::resolve_external_version_dir;
 
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -169,18 +170,35 @@ pub async fn handle(method: &str, path: &str, params: &Option<Value>, body: &Opt
         // ===== 添加外部文件夹 =====
         "POST /api/version/add-folder" => {
             let data = body.clone().unwrap_or(Value::Null);
-            let path_str = utils::get_str(&data, "path");
+            let mut path_str = utils::get_str(&data, "path");
             let name = utils::get_str(&data, "name");
             if path_str.is_empty() {
                 return Some(ApiResult::err(400, "Missing path"));
             }
-            let folder_path = PathBuf::from(&path_str);
+            let mut folder_path = PathBuf::from(&path_str);
             if !folder_path.exists() {
                 return Some(ApiResult::ok(json!({ "success": false, "error": format!("文件夹不存在: {}", path_str) })));
             }
             if !folder_path.is_dir() {
                 return Some(ApiResult::ok(json!({ "success": false, "error": format!("路径不是文件夹: {}", path_str) })));
             }
+
+            // 兼容用户直接选择 PCL/官方启动器的 versions 目录，或单个版本目录：
+            // 统一换算回真正的 Minecraft 根目录后再校验 versions/。
+            if !folder_path.join("versions").is_dir() {
+                let selected_name = folder_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if selected_name.eq_ignore_ascii_case("versions")
+                    && let Some(parent) = folder_path.parent() {
+                        folder_path = parent.to_path_buf();
+                } else if folder_path.join(format!("{}.json", selected_name)).is_file()
+                    && let Some(versions) = folder_path.parent()
+                    && versions.file_name().and_then(|n| n.to_str()) == Some("versions")
+                    && let Some(root) = versions.parent() {
+                        folder_path = root.to_path_buf();
+                    }
+                path_str = folder_path.to_string_lossy().to_string();
+            }
+
             // 校验：必须包含 versions 子目录
             let versions_dir = folder_path.join("versions");
             if !versions_dir.exists() {

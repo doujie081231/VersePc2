@@ -122,7 +122,7 @@ const PageSettingsOther = {
               </div>
               <div class="form-group">
                 <label>最大线程数: <span id="thread-count-value">32</span></label>
-                <input type="range" id="setting-max-threads" min="1" max="128" value="64" class="slider-input" oninput="document.getElementById('thread-count-value').textContent=this.value">
+                <input type="range" id="setting-max-threads" min="1" max="128" value="64" class="slider-input" @input="$event.target.parentElement.querySelector('label span').textContent = $event.target.value">
                 <span class="form-hint">文件级并发下载数，建议 32-64</span>
               </div>
               <div class="form-group">
@@ -133,7 +133,7 @@ const PageSettingsOther = {
               </div>
               <div class="form-group">
                 <label>每文件最大分块数: <span id="chunk-count-value">8</span></label>
-                <input type="range" id="setting-max-chunks-per-file" min="1" max="64" value="64" class="slider-input" oninput="document.getElementById('chunk-count-value').textContent=this.value">
+                <input type="range" id="setting-max-chunks-per-file" min="1" max="64" value="64" class="slider-input" @input="$event.target.parentElement.querySelector('label span').textContent = $event.target.value">
                 <span class="form-hint">单个大文件的最大并行下载分块数</span>
               </div>
               <div class="form-group">

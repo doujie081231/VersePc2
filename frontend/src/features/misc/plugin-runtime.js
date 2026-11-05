@@ -48,20 +48,21 @@ export let reloadPluginUI = null;
     return bytesToText(res);
   }
 
-  // ===== 插件沙箱（权限模型） =====
-  // 按 plugin.json 声明的 permissions 决定放行能力，未授权的一律拦截：
-  //   - 无条件放行（低风险）：get_app_version、store_*、clipboard、selectFile/showOpenDialog、
-  //       openExternal、readFileBuffer（仅限插件自身目录）。
-  //   - permissions.network === true        → 放行 fetch / apiProxy / XHR / WebSocket 等外部网络。
-  //   - permissions.native 含 "exec"        → 放行进程托管（启动/停止/状态/日志/退出事件）。
-  // 说明：JS 无强隔离，本沙箱能阻断普通第三方插件的越权行为，不防护刻意构造的作用域逃逸。
+  // ===== 插件权限兼容层（不是安全边界） =====
+  // 插件脚本与启动器前端运行在同一 WebView，拥有相同的 window/document/网络能力。
+  // 这里只提供一层“最小权限”兼容桥，方便插件按声明调用：
+  //   - 低风险命令直接放行；未列出的命令拒绝（仅约束走 PluginBridge 的调用）。
+  //   - permissions.network 仅作为声明提示，无法阻止插件直接使用 window.fetch。
+  //   - permissions.native 含 "exec" 仅是申请条件；真正的硬边界在 Rust 宿主侧授权表
+  //     （安装时原生弹窗确认，见 plugins.rs / .grants.json）。
+  // 因此：安装插件等同于信任其拥有启动器同等权限，只应安装可信来源的插件。
 
   // 后端命令白名单（无害/只读/本地配置类）
   const PLUGIN_ALLOWLIST = ['get_app_version', 'store_get', 'store_set', 'store_delete'];
 
   function _pluginDeny(pid, what) {
-    console.warn('[plugin-sandbox] 拦截插件 ' + pid + ' 的越权调用: ' + what);
-    return Promise.reject(new Error('permission denied by sandbox: ' + what));
+    console.warn('[plugin-bridge] 拦截插件 ' + pid + ' 的越权桥调用: ' + what);
+    return Promise.reject(new Error('permission denied by bridge: ' + what));
   }
 
   function _hasPerm(plugin, key) {
@@ -145,34 +146,6 @@ export let reloadPluginUI = null;
     });
   }
 
-  // 受限 window：替换 bridge/electronAPI/__TAURI__；未授权则禁用网络 API；DOM 渲染能力保留
-  function _restrictedWindow(pid, dir, plugin) {
-    var br = _restrictedBridge(pid, dir, plugin);
-    var allowNetwork = _hasPerm(plugin, 'network');
-    var guard = {
-      get: function (t, prop) {
-        if (prop === 'bridge' || prop === 'electronAPI' || prop === '__TAURI__' ||
-            prop === '__TAURI_INTERNALS__' || prop === '__TAURI_PROXY__') return br;
-        if (allowNetwork) return t[prop];
-        if (prop === 'fetch') return function () { return _pluginDeny(pid, 'fetch'); };
-        if (prop === 'XMLHttpRequest' || prop === 'WebSocket' || prop === 'EventSource') {
-          return function () { throw new Error('network denied by sandbox'); };
-        }
-        if (prop === 'sendBeacon') return function () { return false; };
-        return t[prop];
-      },
-      set: function (t, prop, val) {
-        // 禁止插件把真实 bridge 写回 window，防止覆盖沙箱
-        if (prop === 'bridge' || prop === 'electronAPI' || prop === '__TAURI__' ||
-            prop === '__TAURI_PROXY__') return false;
-        t[prop] = val;
-        return true;
-      },
-      has: function (_t, _prop) { return true; }
-    };
-    return new Proxy(window, guard);
-  }
-
   // 事件监听 helper（onExecLog/onExecExit 用；bridge 未直接暴露 listen）
   function _listenTauri(eventName, cb) {
     var evt = (window.__TAURI__ && window.__TAURI__.event)
@@ -187,27 +160,36 @@ export let reloadPluginUI = null;
     return function () { disposed = true; if (un) { try { un(); } catch (_) {} } un = null; };
   }
 
-  // 在隔离作用域执行插件脚本：window/self/globalThis 传受限版；fetch/XHR/WS 按权限注入
+  // 在启动器同一环境执行插件脚本。
+  // window/self/globalThis 传真实 window：插件与启动器同权限，不做无法兑现的“沙箱”承诺。
+  // PluginBridge 只是最小权限兼容桥：插件若绕过它直接调用 __TAURI_INTERNALS__，
+  // 仍能发起任意已注册命令；宿主侧能校验参数与授权记录，但无法辨识调用者身份。
+  // 因此安装插件等同于完全信任该插件。
   function execPluginScript(code, plugin) {
     var pid = plugin && plugin.id;
     var dir = plugin && plugin.installedDir;
-    var allowNetwork = _hasPerm(plugin, 'network');
-    var w = _restrictedWindow(pid, dir, plugin);
-    var br = w.bridge;
-    var blockedCtor = function () { throw new Error('network denied by sandbox'); };
+    var w = window;
+    var br = _restrictedBridge(pid, dir, plugin);
     var runner = new Function(
       'window', 'self', 'globalThis', 'navigator', 'document',
       'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'PluginBridge',
       code
     );
-    var f = allowNetwork ? window.fetch.bind(window) : function () { return _pluginDeny(pid, 'fetch'); };
-    var xhr = allowNetwork ? window.XMLHttpRequest : blockedCtor;
-    var ws = allowNetwork ? window.WebSocket : blockedCtor;
-    var es = allowNetwork ? window.EventSource : blockedCtor;
     try {
-      runner(w, w, w, window.navigator, window.document, f, xhr, ws, es, br);
+      runner(
+        w,
+        w,
+        w,
+        window.navigator,
+        window.document,
+        window.fetch.bind(window),
+        window.XMLHttpRequest,
+        window.WebSocket || function () { throw new Error('WebSocket unavailable'); },
+        window.EventSource || function () { throw new Error('EventSource unavailable'); },
+        br
+      );
     } catch (e) {
-      console.error('[plugin-sandbox] 插件 ' + pid + ' 执行失败', e);
+      console.error('[plugin-runtime] 插件 ' + pid + ' 执行失败', e);
     }
   }
 
@@ -222,7 +204,7 @@ export let reloadPluginUI = null;
     });
   }
 
-  // 读取插件内 JS 并在沙箱内执行（使插件能注册组件/做任意定制）
+  // 读取插件内 JS 并执行（使插件能注册组件/做任意定制）
   async function loadPluginScriptFile(plugin, dir, file) {
     const code = await readText(dir, file);
     execPluginScript(code, plugin);

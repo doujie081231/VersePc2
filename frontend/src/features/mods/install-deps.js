@@ -208,7 +208,7 @@ function showDependencyDialog(projectId, source, versionId, fileId, savePath, de
     const ver = dep.compatibleVersion;
     const verInfo = ver ? `v${ver.versionNumber}` : '未找到兼容版本';
     const iconHtml = dep.icon
-      ? `<img src="${dep.icon}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;" onerror="this.style.display='none'" loading="lazy">`
+      ? `<img src="${dep.icon}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;" data-img-fallback="hide" loading="lazy">`
       : `<div style="width:32px;height:32px;border-radius:6px;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:14px;">📦</div>`;
     const btnDisabled = !ver ? 'opacity:0.4;pointer-events:none;' : '';
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
@@ -389,7 +389,7 @@ async function maybeShowPostInstallDeps(projectId, source, versionId, savePath, 
         ? (ver.versionNumber || ver.fileName || '')
         : '无兼容版本';
       const iconHtml = dep.icon
-        ? `<img src="${escapeHtml(dep.icon)}" alt="" style="width:32px;height:32px;border-radius:7px;object-fit:cover;" onerror="this.style.display='none'" loading="lazy">`
+        ? `<img src="${escapeHtml(dep.icon)}" alt="" style="width:32px;height:32px;border-radius:7px;object-fit:cover;" data-img-fallback="hide" loading="lazy">`
         : `<div style="width:32px;height:32px;border-radius:7px;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:14px;">📦</div>`;
       const indent = Math.min(Math.max((dep.depth || 1) - 1, 0), 3) * 14;
       const title = typeof formatModNameWithChinese === 'function'

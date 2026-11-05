@@ -156,6 +156,11 @@ fn current_update_key() -> &'static str {
     }
 }
 
+/// 取当前平台对应的更新包条目；清单可以暂时只包含部分平台。
+fn current_platform_asset(v: &Value) -> Option<&Value> {
+    v.get("files")?.get(current_update_key())
+}
+
 fn parse_version(s: &str) -> (u32, u32, u32) {
     let mut parts = s
         .trim_start_matches('v')
@@ -202,6 +207,104 @@ fn save_skipped_version(version: &str) {
 
 // ============== 检查更新 ==============
 
+/// 更新包地址白名单：只接受本项目在 Gitee / GitHub 的 release 直链。
+/// update.json 会经过第三方加速代理，不能信任其中任意 URL（审计 P1-1）。
+fn is_trusted_update_asset(url: &str) -> bool {
+    url.starts_with("https://github.com/doujie081231/VersePc2/releases/download/")
+        || url.starts_with("https://gitee.com/doujie081231/verse-pc2/releases/download/")
+}
+
+fn is_valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// update.json 发布签名公钥（Ed25519，原始 32 字节的 base64）。
+/// 私钥只保存在发布者本机，绝不进入仓库；对应签名脚本见 scripts/sign-update.mjs。
+const UPDATE_PUBLIC_KEY_B64: &str = "HY8db8m9lz2RZe5gIaUj9ib971FG/L/4/HR3G7U2IZE=";
+
+/// 规范化字段转义：与 scripts/sign-update.mjs 中的 escapeField 完全一致。
+fn canonical_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// 生成签名所覆盖的规范化文本（不依赖 JSON 序列化实现细节）。
+/// 字段按固定顺序输出，files 按平台名排序，避免不同实现/键顺序导致验签失败。
+fn canonical_update_payload(v: &Value) -> Vec<u8> {
+    let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("");
+    let mut out = String::new();
+    out.push_str("verse-update-v1\n");
+    out.push_str(&format!("version={}\n", canonical_escape(field("version"))));
+    out.push_str(&format!(
+        "releaseName={}\n",
+        canonical_escape(field("releaseName"))
+    ));
+    out.push_str(&format!(
+        "releaseDate={}\n",
+        canonical_escape(field("releaseDate"))
+    ));
+    out.push_str(&format!(
+        "releaseNotes={}\n",
+        canonical_escape(field("releaseNotes"))
+    ));
+
+    let files = v.get("files").and_then(|x| x.as_object());
+    let mut platforms: Vec<&String> = files.map(|m| m.keys().collect()).unwrap_or_default();
+    platforms.sort();
+    for p in platforms {
+        let f = files.and_then(|m| m.get(p)).and_then(|x| x.as_object());
+        let url = f
+            .and_then(|m| m.get("url"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("");
+        let sha = f
+            .and_then(|m| m.get("sha256"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        let size = f
+            .and_then(|m| m.get("size"))
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        out.push_str(&format!(
+            "file\t{}\t{}\t{}\t{}\n",
+            canonical_escape(p),
+            canonical_escape(url),
+            canonical_escape(&sha),
+            size
+        ));
+    }
+    out.into_bytes()
+}
+
+/// 校验 update.json 的 Ed25519 签名；缺失或无效一律拒绝（更新链路经过第三方代理）。
+fn verify_update_signature(v: &Value, signature_b64: &str) -> bool {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let (Ok(sig), Ok(key)) = (
+        STANDARD.decode(signature_b64.trim()),
+        STANDARD.decode(UPDATE_PUBLIC_KEY_B64),
+    ) else {
+        return false;
+    };
+    if sig.len() != 64 || key.len() != 32 {
+        return false;
+    }
+    let payload = canonical_update_payload(v);
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key.as_slice())
+        .verify(&payload, &sig)
+        .is_ok()
+}
+
 /// 并发请求单个 update.json 源，成功且数据有效时返回 Some(UpdateRelease)
 async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRelease>, ()> {
     let resp = client
@@ -215,6 +318,14 @@ async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRel
     }
     let v: Value = resp.json().await.map_err(|_| ())?;
 
+    // 更新清单必须携带发布者 Ed25519 签名：清单会经过 ghfast/ghproxy 等第三方代理，
+    // 仅靠 HTTPS/白名单无法防止代理篡改版本号、说明或下载地址（审计 P1-1）。
+    let signature = v.get("signature").and_then(|x| x.as_str()).unwrap_or("");
+    if !verify_update_signature(&v, signature) {
+        log_download(&format!("[check] 拒绝未签名或签名无效的更新清单: {}", url));
+        return Ok(None);
+    }
+
     let version = v
         .get("version")
         .and_then(|x| x.as_str())
@@ -224,15 +335,27 @@ async fn try_fetch_source(client: &Client, url: &str) -> Result<Option<UpdateRel
         return Ok(None);
     }
 
-    // 依据当前运行平台选择 update.json 中对应的文件键，macOS/Linux 也能拉到各自的更新包
-    let files = v.get("files").and_then(|x| x.get(current_update_key()));
-    let asset = files.map(|f| UpdateAsset {
-        url: f.get("url").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+    // 依据当前运行平台选择对应的文件键；缺失则视为该源不适用于本平台。
+    // 这样可以先发布 Windows，macOS/Linux 构建完成后再补充各自的条目。
+    let Some(f) = current_platform_asset(&v) else {
+        log_download(&format!(
+            "[check] 清单缺少当前平台 {} 的安装包，跳过: {}",
+            current_update_key(),
+            url
+        ));
+        return Ok(None);
+    };
+    let asset_url = f.get("url").and_then(|x| x.as_str()).unwrap_or("");
+    let sha = f.get("sha256").and_then(|x| x.as_str()).unwrap_or("");
+    // 不可信的下载地址或缺失哈希：整份清单位于第三方代理链路上，直接换源/失败关闭
+    if !is_trusted_update_asset(asset_url) || !is_valid_sha256(sha) {
+        log_download(&format!("[check] 拒绝不可信的更新包: url={} sha256={}", asset_url, sha));
+        return Ok(None);
+    }
+    let asset = Some(UpdateAsset {
+        url: asset_url.to_string(),
         size: f.get("size").and_then(|x| x.as_u64()).unwrap_or(0),
-        sha256: f
-            .get("sha256")
-            .and_then(|x| x.as_str())
-            .map(String::from),
+        sha256: Some(sha.to_string()),
     });
 
     Ok(Some(UpdateRelease {
@@ -437,8 +560,10 @@ pub fn pending_downloaded_path() -> Option<PathBuf> {
         .and_then(|s| s.downloaded_path.clone())
 }
 
-/// 用户关闭程序时调用：若已有下载完成的更新包，写入一次性"已更新"提示后执行替换退出。
+/// 用户关闭程序时调用：若已有下载完成的更新包，执行替换退出。
 /// 返回 true 表示已进入更新替换流程，调用方应跳过正常的关闭动画/关闭逻辑（进程由安装脚本负责退出并重启）。
+/// 安装脚本启动失败时返回 false，让调用方继续正常关闭——与 PCL 一致：
+/// 更新失败只记录错误，绝不把“关闭程序”一起卡住。
 pub fn auto_install_on_close(app: &tauri::AppHandle) -> bool {
     let Some(p) = pending_downloaded_path() else {
         return false;
@@ -446,10 +571,16 @@ pub fn auto_install_on_close(app: &tauri::AppHandle) -> bool {
     if !p.exists() {
         return false;
     }
+    // 先写一次性"已更新"提示：安装脚本要等本进程退出后才替换并启动新版本，
+    // 必须保证文件在退出前落盘；安装失败时再删掉，避免下次启动误报已更新
     if let Some(s) = UPDATE_STATE.lock().unwrap().as_ref() {
         write_pending_notice(&s.release.tag_ver, &s.release.body);
     }
-    let _ = install_and_restart(app, &p);
+    if let Err(e) = install_and_restart(app, &p) {
+        let _ = fs::remove_file(pending_notice_path());
+        log_download(&format!("[install] 关闭时安装更新失败，改为正常退出: {}", e));
+        return false;
+    }
     true
 }
 
@@ -466,11 +597,16 @@ pub async fn updater_install_update(app: AppHandle) -> Result<Value, String> {
     if !path.exists() {
         return Err("更新文件不存在，请重新下载".into());
     }
-    // 升级前写入一次性提示，重启启动时前端据此显示"软件已更新至 xxx 版本"
+    // 先写一次性"已更新"提示（重启启动时前端据此显示"软件已更新至 xxx 版本"），
+    // 安装脚本要等本进程退出后才执行，因此必须在退出前落盘
     if let Some(r) = &release {
         write_pending_notice(&r.tag_ver, &r.body);
     }
-    install_and_restart(&app, &path)?;
+    if let Err(e) = install_and_restart(&app, &path) {
+        // 安装未启动时删掉提示，避免下次启动误报已更新
+        let _ = fs::remove_file(pending_notice_path());
+        return Err(e);
+    }
     Ok(json!({ "success": true }))
 }
 
@@ -484,5 +620,90 @@ pub async fn updater_download_update(app: AppHandle) -> Result<Value, String> {
     match download_update_inner(&app, &release).await {
         Ok(()) => Ok(json!({ "success": true })),
         Err(e) => Ok(json!({ "success": false, "error": e })),
+    }
+}
+
+#[cfg(test)]
+mod update_asset_tests {
+    use super::*;
+
+    #[test]
+    fn only_project_release_urls_are_trusted() {
+        assert!(is_trusted_update_asset(
+            "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.5/VersePC2.exe"
+        ));
+        assert!(is_trusted_update_asset(
+            "https://github.com/doujie081231/VersePc2/releases/download/v1.8.5/VersePC2.exe"
+        ));
+        assert!(!is_trusted_update_asset("https://evil.example.com/VersePC2.exe"));
+        assert!(!is_trusted_update_asset(
+            "https://github.com/other/repo/releases/download/v1/VersePC2.exe"
+        ));
+        assert!(!is_trusted_update_asset("http://gitee.com/doujie081231/verse-pc2/releases/download/v1/x"));
+    }
+
+    #[test]
+    fn sha256_must_be_64_hex_chars() {
+        assert!(is_valid_sha256(
+            "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a325"
+        ));
+        assert!(!is_valid_sha256(""));
+        assert!(!is_valid_sha256("abc"));
+        assert!(!is_valid_sha256(
+            "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a32Z"
+        ));
+    }
+
+    const SHIPPED_MANIFEST: &str = include_str!("../../update.json");
+
+    fn shipped_signature(v: &Value) -> String {
+        v.get("signature")
+            .and_then(|x| x.as_str())
+            .expect("update.json 缺少 signature，请先运行 scripts/sign-update.mjs")
+            .to_string()
+    }
+
+    #[test]
+    fn shipped_manifest_signature_verifies() {
+        let v: Value = serde_json::from_str(SHIPPED_MANIFEST).expect("update.json 解析失败");
+        let sig = shipped_signature(&v);
+        assert!(verify_update_signature(&v, &sig));
+    }
+
+    #[test]
+    fn tampered_version_or_asset_url_fails_verification() {
+        let v: Value = serde_json::from_str(SHIPPED_MANIFEST).expect("update.json 解析失败");
+        let sig = shipped_signature(&v);
+
+        let mut changed_version = v.clone();
+        changed_version["version"] = json!("9.9.9");
+        assert!(!verify_update_signature(&changed_version, &sig));
+
+        let mut changed_url = v.clone();
+        changed_url["files"]["win-x64"]["url"] = json!("https://evil.example.com/VersePC2.exe");
+        assert!(!verify_update_signature(&changed_url, &sig));
+    }
+
+    #[test]
+    fn manifest_without_current_platform_asset_is_skipped() {
+        let v = json!({
+            "version": "9.9.9",
+            "files": {
+                "other-platform": {
+                    "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v9.9.9/VersePC2.exe",
+                    "size": 1,
+                    "sha256": "17aa01d6b05cfdc4d277ba44fcf5b733f1e014fad0c6e0e17dc7c3bcfcc9a325"
+                }
+            }
+        });
+        assert!(current_platform_asset(&v).is_none());
+    }
+
+    #[test]
+    fn missing_or_malformed_signature_fails_verification() {
+        let v: Value = serde_json::from_str(SHIPPED_MANIFEST).expect("update.json 解析失败");
+        assert!(!verify_update_signature(&v, ""));
+        assert!(!verify_update_signature(&v, "not-base64"));
+        assert!(!verify_update_signature(&v, "AAAA"));
     }
 }

@@ -135,17 +135,34 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
 
     let version_id = utils::get_str(&settings, "selectedVersion");
     let versions_dir = data_dir.join("versions");
-    let version_dir = if !version_id.is_empty() {
-        versions_dir.join(&version_id)
+    // 外部版本必须定位到 external-folders.json 里的真实目录；
+    // 否则“打开模组/存档/日志目录”会错误打开启动器内部 data/versions/<id>。
+    let external_dir = if version_id.is_empty() {
+        None
     } else {
-        minecraft_dir.clone()
+        crate::versions::resolve_external_version_dir(&version_id)
+            .map(PathBuf::from)
     };
+    let version_dir = external_dir.clone().unwrap_or_else(|| {
+        if version_id.is_empty() {
+            minecraft_dir.clone()
+        } else {
+            versions_dir.join(&version_id)
+        }
+    });
+    // 外部版本目录结构为 <root>/versions/<id>，其父父目录即外部 Minecraft 根
+    let external_root = external_dir.as_ref().and_then(|p| {
+        p.parent().and_then(|versions| versions.parent()).map(|root| root.to_path_buf())
+    });
     eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={}",
         version_id, versions_dir.display(), version_dir.display());
 
     let path = match folder {
-        "minecraft" | "game" => minecraft_dir,
-        "versions" => versions_dir,
+        "minecraft" | "game" => external_root.clone().unwrap_or(minecraft_dir),
+        "versions" => external_root
+            .as_ref()
+            .map(|root| root.join("versions"))
+            .unwrap_or(versions_dir),
         "mods" => version_dir.join("mods"),
         "assets" => version_dir.join("assets"),
         "logs" => version_dir.join("logs"),
@@ -534,14 +551,168 @@ pub fn handle(method: &str, path: &str, params: &Option<Value>, body: &Option<Va
     }
 }
 
+/// read_file_buffer 允许读取的媒体扩展名：壁纸/预览/存档图标等都是这些类型。
+/// 不含 json/db/无扩展名文件，避免前端任意 JS 借此读取账号令牌、浏览器密码库、
+/// SSH 私钥等（审计 P0-3）。
+const READABLE_MEDIA_EXTS: &[&str] = &[
+    "png", "jpg", "jpeg", "jfif", "webp", "gif", "bmp", "svg", "ico",
+    "mp4", "webm", "mov", "m4v", "mkv", "avi", "wmv", "flv",
+];
+
+/// 仅允许在数据目录下读取的日志类扩展名（问题反馈自动收集日志用）
+const READABLE_LOG_EXTS: &[&str] = &["log", "txt", "install"];
+
+/// Windows 路径前缀比较（大小写不敏感）
+fn path_starts_with_ci(path: &std::path::Path, prefix: &std::path::Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let p = path.to_string_lossy().to_lowercase();
+        let q = prefix.to_string_lossy().to_lowercase();
+        if q.is_empty() || !p.starts_with(&q) {
+            return false;
+        }
+        // 防止 `data` 前缀误匹配 `database`
+        p.len() == q.len()
+            || p.as_bytes()[q.len()] == b'\\'
+            || p.as_bytes()[q.len()] == b'/'
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.starts_with(prefix)
+    }
+}
+
+/// 凭据/隐私类目录：不允许通过 read_file_buffer 读取
+fn sensitive_read_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for key in ["APPDATA", "LOCALAPPDATA", "ProgramData", "SystemRoot"] {
+        if let Some(v) = std::env::var_os(key) {
+            roots.push(PathBuf::from(v));
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        for name in [".ssh", ".aws", ".gnupg", ".config", ".kube", ".docker"] {
+            roots.push(home.join(name));
+        }
+    }
+    roots
+        .into_iter()
+        .map(|p| normalize_path_for_allowlist(&p))
+        .collect()
+}
+
+/// 读取能力判定：
+/// - 媒体文件：任意目录（数据目录、外部盘、Steam 创意工坊等），但敏感目录除外
+/// - 日志文件：仅数据目录（反馈页自动收集 logs 下的 .log/.txt/.install）
+fn is_read_allowed(
+    path: &std::path::Path,
+    data_dir: &std::path::Path,
+    sensitive: &[PathBuf],
+) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    let under_data = path_starts_with_ci(path, data_dir);
+    let is_media = READABLE_MEDIA_EXTS.contains(&ext.as_str());
+    let is_log = under_data && READABLE_LOG_EXTS.contains(&ext.as_str());
+    if !is_media && !is_log {
+        return false;
+    }
+    if under_data {
+        return true;
+    }
+    // 日志类离开数据目录后不再放行
+    if !is_media {
+        return false;
+    }
+    !sensitive.iter().any(|root| path_starts_with_ci(path, root))
+}
+
 /// 读取指定文件的原始字节（返回 ArrayBuffer）
 /// 用于壁纸等本地图片加载：Tauri 的 WebView 无法直接加载本地文件路径，
 /// 前端读取字节后转 blob URL 即可显示。
+///
+/// 安全约束（审计 P0-3）：必须先 canonicalize 再判断，防止 `..` 绕过；
+/// 只允许媒体扩展名，敏感目录（AppData/ProgramData/SystemRoot/.ssh 等）一律拒绝。
 #[tauri::command]
 pub async fn read_file_buffer(_app: tauri::AppHandle, path: String) -> Result<Vec<u8>, String> {
-    let path_buf = std::path::Path::new(&path);
-    if !path_buf.is_file() {
+    let canonical = std::fs::canonicalize(&path).map_err(|_| "文件不存在或路径无效".to_string())?;
+    let normalized = normalize_path_for_allowlist(&canonical);
+    if !normalized.is_file() {
         return Err("文件不存在".to_string());
     }
-    std::fs::read(&path).map_err(|e| e.to_string())
+    let data_dir = std::fs::canonicalize(storage::resolve_data_dir())
+        .map(|p| normalize_path_for_allowlist(&p))
+        .unwrap_or_else(|_| normalize_path_for_allowlist(&storage::resolve_data_dir()));
+    if !is_read_allowed(&normalized, &data_dir, &sensitive_read_roots()) {
+        return Err("不允许读取该文件".to_string());
+    }
+    std::fs::read(&normalized).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod read_guard_tests {
+    use super::*;
+    use std::fs;
+
+    fn setup() -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "verse-fs-read-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(root.join("data").join("logs")).unwrap();
+        fs::create_dir_all(root.join("sensitive")).unwrap();
+        fs::write(root.join("pic.png"), b"x").unwrap();
+        fs::write(root.join("secret.json"), b"{}").unwrap();
+        fs::write(root.join("id_rsa"), b"key").unwrap();
+        fs::write(root.join("note.txt"), b"x").unwrap();
+        fs::write(root.join("data").join("logs").join("launch-debug.log"), b"log").unwrap();
+        fs::write(root.join("sensitive").join("photo.jpg"), b"x").unwrap();
+        root
+    }
+
+    fn canon(p: PathBuf) -> PathBuf {
+        fs::canonicalize(p).unwrap()
+    }
+
+    #[test]
+    fn media_is_allowed_but_credentials_and_logs_outside_data_are_not() {
+        let root = setup();
+        let data = canon(root.join("data"));
+        let sensitive = vec![canon(root.join("sensitive"))];
+
+        assert!(is_read_allowed(&canon(root.join("pic.png")), &data, &sensitive));
+        assert!(!is_read_allowed(&canon(root.join("secret.json")), &data, &sensitive));
+        assert!(!is_read_allowed(&canon(root.join("id_rsa")), &data, &sensitive));
+        // .txt 属于日志类扩展名：只允许在数据目录下读取
+        assert!(!is_read_allowed(&canon(root.join("note.txt")), &data, &sensitive));
+        assert!(is_read_allowed(
+            &canon(root.join("data").join("logs").join("launch-debug.log")),
+            &data,
+            &sensitive
+        ));
+    }
+
+    #[test]
+    fn sensitive_directories_are_denied_even_for_media() {
+        let root = setup();
+        let data = canon(root.join("data"));
+        let sensitive = vec![canon(root.join("sensitive"))];
+        assert!(!is_read_allowed(&canon(root.join("sensitive").join("photo.jpg")), &data, &sensitive));
+    }
+
+    #[test]
+    fn data_prefix_does_not_match_sibling_directory() {
+        let root = setup();
+        let data = canon(root.join("data"));
+        fs::create_dir_all(root.join("database")).unwrap();
+        fs::write(root.join("database").join("x.log"), b"x").unwrap();
+        assert!(!is_read_allowed(&canon(root.join("database").join("x.log")), &data, &[]));
+    }
 }

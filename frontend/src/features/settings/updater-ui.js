@@ -1,4 +1,6 @@
 import { showToast } from '../misc/ui-components.js';
+import DOMPurify from 'dompurify';
+
 import { switchPage } from './window-theme.js';
 
 import { bridge } from '../../core/tauri-bridge.js';
@@ -91,8 +93,8 @@ const api = bridge;
         if (contentEl) {
             const notes = notice.notes || '';
             const render = () => {
-                contentEl.innerHTML = '<div class="update-status__title" style="margin-bottom:8px;">更新内容：</div>' +
-                    (typeof marked !== 'undefined' ? marked.parse(notes) : (notes ? notes.replace(/\n/g, '<br>') : '<p>详情请前往官网查看</p>'));
+                contentEl.innerHTML = DOMPurify.sanitize('<div class="update-status__title" style="margin-bottom:8px;">更新内容：</div>' +
+                    (typeof marked !== 'undefined' ? marked.parse(notes) : (notes ? notes.replace(/\n/g, '<br>') : '<p>详情请前往官网查看</p>')));
             };
             if (typeof marked === 'undefined') {
                 _lazyLoadScript('js/marked.min.js').then(render).catch(render);
@@ -177,7 +179,7 @@ const api = bridge;
                 try { await _lazyLoadScript('js/marked.min.js'); } catch (e) {}
             }
             if (typeof marked !== 'undefined') {
-                content.innerHTML = marked.parse(notes.trim());
+                content.innerHTML = DOMPurify.sanitize(marked.parse(notes.trim()));
             } else {
                 content.textContent = notes.trim();
             }
@@ -363,11 +365,11 @@ const api = bridge;
                 const html = typeof marked !== 'undefined'
                     ? marked.parse(data.releaseNotes)
                     : data.releaseNotes.replace(/\n/g, '<br>');
-                contentEl.innerHTML = html;
+                contentEl.innerHTML = DOMPurify.sanitize(html);
             };
             if (typeof marked === 'undefined') {
                 _lazyLoadScript('js/marked.min.js').then(renderNotes).catch(() => {
-                    contentEl.innerHTML = data.releaseNotes.replace(/\n/g, '<br>');
+                    contentEl.innerHTML = DOMPurify.sanitize(data.releaseNotes.replace(/\n/g, '<br>'));
                 });
             } else {
                 renderNotes();

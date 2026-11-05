@@ -28,6 +28,100 @@ fn installed_index() -> PathBuf {
     plugins_root().join("installed.json")
 }
 
+/// 宿主侧插件授权表：记录用户确认过的高危权限，插件自己改 plugin.json 无法提权。
+fn grants_path() -> PathBuf {
+    plugins_root().join(".grants.json")
+}
+
+/// 插件 id 只允许普通目录名：拒绝路径分隔符、盘符和 `..`（与开服目录穿越同类问题）
+pub fn valid_plugin_id(id: &str) -> bool {
+    !id.is_empty()
+        && !id.contains("..")
+        && !id.contains('/')
+        && !id.contains('\\')
+        && !id.contains(':')
+}
+
+fn load_grants() -> Value {
+    match std::fs::read_to_string(grants_path()) {
+        Ok(c) => serde_json::from_str(c.trim_start_matches('\u{FEFF}'))
+            .unwrap_or_else(|_| json!({ "grants": {} })),
+        Err(_) => json!({ "grants": {} }),
+    }
+}
+
+fn save_grants(grants: &Value) {
+    let path = grants_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(grants).unwrap_or_default());
+}
+
+/// 插件清单是否声明了 native:exec。注意这只是“可申请”条件，不等于已授权。
+pub fn plugin_declares_native_exec(id: &str) -> bool {
+    if !valid_plugin_id(id) {
+        return false;
+    }
+    let Ok(content) = std::fs::read_to_string(plugin_dir(id).join("plugin.json")) else {
+        return false;
+    };
+    let Ok(m) = serde_json::from_str::<Value>(content.trim_start_matches('\u{FEFF}')) else {
+        return false;
+    };
+    m.get("permissions")
+        .and_then(|p| p.get("native"))
+        .and_then(|a| a.as_array())
+        .map(|arr| arr.iter().any(|v| v.as_str() == Some("exec")))
+        .unwrap_or(false)
+}
+
+/// 宿主授权表中是否记录了该插件的 native:exec 授权
+pub fn has_native_exec_grant(id: &str) -> bool {
+    if !valid_plugin_id(id) {
+        return false;
+    }
+    load_grants()
+        .get("grants")
+        .and_then(|g| g.get(id))
+        .and_then(|x| x.get("native_exec"))
+        .and_then(|b| b.as_bool())
+        .unwrap_or(false)
+}
+
+/// 写入/撤销 native:exec 授权（仅安装流程在用户确认后调用）
+pub fn set_native_exec_grant(id: &str, granted: bool) {
+    if !valid_plugin_id(id) {
+        return;
+    }
+    let mut data = load_grants();
+    if !data.is_object() {
+        data = json!({ "grants": {} });
+    }
+    if data.get("grants").and_then(|v| v.as_object()).is_none()
+        && let Some(obj) = data.as_object_mut()
+    {
+        obj.insert("grants".to_string(), json!({}));
+    }
+    if let Some(grants) = data.get_mut("grants").and_then(|v| v.as_object_mut()) {
+        if granted {
+            grants.insert(
+                id.to_string(),
+                json!({ "native_exec": true, "grantedAt": crate::utils::now_millis() }),
+            );
+        } else {
+            grants.remove(id);
+        }
+    }
+    save_grants(&data);
+}
+
+/// 插件能否执行外部程序：id 合法 + 已安装且清单声明 exec + 宿主授权表已授权。
+/// 三者缺一不可：更新后的插件即便旧授权还在，只要新清单不再声明 exec 也会被拒绝。
+pub fn can_native_exec(id: &str) -> bool {
+    valid_plugin_id(id) && plugin_declares_native_exec(id) && has_native_exec_grant(id)
+}
+
 // ============== 清单读取 ==============
 
 /// 读取并校验一份 plugin.json（<id>/plugin.json）。
@@ -137,7 +231,7 @@ fn phase_extract(zip_path: &str, tmp: &Path) -> Result<(Value, PathBuf), String>
 
 /// 把有效根移动到 <plugins>/<id>/（已存在则先删，支持更新覆盖）。
 fn apply_install(tmp_root: &Path, effective: &Path, id: &str) -> Result<Value, String> {
-    if id.is_empty() || id != id.trim_matches(['.', '/', '\\']) {
+    if !valid_plugin_id(id) {
         return Err("插件 id 不合法".to_string());
     }
     let target = plugin_dir(id);
@@ -206,8 +300,8 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
 // ============== 卸载 ==============
 
 pub fn uninstall(id: &str) -> Value {
-    if id.is_empty() {
-        return json!({ "ok": false, "error": "缺少插件 id" });
+    if !valid_plugin_id(id) {
+        return json!({ "ok": false, "error": "插件 id 不合法" });
     }
     let target = plugin_dir(id);
     if !target.exists() {
@@ -216,6 +310,8 @@ pub fn uninstall(id: &str) -> Value {
     match std::fs::remove_dir_all(&target) {
         Ok(()) => {
             remove_index(id);
+            // 卸载时同步撤销宿主授权，避免同名插件重新安装后继承旧授权
+            set_native_exec_grant(id, false);
             json!({ "ok": true })
         }
         Err(e) => json!({ "ok": false, "error": format!("卸载失败: {}", e) }),
@@ -326,7 +422,13 @@ pub async fn market_index(index_url: &str) -> Value {
 /// 下载插件包（校验 sha256）并安装。
 /// 注意：market 提供的是 sha256，而 download_with_mirror 的哈希参数是 sha1，
 /// 因此下载阶段不传哈希（只做 size 校验），下载完成后用 sha256 独立校验。
-pub async fn download_and_install(url: String, sha256: String, size: u64, expected_id: String) -> Value {
+pub async fn download_and_install(
+    app: tauri::AppHandle,
+    url: String,
+    sha256: String,
+    size: u64,
+    expected_id: String,
+) -> Value {
     let root = plugins_root();
     let _ = std::fs::create_dir_all(&root);
     let tmp = root.join(format!(".dl_{}.zip", crate::utils::now_millis()));
@@ -349,8 +451,51 @@ pub async fn download_and_install(url: String, sha256: String, size: u64, expect
         }
         Err(e) => json!({ "ok": false, "error": format!("插件包下载失败: {}", e) }),
     };
+    // 安装成功后处理 native:exec 授权：
+    // 新清单声明 exec 时，必须由后端弹出原生确认框，用户点过才写入宿主授权表；
+    // 这样即使前端被 XSS 调用安装命令，也无法绕过用户确认静默提权。
+    if let Some(installed) = result.get("plugin").cloned()
+        && let Some(id) = installed.get("id").and_then(|v| v.as_str())
+    {
+        if plugin_declares_native_exec(id) {
+            let granted = confirm_native_exec(&app, id, &installed).await;
+            set_native_exec_grant(id, granted);
+        } else {
+            // 更新后不再声明 exec：撤销旧授权，避免静默保留执行能力
+            set_native_exec_grant(id, false);
+        }
+    }
     let _ = std::fs::remove_file(&tmp);
     result
+}
+
+/// 原生确认框：插件声明 native:exec 时，必须由用户在系统对话框中确认。
+/// 使用异步 `show` + oneshot，避免阻塞异步运行时。
+async fn confirm_native_exec(app: &tauri::AppHandle, id: &str, manifest: &Value) -> bool {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+
+    let name = manifest
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(id);
+    let message = format!(
+        "插件「{}」（{}）声明了执行外部程序的权限。\n\n\
+         信任后，该插件可以启动任意本地程序。\n\
+         插件脚本运行在启动器进程内，JS 无法提供真正的沙箱隔离，请只安装你信任的插件。",
+        name, id
+    );
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .message(message)
+        .title("插件权限确认")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "信任并安装".to_string(),
+            "取消".to_string(),
+        ))
+        .show(move |yes| {
+            let _ = tx.send(yes);
+        });
+    rx.await.unwrap_or(false)
 }
 
 /// 拉取插件市场。请求参数：{ indexUrl? }
@@ -361,6 +506,25 @@ pub async fn plugin_market_index(index_url: String) -> Value {
 
 /// 从市场下载并安装插件。请求参数：{ url, sha256?, size?, expectedId? }
 #[tauri::command]
-pub async fn plugin_download_install(url: String, sha256: String, size: u64, expected_id: String) -> Value {
-    download_and_install(url, sha256, size, expected_id).await
+pub async fn plugin_download_install(
+    app: tauri::AppHandle,
+    url: String,
+    sha256: String,
+    size: u64,
+    expected_id: String,
+) -> Value {
+    download_and_install(app, url, sha256, size, expected_id).await
+}
+
+#[cfg(test)]
+mod grant_tests {
+    use super::*;
+
+    #[test]
+    fn plugin_id_rejects_path_traversal() {
+        for bad in ["", "..", "../x", "..\\x", "a/b", "a\\b", "C:\\Windows", "C:/Windows"] {
+            assert!(!valid_plugin_id(bad), "应拒绝非法插件 id: {bad}");
+        }
+        assert!(valid_plugin_id("my-plugin_1"));
+    }
 }

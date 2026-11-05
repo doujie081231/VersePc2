@@ -237,13 +237,14 @@ fn window_show(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
-async fn window_close(window: tauri::WebviewWindow) {
+fn window_close(window: tauri::WebviewWindow) {
     // 关闭前先记录窗口尺寸，避免动画移动后把位移/尺寸写进记忆
     WINDOW_RESIZE_GEN.fetch_add(1, AtomicOrdering::SeqCst);
     save_window_state(&window);
 
     // 自动更新：若已有下载完成的更新包，直接进入"替换+重启"流程（安装脚本会退出进程并重启新版本），
     // 不再播放关闭动画，避免旧进程占用 exe 导致替换失败。
+    // 安装失败时 auto_install_on_close 返回 false，继续走正常关闭（与 PCL 一致，更新失败不能卡住退出）。
     if crate::updater::auto_install_on_close(window.app_handle()) {
         return;
     }
@@ -255,20 +256,24 @@ async fn window_close(window: tauri::WebviewWindow) {
     // 关闭前触发前端 CSS 关闭动画
     let _ = window.emit("request-close-animate", ());
 
+    // 动画放在独立线程里跑：不依赖 Tauri 异步运行时，后台下载/扫描占满线程池时也不会拖住关闭
     let win = window.clone();
-    tauri::async_runtime::spawn(async move {
-        let (start_x, start_y, win_h) = match win.outer_position() {
-            Ok(pos) => {
-                let h = win
-                    .inner_size()
-                    .ok()
-                    .map(|s| s.height as i32)
-                    .unwrap_or(800);
-                (pos.x, pos.y, h)
-            }
-            Err(_) => return,
-        };
+    std::thread::spawn(move || close_window_with_animation(win));
+}
 
+/// 播放关闭动画并关闭窗口。任何一步失败都必须真正关闭，避免“点关闭没反应”。
+fn close_window_with_animation(win: tauri::WebviewWindow) {
+    // 位置读取失败时无法播放动画，直接隐藏并关闭（原实现会在这里静默返回，导致窗口关不掉）
+    let position = win.outer_position().ok().map(|pos| {
+        let h = win
+            .inner_size()
+            .ok()
+            .map(|s| s.height as i32)
+            .unwrap_or(800);
+        (pos.x, pos.y, h)
+    });
+
+    if let Some((start_x, start_y, win_h)) = position {
         // 移动距离 = 窗口高度 + 100px，确保完全移出屏幕
         let distance = win_h + 100;
         let target_y = start_y - distance;
@@ -277,7 +282,7 @@ async fn window_close(window: tauri::WebviewWindow) {
         let step_delay_ms = 15u64;
 
         for i in 1..=steps {
-            tokio::time::sleep(std::time::Duration::from_millis(step_delay_ms)).await;
+            std::thread::sleep(std::time::Duration::from_millis(step_delay_ms));
             let progress = i as f64 / steps as f64;
             // easeOutCubic 缓动：先快后慢
             let eased = 1.0 - (1.0 - progress).powi(3);
@@ -287,8 +292,19 @@ async fn window_close(window: tauri::WebviewWindow) {
                 y,
             }));
         }
-        let _ = win.hide();
-        let _ = win.close();
+    }
+
+    let _ = win.hide();
+    let _ = win.close();
+
+    // 兜底：hide/close 被系统拒绝时强制退出进程，
+    // 与 PCL 的 EndProgramForce 一致——用户点“关闭”必须真的退出。
+    let app = win.app_handle().clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        if app.get_webview_window("main").is_some() {
+            app.exit(0);
+        }
     });
 }
 

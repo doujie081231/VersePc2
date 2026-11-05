@@ -275,7 +275,7 @@ function renderDepsList(depArray, resolved, versionInfo, hasVersionFilter, curre
     }
 
     return `<div class="md-dep-item"${actionAttrs('openModDetail', d.projectId, appState.currentModDetailSource || 'modrinth')}>
-      ${icon ? `<div class="md-dep-icon"><img src="${icon}" alt="" onerror="this.parentElement.remove()"></div>` : ''}
+      ${icon ? `<div class="md-dep-icon"><img src="${icon}" alt="" data-img-fallback="remove-parent"></div>` : ''}
       <div class="md-dep-info">
         <div class="md-dep-name">${escapeHtml(formatModNameWithChinese(info.slug || d.projectId, title))}</div>
         <div class="md-dep-desc">${escapeHtml(desc)}</div>

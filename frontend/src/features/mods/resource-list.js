@@ -140,7 +140,7 @@ async function loadResourceList(type) {
     } else {
       container.innerHTML = hits.map(item => `
         <div class="mod-item mod-item-clickable"${actionAttrs('openResourceDetail', item.id, type, item.source || 'modrinth')} data-preload-resource="${escapeHtml(item.id)}" data-preload-source="${escapeHtml(item.source || 'modrinth')}">
-          ${item.icon ? `<div class="mod-icon"><img src="${normalizeIconUrl(item.icon)}" alt="" onerror="this.parentElement.remove()"></div>` : ''}
+          ${item.icon ? `<div class="mod-icon"><img src="${normalizeIconUrl(item.icon)}" alt="" data-img-fallback="remove-parent"></div>` : ''}
           <div class="mod-info">
             <div class="mod-name">${escapeHtml(formatModNameWithChinese(item.slug || item.id, item.title))}
               ${(source === 'any' || !source) ? `<span style="font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;background:${item.source === 'curseforge' ? 'color-mix(in srgb, var(--orange) 14%, transparent);color:var(--orange);border:1px solid color-mix(in srgb, var(--orange) 24%, transparent)' : 'color-mix(in srgb, var(--green) 14%, transparent);color:var(--green);border:1px solid color-mix(in srgb, var(--green) 24%, transparent)'};font-weight:500;vertical-align:middle">${item.source === 'curseforge' ? 'CF' : 'MR'}</span>` : ''}

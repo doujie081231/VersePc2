@@ -93,9 +93,11 @@ const PagePlugins = {
     pluginPermissionDesc(p) {
       const list = [];
       const perms = (p && p.permissions) || {};
-      if (perms.network === true) list.push('访问网络：可请求外部服务、下载数据');
+      // 声明仅用于提示与宿主侧授权判断：网络声明无法真正限制插件（同一 WebView），
+      // 执行外部程序则由 Rust 宿主授权表 + 原生确认弹窗硬性管控。
+      if (perms.network === true) list.push('声明需要网络：插件会请求外部服务、下载数据（声明项，无法限制同权脚本）');
       if (Array.isArray(perms.native) && perms.native.indexOf('exec') >= 0) {
-        list.push('执行外部程序：可启动/停止本地进程（如 frpc.exe），用于进程托管');
+        list.push('申请执行外部程序：可启动/停止本地进程（如 frpc.exe），需安装完成后再经系统弹窗授权');
       }
       return list;
     },
@@ -111,7 +113,8 @@ const PagePlugins = {
           '权限确认',
           '插件「' + (p.name || p.id) + '」声明了以下权限：<br>' +
             perms.map(s => '&#8226; ' + s).join('<br>') +
-            '<br><br>请确认您信任该插件后再继续安装。',
+            '<br><br>注意：插件脚本运行在启动器进程内，JS 无法提供真正的沙箱隔离，请只安装你信任的插件。' +
+            '<br>若插件声明了执行外部程序，安装完成时系统还会弹窗再次确认；插件自己修改清单无法获得执行权限。',
           '信任并安装',
           '取消'
         );

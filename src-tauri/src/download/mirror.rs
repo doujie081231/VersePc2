@@ -143,6 +143,14 @@ pub fn to_mirror_url(original: &str) -> Option<String> {
         original.replace("https://meta.fabricmc.net/", "https://bmclapi2.bangbang93.com/fabric-meta/")
     } else if original.starts_with("https://maven.minecraftforge.net/") {
         original.replace("https://maven.minecraftforge.net/", "https://bmclapi2.bangbang93.com/maven/")
+    } else if original.starts_with("https://maven.neoforged.net/releases/") {
+        // NeoForge 官方仓库路径带 releases 段，BMCLAPI 的镜像树没有该段：
+        // 与 PCL 一致，把 maven.neoforged.net/releases 整体映射为 bmclapi/maven，
+        // 否则会请求 bmclapi/maven/releases/... 而 404（反馈中的 earlydisplay 4.0.45）
+        original.replace(
+            "https://maven.neoforged.net/releases/",
+            "https://bmclapi2.bangbang93.com/maven/",
+        )
     } else if original.starts_with("https://maven.neoforged.net/") {
         original.replace("https://maven.neoforged.net/", "https://bmclapi2.bangbang93.com/maven/")
     } else if original.starts_with("https://maven.fabricmc.net/") {
@@ -157,10 +165,15 @@ pub fn to_mirror_url(original: &str) -> Option<String> {
     };
     Some(mirror)
 }
-#[allow(clippy::items_after_test_module)]
+
+#[allow(clippy::items_after_test_module)]
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 镜像熔断状态是全局的，涉及 mirror_success/mirror_failed 的测试必须串行，
+    /// 否则并行执行时会被其它测试重置计数而随机失败。
+    static MIRROR_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn mirror_urls_cover_mojang_and_modrinth() {
@@ -184,6 +197,25 @@ mod tests {
     }
 
     #[test]
+    fn neoforge_releases_use_bmclapi_maven_root() {
+        // NeoForge 官方仓库固定在 /releases/ 下，BMCLAPI 镜像树没有 releases 段；
+        // 映射时必须去掉该段，否则请求 bmclapi/maven/releases/... 会 404
+        let official = "https://maven.neoforged.net/releases/net/neoforged/fancymodloader/earlydisplay/4.0.45/earlydisplay-4.0.45.jar";
+        assert_eq!(
+            to_mirror_url(official).as_deref(),
+            Some(
+                "https://bmclapi2.bangbang93.com/maven/net/neoforged/fancymodloader/earlydisplay/4.0.45/earlydisplay-4.0.45.jar"
+            )
+        );
+        // 不带 releases 的旧式地址仍按原规则映射到 maven 根
+        let legacy = "https://maven.neoforged.net/net/neoforged/neoforge/maven-metadata.xml";
+        assert_eq!(
+            to_mirror_url(legacy).as_deref(),
+            Some("https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/maven-metadata.xml")
+        );
+    }
+
+    #[test]
     fn temurin_github_links_use_ustc_mirror() {
         let original = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip";
         let mirror = to_mirror_url(original).unwrap();
@@ -193,6 +225,7 @@ mod tests {
 
     #[test]
     fn download_source_controls_ordering() {
+        let _guard = MIRROR_STATE_LOCK.lock().unwrap();
         mirror_success();
         let official = "https://piston-data.mojang.com/foo";
         let auto = get_mirror_urls(official, "auto");
@@ -218,6 +251,7 @@ mod tests {
 
     #[test]
     fn maven_urls_include_aliyun_and_huawei_fallbacks() {
+        let _guard = MIRROR_STATE_LOCK.lock().unwrap();
         mirror_success();
         let original = "https://maven.minecraftforge.net/org/checkerframework/checker-qual/2.0.0/checker-qual-2.0.0.jar";
         let urls = get_mirror_urls(original, "china-first");

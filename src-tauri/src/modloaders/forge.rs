@@ -206,10 +206,19 @@ pub async fn install_forge(
         return json!({ "success": false, "error": format!("无法创建临时目录: {}", e) });
     }
 
+    let official_installer_url = format!(
+        "{}/{}/forge-{}-installer.jar",
+        FORGE_MAVEN_OFFICIAL, version_str, version_str
+    );
     let installer_urls = vec![
         format!("{}/{}/forge-{}-installer.jar", FORGE_MAVEN_BMCLAPI, version_str, version_str),
-        format!("{}/{}/forge-{}-installer.jar", FORGE_MAVEN_OFFICIAL, version_str, version_str),
+        official_installer_url.clone(),
     ];
+    // 从官方源取 sha1（严格 TLS），镜像只负责带宽，下载后校验真实性（审计 P0-4）
+    let installer_sha1 = shared::fetch_maven_sha1(&official_installer_url, 5).await;
+    if installer_sha1.is_none() {
+        eprintln!("[Forge] 官方源 sha1 不可用，本次仅校验 ZIP 魔数");
+    }
 
     let mut installer_ok = false;
     for url in &installer_urls {
@@ -220,7 +229,7 @@ pub async fn install_forge(
         match crate::download::single::download_with_mirror(
             url,
             &installer_path,
-            None,
+            installer_sha1.as_deref(),
             None,
             "libraries",
             180,
@@ -242,7 +251,19 @@ pub async fn install_forge(
             eprintln!("[Forge] 改用 curl 下载 installer: {}", url);
             match shared::download_with_curl(url, &installer_path, 300).await {
                 Ok(()) => {
-                    downloaded_ok = true;
+                    // curl 不走内部哈希校验，这里按官方 sha1 再验一次
+                    let hash_ok = match installer_sha1.as_deref() {
+                        Some(expected) => crate::mods::jar::compute_sha1_file(&installer_path)
+                            .map(|h| h.eq_ignore_ascii_case(expected))
+                            .unwrap_or(false),
+                        None => true,
+                    };
+                    if hash_ok {
+                        downloaded_ok = true;
+                    } else {
+                        eprintln!("[Forge] curl 下载 installer 哈希校验失败: {}", url);
+                        let _ = std::fs::remove_file(&installer_path);
+                    }
                 }
                 Err(e) => {
                     eprintln!("[Forge] curl 下载失败 {}: {}", url, e);

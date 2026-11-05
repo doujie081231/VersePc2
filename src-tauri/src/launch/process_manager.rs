@@ -52,13 +52,23 @@ pub async fn do_launch(
         ));
     }
 
-    // 选择 Java 路径
+    // 选择 Java 路径：没有满足版本约束的 Java 时明确报错，不能回退到 PATH 上的
+    // 任意 java（很可能是过新的 Java 25，导致 Forge 1.16.5/1.20.1 启动崩溃）。
     let java_path = super::dep_check::select_java_for_version(&version_id, &settings, &version_json);
-    let java_path = if java_path.is_empty() {
-        "java".to_string()
-    } else {
-        java_path
-    };
+    if java_path.is_empty() {
+        let (req_min, req_max) = super::dep_check::get_java_version_range_from_json(&version_id, &version_json);
+        let requirement = if req_max > 900 {
+            format!("Java {}+", req_min)
+        } else if req_min == req_max {
+            format!("Java {}", req_min)
+        } else {
+            format!("Java {}~{}", req_min, req_max)
+        };
+        return Err(format!(
+            "未找到适用于「{}」的 {}。请在设置 → Java 中安装或选择一个符合要求的 Java 后再启动（可参考 PCL 为该版本自动匹配的 Java 版本）。",
+            version_id, requirement
+        ));
+    }
 
     // 启动子进程
     let mut cmd = tokio::process::Command::new(&java_path);

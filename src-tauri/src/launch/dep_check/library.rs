@@ -144,7 +144,8 @@ pub(crate) fn check_maven_library(
         if name.contains("fabric") || name.contains("fabricmc") {
             base_url = "https://maven.fabricmc.net/".to_string();
         } else if name.contains("neoforged") {
-            base_url = "https://maven.neoforged.net/".to_string();
+            // NeoForge 官方仓库路径带 releases 段
+            base_url = "https://maven.neoforged.net/releases/".to_string();
         } else if name.contains("forge") || name.contains("minecraftforge") || parts[0] == "net.minecraft" {
             base_url = "https://maven.minecraftforge.net/".to_string();
         } else {

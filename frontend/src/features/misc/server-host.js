@@ -242,24 +242,27 @@ function _shUpdateActiveStatus(data) {
   }
 }
 
-async function serverHostRefreshVersions() {
+async function serverHostRefreshVersions(force = false) {
   if (!customSelectInstances['server-host-version']) {
     initAllCustomSelects();
   }
   const inst = customSelectInstances['server-host-version'];
   if (!inst) return;
   inst.setOptions([{ value: '', text: '加载中...' }]);
+  inst.setValue('');
   try {
-    let installed = (typeof appState.installedVersions !== 'undefined' && Array.isArray(appState.installedVersions))
+    let installed = (!force && typeof appState.installedVersions !== 'undefined' && Array.isArray(appState.installedVersions))
       ? appState.installedVersions
       : [];
     if ((!installed || installed.length === 0) && typeof API !== 'undefined' && API.getVersions) {
-      const data = await API.getVersions(false);
+      // 进入页面或手动刷新时强制重新扫描，避免 appState 缓存为空时一直显示“加载中”
+      const data = await API.getVersions(force || (Array.isArray(installed) && installed.length === 0));
       installed = data.installed || [];
     }
     _shVersions = Array.isArray(installed) ? installed.slice() : [];
     if (_shVersions.length === 0) {
       inst.setOptions([{ value: '', text: '暂无已安装版本' }]);
+      inst.setValue('');
       _shSetStatusText('没有找到已安装版本，请先在「下载」页安装版本。');
       return;
     }
@@ -277,11 +280,15 @@ async function serverHostRefreshVersions() {
     }).sort((a, b) => (b.pure - a.pure) || a.id.localeCompare(b.id, undefined, { numeric: true }));
 
     inst.setOptions(scored.map(({ id, tag }) => ({ value: id, text: id + '（' + tag + '）' })));
+    // setOptions 只重建选项，不会更新触发器文字；这里主动选中第一个版本，
+    // 避免加载完成后仍停留在“加载中...”，也让用户可以直接点“创建服务端”。
+    inst.setValue(scored[0].id);
     _shSetStatusText(`已加载 ${_shVersions.length} 个本地版本。模组端版本将自动识别并安装对应服务端。`);
     await serverHostDetectLoader();
   } catch (e) {
     console.error('[ServerHost] refresh versions failed:', e);
     inst.setOptions([{ value: '', text: '加载失败' }]);
+    inst.setValue('');
     _shSetStatusText('版本列表加载失败：' + (e.message || e));
   }
 }

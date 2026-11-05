@@ -5,7 +5,6 @@
 // 实现：创建开服目录、下载 server.jar、spawn java 子进程、stdin/stdout 控制、模组同步
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -183,6 +182,10 @@ pub async fn host_create(
     } else {
         gen_id()
     };
+    // id 会直接拼进数据目录：先校验，非法 id 不写入索引
+    let Some(dir) = server_dir_of(&id) else {
+        return json!({ "ok": false, "error": "服务器 id 非法" });
+    };
 
     let now = now_ms();
     let base_version = resolved
@@ -225,7 +228,6 @@ pub async fn host_create(
     }
     save_index(&idx);
 
-    let dir = server_dir_of(&id);
     let _ = std::fs::create_dir_all(&dir);
 
     // === 模组端分支 ===
@@ -441,8 +443,11 @@ pub async fn host_start(sink: &Arc<dyn HostSink>, server_id: String) -> Value {
         Some(e) => e,
         None => return json!({ "ok": false, "error": "服务器不存在" }),
     };
+    // 目录必须位于 servers_root 之下，防止索引被篡改后启动任意目录
+    let Some(dir) = server_dir_from_entry(&entry, &server_id) else {
+        return json!({ "ok": false, "error": "服务器目录非法" });
+    };
 
-    let dir = server_dir_of(&server_id);
     let launch_kind = entry
         .get("launchKind")
         .and_then(|v| v.as_str())
@@ -797,13 +802,18 @@ pub async fn host_delete(server_id: String) -> Value {
         return json!({ "ok": false, "error": "请先停止服务器再删除" });
     }
     let mut idx = load_index();
-    let dir = idx
+    // 先查索引并校验目录：查不到就拒绝，不能再用原始 id 拼兜底路径（审计 P1-2）
+    let entry = idx
         .get("servers")
         .and_then(|v| v.as_array())
         .and_then(|arr| arr.iter().find(|s| s.get("id").and_then(|v| v.as_str()) == Some(&server_id)))
-        .and_then(|s| s.get("dir").and_then(|v| v.as_str()).map(|s| s.to_string()))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| server_dir_of(&server_id));
+        .cloned();
+    let Some(entry) = entry else {
+        return json!({ "ok": false, "error": "服务器不存在" });
+    };
+    let Some(dir) = server_dir_from_entry(&entry, &server_id) else {
+        return json!({ "ok": false, "error": "服务器目录非法" });
+    };
 
     if let Some(arr) = idx.get_mut("servers").and_then(|v| v.as_array_mut()) {
         arr.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(&server_id));
@@ -828,14 +838,18 @@ pub async fn host_open_dir(server_id: Option<String>) -> Value {
     let dir = match server_id {
         Some(id) if !id.is_empty() => {
             let idx = load_index();
-            
-            idx
+            let entry = idx
                 .get("servers")
                 .and_then(|v| v.as_array())
                 .and_then(|arr| arr.iter().find(|s| s.get("id").and_then(|v| v.as_str()) == Some(&id)))
-                .and_then(|s| s.get("dir").and_then(|v| v.as_str()).map(|s| s.to_string()))
-                .map(PathBuf::from)
-                .unwrap_or_else(|| server_dir_of(&id))
+                .cloned();
+            let Some(entry) = entry else {
+                return json!({ "ok": false, "error": "服务器不存在" });
+            };
+            match server_dir_from_entry(&entry, &id) {
+                Some(d) => d,
+                None => return json!({ "ok": false, "error": "服务器目录非法" }),
+            }
         }
         _ => servers_root(),
     };
@@ -900,11 +914,9 @@ pub async fn host_sync_mods(sink: &Arc<dyn HostSink>, server_id: String, client_
         None => return json!({ "ok": false, "error": "服务器不存在" }),
     };
 
-    let dir = entry
-        .get("dir")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| server_dir_of(&server_id));
+    let Some(dir) = server_dir_from_entry(&entry, &server_id) else {
+        return json!({ "ok": false, "error": "服务器目录非法" });
+    };
 
     let src_mods = resolve_client_mods_dir(&client_version_id);
     let dest_mods = dir.join("mods");

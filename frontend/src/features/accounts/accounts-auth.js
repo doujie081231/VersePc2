@@ -160,7 +160,7 @@ function showProfileSelectModal(accessToken, clientToken, serverUrl, profiles) {
     const pSkinUrl = `/api/avatar?uuid=${pUuid}${pServerParam}${pUsernameParam}`;
     return `
     <div class="profile-select-item"${actionAttrs('selectThirdPartyProfile', p.id, p.name)}>
-      <img src="${escapeHtml(pSkinUrl)}" alt="" class="profile-select-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+      <img src="${escapeHtml(pSkinUrl)}" alt="" class="profile-select-avatar" data-img-fallback="sibling">
       <div class="profile-select-avatar-fallback" style="display:none;width:40px;height:40px;background:var(--bg-tertiary);border-radius:6px;align-items:center;justify-content:center;font-size:18px;color:var(--text-secondary);">${p.name.charAt(0).toUpperCase()}</div>
       <div class="profile-select-info">
         <div class="profile-select-name">${escapeHtml(p.name)}</div>
