@@ -19,12 +19,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS 两种架构都在 macos-14 (ARM) 上构建：
-          #   原生 = Apple Silicon (aarch64)；交叉编译 x86_64-apple-darwin = Intel。
-          # macos-13 已被 GitHub 退役，不再作为 Intel runner 使用。
-          - { os: macos-14, target: x86_64-apple-darwin, label: macOS_x86_64 }
-          - { os: macos-14, target: "", label: macOS_arm64 }
-          - { os: ubuntu-24.04, target: "", label: Linux_x86_64 }
+          # macOS 两种架构各自在原生 runner 上构建：
+          #   macos-15-intel = Intel (x86_64)，macos-15 = Apple Silicon (aarch64)。
+          # macos-14 已出现 "configuration macos-14-arm64-us-default is not supported"
+          # 导致任务在 1 秒内被取消，改用 macos-15 系列标签。
+          - { os: macos-15-intel, target: "", label: macOS_x86_64, arch: x86_64 }
+          - { os: macos-15, target: "", label: macOS_arm64, arch: aarch64 }
+          - { os: ubuntu-24.04, target: "", label: Linux_x86_64, arch: "" }
     runs-on: ${{ matrix.os }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -121,7 +122,7 @@ jobs:
             [ -f src-tauri/icons/icon.icns ] && cp src-tauri/icons/icon.icns "${APP}/Contents/Resources/icon.icns"
             # 临时签名，保证 Apple Silicon 上可直接运行（无需开发者证书）
             codesign --force --deep --sign - "${APP}"
-            ARCH="aarch64"; [ -n "${{ matrix.target }}" ] && ARCH="x86_64"
+            ARCH="${{ matrix.arch }}"
             zip -r "-y" "VersePC2-macos-${ARCH}.zip" "${APP}"
             files+=( "VersePC2-macos-${ARCH}.zip" )
           fi
