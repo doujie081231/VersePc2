@@ -1,29 +1,29 @@
 {
-  "version": "1.8.8",
-  "releaseName": "v1.8.8",
-  "releaseDate": "2026-11-06",
-  "releaseNotes": "VersePC2 v1.8.8\n\n热修复：\n- 修复 1.8.7 引入的插件页面全部空白问题（插件目录内的页面脚本与样式被误拦截）\n- 老版本 Forge（如 1.16.5 36.2.x）继续按 Java 8 要求匹配，缺少合适 Java 时自动下载\n- 版本隔离设置改为持久化，资源包 / 模组 / 存档等目录遵循 PathIndie 规则",
+  "version": "1.8.9",
+  "releaseName": "v1.8.9",
+  "releaseDate": "2026-11-07",
+  "releaseNotes": "VersePC2 v1.8.9\n\n修复：\n- 延续 1.8.8 修复：插件页面（本地开服 / 内网穿透 / 种子地图等）可正常加载，不再空白\n- 老版本 Forge（如 1.16.5 36.2.x）继续按 Java 8 匹配，缺少合适 Java 时自动下载\n- 版本隔离设置持久化，资源包 / 模组 / 存档等目录遵循 PathIndie 规则",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.8/VersePC2.exe",
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.8.9/VersePC2.exe",
       "size": 71697920,
-      "sha256": "603015a6648892a87f39be918c381df446ad928e33b2ad58f8e168e135cae6d8"
+      "sha256": "5e8099e0239d00f0cb566d889827f62ab030b85a13b4e962ca8167eb80bc83d5"
     },
     "linux-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.8/VersePC2-linux-x86_64",
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.9/VersePC2-linux-x86_64",
       "size": 14395808,
-      "sha256": "591113792bf7bbbb6fb2ba730c5159896922865d0c6f6303f1b78013200d1d6a"
+      "sha256": "f0be40ee68509785069c02a9f385d565799721b8266842578aece8064d4a548f"
     },
     "macos-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.8/VersePC2-macos-x86_64.zip",
-      "size": 11298508,
-      "sha256": "06366928feff078358dbca23097c571e83fd7c267ef74c055d006d526ce8418d"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.9/VersePC2-macos-x86_64.zip",
+      "size": 11301707,
+      "sha256": "fbaa6844f667bec2f5634e7e6bbbfed1a20ff1bdca7848636b967deb473fbb3b"
     },
     "macos-aarch64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.8/VersePC2-macos-aarch64.zip",
-      "size": 10914272,
-      "sha256": "b1e1f810712e6aa23b7fdfc60fe5f232df1d5e02bf2b4c2ea989f75ed193bdf5"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.8.9/VersePC2-macos-aarch64.zip",
+      "size": 10914423,
+      "sha256": "80cd0d4ba4b8111b1ed583bb6f6d1b6b0ee2cb9ce2d4f1e3b4e2017ddbed0197"
     }
   },
-  "signature": "+wUSacWnX85h7RsEdEWazDkPRfzl/DcG03FpuaBbz3geXCp/9qy0jxAQVuqlbll8D25pc+8Oe3zlTTOInYZRCw=="
+  "signature": "IOM8YkP8FQEhDxLcrdgFba3vkjA3olADfZ4moOHp8UqLlgQIsSxADxUnj6t+uGXIYUrupSBaO3wkXDwBDmu2Aw=="
 }
