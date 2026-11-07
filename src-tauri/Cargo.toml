@@ -1,6 +1,6 @@
 [package]
 name = "verse-tauri"
-version = "1.8.8"
+version = "1.8.9"
 description = "VersePC - Minecraft ???"
 license = "GPL-3.0"
 edition = "2024"
