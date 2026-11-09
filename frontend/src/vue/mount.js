@@ -23,6 +23,8 @@ const OTHER_PAGES = [
   ['PagePrivateServer', '#page-private-server', () => import('./pages/page-private-server.js')],
   ['PageServerHost', '#page-server-host', () => import('./pages/page-server-host.js')],
   ['PageToolbox', '#page-toolbox', () => import('./pages/page-toolbox.js')],
+  ['PageCommunity', '#page-community', () => import('./pages/page-community.js')],
+  ['PageSkin', '#page-skin', () => import('./pages/page-skin.js')],
   ['PageAccounts', '#page-accounts', () => import('./pages/page-accounts.js')],
   ['PageSettingsLaunch', '#page-settings-launch', () => import('./pages/page-settings-launch.js')],
   ['PageSettingsPersonalize', '#page-settings-personalize', () => import('./pages/page-settings-personalize.js')],
@@ -73,4 +75,17 @@ window.addEventListener('DOMContentLoaded', function () {
   if (import.meta.env.DEV) {
     import('./dev-preview.js').then((m) => m.mountDevPreview()).catch(() => {});
   }
+
+  // 内置网页登录会在主窗口临时跳到站点登录页，回来后自动回到原来的面板页
+  try {
+    const back = window.localStorage.getItem('versePanelReturn');
+    if (back) {
+      window.localStorage.removeItem('versePanelReturn');
+      setTimeout(() => {
+        import('../features/versions/versions-nav.js')
+          .then((m) => m.navigateToPage(back))
+          .catch(() => {});
+      }, 600);
+    }
+  } catch (e) {}
 });

@@ -1,0 +1,145 @@
+/* components/webpanel.css — 内置网页面板（社区 / 皮肤站） */
+
+.page.active.wp-page {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0 !important;
+}
+
+.wp-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.wp-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+.wp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    min-width: 32px;
+    padding: 0 10px;
+    font-size: 12.5px;
+    line-height: 1;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.wp-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.wp-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.wp-btn.wp-icon {
+    min-width: 30px;
+    padding: 0 8px;
+    font-size: 14px;
+}
+
+.wp-btn.wp-accent {
+    color: var(--accent-text, #fff);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.wp-btn.wp-accent:hover {
+    filter: brightness(1.08);
+    color: var(--accent-text, #fff);
+}
+
+.wp-addr {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 46%;
+    padding: 0 2px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wp-spacer {
+    flex: 1 1 auto;
+    min-width: 8px;
+}
+
+.wp-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.wp-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    opacity: 0.6;
+}
+
+.wp-state.on .wp-dot {
+    background: var(--accent);
+    opacity: 1;
+}
+
+.wp-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: var(--bg-primary);
+}
+
+.wp-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--bg-primary);
+}
+
+.wp-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100%;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.wp-tip {
+    margin-left: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+    .wp-addr {
+        display: none;
+    }
+}
