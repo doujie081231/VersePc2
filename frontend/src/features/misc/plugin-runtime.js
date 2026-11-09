@@ -9,7 +9,7 @@
  */
 import { navigateToPage } from '../../core/navigation.js';
 import { bridge } from '../../core/tauri-bridge.js';
-import { createApp } from 'vue';
+import { createApp, nextTick } from 'vue';
 import { isVueMountDone } from '../../core/vue-ready.js';
 
 const pluginComponents = {};
@@ -236,6 +236,31 @@ export let reloadPluginUI = null;
     }, 400);
   }
 
+  // 插件模板沿用内联事件写法（onclick="fn()"）。应用 CSP 的 script-src 不含
+  // 'unsafe-inline'，浏览器会直接拒绝内联事件处理器，表现为按钮点了没反应。
+  // 这里在挂载后改写为 addEventListener，函数名仍按全局作用域解析
+  // （兼容接口见 core/plugin-compat.js）。
+  const INLINE_EVENT_ATTRS = ['onclick', 'onchange', 'oninput', 'onkeydown', 'onkeyup', 'onsubmit'];
+
+  function bindInlineHandlers(root) {
+    if (!root || !root.querySelectorAll) return;
+    INLINE_EVENT_ATTRS.forEach(function (attr) {
+      root.querySelectorAll('[' + attr + ']').forEach(function (el) {
+        const code = el.getAttribute(attr);
+        el.removeAttribute(attr);
+        if (!code) return;
+        let fn;
+        try {
+          fn = new Function('event', code);
+        } catch (e) {
+          console.warn('[plugin-runtime] 内联事件解析失败: ' + code, e);
+          return;
+        }
+        el.addEventListener(attr.slice(2), function (ev) { fn.call(el, ev); });
+      });
+    });
+  }
+
   // 加载并挂载 Vue 组件到容器（组件注册名 Plugin_<id>_<key>）
   async function mountComponent(pid, key, container) {
     const compKey = COMP_PREFIX + pid + '_' + key;
@@ -244,6 +269,7 @@ export let reloadPluginUI = null;
     try {
       container.__plugin_mounted = true;
       createApp(pluginComponents[compKey]).mount(container);
+      nextTick(function () { bindInlineHandlers(container); });
       return true;
     } catch (e) {
       console.error('[plugin-runtime] mount 失败 ' + compKey, e);
