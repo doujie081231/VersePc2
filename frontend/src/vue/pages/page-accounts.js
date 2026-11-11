@@ -2,8 +2,26 @@
 import { handleSkinUpload, handleCapeUpload } from '../../features/accounts/accounts.js';
 
 import { closeMsAuthModal, copyMsCode, reopenMsAuthPage, closeOfflineModal, closeThirdPartyModal, closeProfileSelectModal, setSkinBg, showAccountList, copyDetailUuid, setAnim, fetchSessionCape, unselectCape, detailSelectAccount, detailRefreshSkin, detailDeleteAccount, openMsAuthModal, openOfflineAccountModal, openThirdPartyAccountModal, submitThirdPartyLogin } from '../../features/accounts/accounts.js';
+import { accountsState } from '../../features/accounts/accounts-state.js';
+import { showToast } from '../../features/misc/ui-components.js';
+import { switchPage } from '../../features/settings/window-theme.js';
 import VButton from '@/components/verse/VButton.vue';
 import VInput from '@/components/verse/VInput.vue';
+
+function openSkinLibrary() {
+  const acc = accountsState._currentDetailAccount;
+  if (!acc) {
+    showToast('请先打开一个账户的详情', 'warning');
+    return;
+  }
+  // switchPage 离开账户页时会清空 _currentDetailAccount，这里先留一份快照
+  accountsState._skinLibraryAccount = {
+    id: acc.id,
+    name: acc.username || acc.name || acc.id,
+    type: acc.type
+  };
+  switchPage('skin-library');
+}
 
 function pickSkinFile() {
   document.getElementById('skin-file-input')?.click();
@@ -17,7 +35,7 @@ const PageAccounts = {
   components: { VButton, VInput },
   setup() {
     // handleSkinUpload / handleCapeUpload 原为内联 onchange 调用的全局函数，改为模板事件后必须暴露到作用域
-    return { closeMsAuthModal, copyMsCode, reopenMsAuthPage, closeOfflineModal, closeThirdPartyModal, closeProfileSelectModal, setSkinBg, showAccountList, copyDetailUuid, setAnim, fetchSessionCape, unselectCape, detailSelectAccount, detailRefreshSkin, detailDeleteAccount, openMsAuthModal, openOfflineAccountModal, openThirdPartyAccountModal, submitThirdPartyLogin, pickSkinFile, pickCapeFile, handleSkinUpload, handleCapeUpload };
+    return { closeMsAuthModal, copyMsCode, reopenMsAuthPage, closeOfflineModal, closeThirdPartyModal, closeProfileSelectModal, setSkinBg, showAccountList, copyDetailUuid, setAnim, fetchSessionCape, unselectCape, detailSelectAccount, detailRefreshSkin, detailDeleteAccount, openMsAuthModal, openOfflineAccountModal, openThirdPartyAccountModal, submitThirdPartyLogin, pickSkinFile, pickCapeFile, handleSkinUpload, handleCapeUpload, openSkinLibrary };
   },
   template: `
           <div class="accounts-redesign">
@@ -208,6 +226,10 @@ const PageAccounts = {
                   </button>
                   <h2 class="acct-detail-title" id="detail-username">-</h2>
                   <span class="acct-detail-badge" id="detail-skin-type">经典</span>
+                  <VButton variant="accent" size="sm" class="ml-auto" @click="openSkinLibrary()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.58 2.23l.42 4.1A2 2 0 0 0 4.7 11.5l1.3-.8V21a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-10.3l1.3.8a2 2 0 0 0 2.24-1.71l.42-4.1a2 2 0 0 0-1.58-2.23z"/></svg>
+                    皮肤库
+                  </VButton>
                 </div>
                 <div class="acct-detail-fields">
                   <div class="acct-detail-field">
