@@ -44,10 +44,18 @@ const PageSkinLibrary = {
     }
   },
   mounted() {
-    this.account = accountsState._skinLibraryAccount || null;
-    this.load(1);
+    this.onOpen();
+    document.addEventListener('verse:skin-library-open', this.onOpen);
+  },
+  beforeUnmount() {
+    document.removeEventListener('verse:skin-library-open', this.onOpen);
   },
   methods: {
+    // 每次从账户详情页进入都重新读取账户快照并回到第一页
+    onOpen() {
+      this.account = accountsState._skinLibraryAccount || null;
+      this.load(1);
+    },
     previewUrl(tid) {
       return PREVIEW_BASE + tid;
     },
@@ -78,7 +86,7 @@ const PageSkinLibrary = {
     },
     async openSkin(skin) {
       if (this.applyingTid !== null) return;
-      const acc = this.account;
+      const acc = accountsState._skinLibraryAccount || this.account;
       if (!acc) {
         showToast('请先从账户详情页进入皮肤库', 'warning');
         return;

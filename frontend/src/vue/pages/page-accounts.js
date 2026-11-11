@@ -21,6 +21,8 @@ function openSkinLibrary() {
     type: acc.type
   };
   switchPage('skin-library');
+  // 页面组件只挂载一次，通知它刷新当前账户（否则切换账户后会沿用上一次的快照）
+  document.dispatchEvent(new CustomEvent('verse:skin-library-open'));
 }
 
 function pickSkinFile() {
