@@ -104,11 +104,13 @@ async fn handle_resolve_name(body: &Option<Value>) -> ApiResult {
 /// POST /api/download-custom — 开始下载
 ///
 /// 文件名优先级（重要：格式必须跟真实文件一致）：
-///   1. 请求里显式给的 fileName（用户在卡片里填的）
-///   2. HEAD/GET 探测 Content-Disposition: filename*= / filename=
-///   3. 重定向后的最终 URL 路径段（很多站点直接 302 到 .../pkg.exe）
-///   4. 原始 URL 路径段
-///   5. download.bin
+///
+/// 1. 请求里显式给的 fileName（用户在卡片里填的）
+/// 2. HEAD/GET 探测 Content-Disposition: filename*= / filename=
+/// 3. 重定向后的最终 URL 路径段（很多站点直接 302 到 .../pkg.exe）
+/// 4. 原始 URL 路径段
+/// 5. download.bin
+///
 /// 旧实现只看原始 URL，遇到 download?id=123 这类地址就会把文件名写成
 /// "download" 或 "download.bin"，扩展名的丢失就是这么来的。
 async fn handle_start(app: &AppHandle, body: &Option<Value>) -> ApiResult {
@@ -641,15 +643,12 @@ fn url_looks_like_file(url: &str) -> bool {
 /// 取 URL 路径最后一段（去查询串、% 解码）
 fn url_last_segment(url: &str) -> Option<String> {
     let no_query = url.split(['?', '#']).next().unwrap_or(url);
-    let path_part = match no_query.find("://") {
-        Some(idx) => {
-            let after = &no_query[idx + 3..];
-            match after.find('/') {
-                Some(slash) => &after[slash..],
-                None => return None,
-            }
-        }
-        None => no_query,
+    let path_part = if let Some(idx) = no_query.find("://") {
+        let after = &no_query[idx + 3..];
+        let slash = after.find('/')?;
+        &after[slash..]
+    } else {
+        no_query
     };
     let last = path_part.rsplit('/').find(|s| !s.is_empty())?;
     Some(percent_decode(last))

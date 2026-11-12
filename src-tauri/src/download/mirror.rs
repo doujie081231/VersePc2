@@ -123,7 +123,7 @@ fn temurin_ustc_mirror(github_url: &str) -> Option<String> {
 /// 按域名决定「下载这条 URL 必须带哪些请求头」。
 ///
 /// 很多站点的 CDN 会校验 Referer / UA，缺了直接 403：
-
+///
 ///   · 哔哩哔哩（hdslb / bilivideo / bilibili）：必须带 Referer=https://www.bilibili.com/
 ///   · 部分网盘 / 图床也会看 Referer
 ///
@@ -418,15 +418,6 @@ mod tests {
     }
 
     #[test]
-    fn forge_maven_keeps_official_and_files_fallback() {
-        let original = "https://maven.minecraftforge.net/net/minecraftforge/ForgeAutoRenamingTool/0.1.22/ForgeAutoRenamingTool-0.1.22-all.jar";
-        let urls = get_mirror_urls(original, "china-first");
-        assert!(urls.contains(&original.to_string()));
-        assert!(urls
-            .iter()
-            .any(|u| u.starts_with("https://files.minecraftforge.net/maven/")));
-    }
-    #[test]
     fn maven_urls_include_aliyun_and_huawei_fallbacks() {
         let _guard = MIRROR_STATE_LOCK.lock().unwrap();
         mirror_success();
@@ -510,14 +501,6 @@ pub fn get_mirror_urls(original: &str, download_source: &str) -> Vec<String> {
             }
         }
 
-    // Forge 官方 Maven 的备用入口：files.minecraftforge.net/maven 与 maven.minecraftforge.net
-    // 内容一致；部分网络只放行其中一个。安装器支持库只存在于官方仓库，镜像通常没有。
-    if let Some(rest) = original.strip_prefix("https://maven.minecraftforge.net/") {
-        let files_mirror = format!("https://files.minecraftforge.net/maven/{}", rest);
-        if !urls.contains(&files_mirror) {
-            urls.push(files_mirror);
-        }
-    }
     // libraries.minecraft.net 额外补 Forge maven 镜像，作为兜底候选
     if original.starts_with("https://libraries.minecraft.net/") {
         let forge_mirror = original.replacen(

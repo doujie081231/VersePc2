@@ -616,11 +616,17 @@ mod tests {
         assert_eq!(v.get("version").and_then(|x| x.as_str()), Some(EXTENSION_VERSION));
         // key 必须存在，否则扩展 ID 会随安装环境变化
         assert!(v.get("key").and_then(|x| x.as_str()).map(|s| !s.is_empty()).unwrap_or(false));
-        // 原生宿主名必须与后端常量一致
-        assert_eq!(
-            v.get("permissions").and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0),
-            5
-        );
+        // 权限清单必须与代码实际使用的一致（tabs 已移除：从未调用 chrome.tabs）
+        let perms: Vec<&str> = v
+            .get("permissions")
+            .and_then(|x| x.as_array())
+            .map(|a| a.iter().filter_map(|s| s.as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(perms.len(), 4);
+        for need in ["downloads", "nativeMessaging", "storage", "notifications"] {
+            assert!(perms.contains(&need), "缺权限: {need}");
+        }
+        assert!(!perms.contains(&"tabs"), "tabs 是冗余权限，必须移除");
     }
 
     #[test]

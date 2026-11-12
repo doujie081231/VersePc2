@@ -93,7 +93,7 @@ fn from_self(out: &mut Vec<PathBuf>) {
 fn from_processes(out: &mut Vec<PathBuf>) {
     let mut sys = sysinfo::System::new();
     sys.refresh_processes();
-    for (_pid, proc_) in sys.processes() {
+    for proc_ in sys.processes().values() {
         // sysinfo 0.30 的 exe() 返回 Option<&Path>
         if let Some(p) = proc_.exe()
             && is_candidate(p)
@@ -177,10 +177,10 @@ fn from_common_dirs(out: &mut Vec<PathBuf>) {
     let mut roots: Vec<PathBuf> = Vec::new();
 
     for var in ["LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)", "USERPROFILE", "SystemDrive"] {
-        if let Ok(v) = std::env::var(var) {
-            if !v.is_empty() {
-                roots.push(PathBuf::from(v));
-            }
+        if let Ok(v) = std::env::var(var)
+            && !v.is_empty()
+        {
+            roots.push(PathBuf::from(v));
         }
     }
 
@@ -227,7 +227,7 @@ fn rank(paths: Vec<PathBuf>) -> Vec<(PathBuf, u64, u64)> {
             Some((p, meta.len(), mtime))
         })
         .collect();
-    list.sort_by(|a, b| b.2.cmp(&a.2));
+    list.sort_by_key(|a| std::cmp::Reverse(a.2));
     list
 }
 
