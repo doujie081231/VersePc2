@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>VersePC2 下载接管 · 设置</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 32px 24px;
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #0f151d; color: #e6eef8;
+    }
+    .wrap { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 24px; font-weight: 700; letter-spacing: .2px; }
+
+    .card {
+      background: #171f2a; border: 1px solid #26313f; border-radius: 12px;
+      padding: 18px 20px; margin-bottom: 12px;
+    }
+    .card h2 {
+      font-size: 11px; margin: 0 0 14px; color: #7c8fa6;
+      font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
+    }
+
+    .switch { display: flex; align-items: center; gap: 10px; margin: 11px 0; font-size: 13.5px; cursor: pointer; }
+    .switch input { width: 16px; height: 16px; accent-color: #4f8cff; cursor: pointer; }
+
+    .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #5b6a7d; flex: 0 0 auto; }
+    .dot.ok { background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.15); }
+    .dot.bad { background: #f87171; box-shadow: 0 0 0 3px rgba(248,113,113,.15); }
+
+    .path {
+      font-size: 12.5px; color: #cfe0f5; word-break: break-all; line-height: 1.5;
+      padding: 9px 11px; border-radius: 8px; background: #0c121a; border: 1px solid #202a36;
+    }
+    .path.ok { color: #86e7a8; border-color: #294a35; }
+
+    button {
+      padding: 8px 14px; font-size: 13px; border-radius: 8px; cursor: pointer;
+      border: 1px solid #26313f; background: #1e2836; color: #cfe0f5; margin-right: 8px;
+      transition: background-color .15s ease, border-color .15s ease;
+    }
+    button:hover { background: #26313f; border-color: #33414f; }
+    button.primary { background: #2f6fdd; border-color: #2f6fdd; color: #fff; }
+    button.primary:hover { background: #3b7ceb; }
+
+    .scan-list { display: flex; flex-direction: column; gap: 6px; }
+    .scan-item {
+      display: flex; align-items: center; gap: 8px; padding: 9px 11px;
+      border: 1px solid #26313f; border-radius: 9px; background: #0c121a;
+      font-size: 12px; cursor: pointer; word-break: break-all;
+      transition: border-color .15s ease;
+    }
+    .scan-item:hover { border-color: #4f8cff; }
+    .scan-item .tag { flex: 0 0 auto; font-size: 10.5px; padding: 2px 7px; border-radius: 999px; background: #24405f; color: #9fc6ff; }
+    .scan-item .tag.rec { background: #1f4d33; color: #86e7a8; }
+    .scan-item .tag.warn { background: #4d2a2a; color: #ffb3b3; }
+
+    #manualPath {
+      width: 100%; margin-top: 12px; padding: 10px 12px; border-radius: 9px;
+      border: 1px solid #202a36; background: #0c121a; color: #cfe0f5; font-size: 12.5px;
+    }
+    #manualPath:focus { outline: none; border-color: #4f8cff; }
+
+    #pickHint { font-size: 12px; color: #7c8fa6; margin: 10px 0 0; line-height: 1.6; min-height: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>VersePC2 下载接管</h1>
+
+    <div class="card">
+      <h2>接管行为</h2>
+      <label class="switch"><input id="enabled" type="checkbox" /><span>启用下载接管</span></label>
+      <label class="switch"><input id="useBrowserFolder" type="checkbox" /><span>使用浏览器保存目录</span></label>
+    </div>
+
+    <div class="card">
+      <h2>启动器位置</h2>
+      <div class="path" id="txtLauncherPath">跟随系统注册项</div>
+      <div style="margin-top:12px;">
+        <button id="btnScan" class="primary">一键扫描</button>
+        <button id="btnPick">手动选择</button>
+        <button id="btnClearPath">清除</button>
+      </div>
+      <div id="scanBox" style="margin-top:12px;display:none;">
+        <div id="scanList" class="scan-list"></div>
+      </div>
+      <input id="manualPath" type="text" placeholder="粘贴路径，或把 VersePC2.exe 拖进来" />
+      <div style="margin-top:10px;"><button id="btnUseManual">使用这个路径</button></div>
+      <p id="pickHint"></p>
+    </div>
+
+    <div class="card">
+      <h2>连接状态</h2>
+      <div class="row"><span class="dot" id="dotHost"></span><span id="txtHost">未检测</span></div>
+      <div class="row"><span class="dot" id="dotLauncher"></span><span id="txtLauncher">未检测</span></div>
+      <div style="margin-top:14px;">
+        <button id="btnTest">测试连接</button>
+      </div>
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

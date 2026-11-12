@@ -29,6 +29,7 @@ import {
   OPTIONAL_WIDGETS,
   WIDGETS,
 } from '../../features/home/home-widgets.js';
+import HomeDownloadWidget from './home-download-widget.js';
 
 const AVATAR_MIN = 0.5, AVATAR_MAX = 2.0, DRAG_THRESHOLD = 5;
 
@@ -37,12 +38,13 @@ function clampPos(v, min, max) {
 }
 
 const PageHome = {
+  components: { HomeDownloadWidget },
   data() {
     return {
       layoutReady: false,
       editingLayout: false,
       widgetPickerOpen: false,       // 控件库面板是否展开
-      visibleWidgets: {},            // { mods: true } —— 由 home-widgets 维护
+      visibleWidgets: {},            // { download: true } —— 由 home-widgets 维护
       _boundNav: {},
       optionalWidgets: OPTIONAL_WIDGETS,
       iconPath: (id) => (WIDGETS[id] && WIDGETS[id].icon) || null,
@@ -107,6 +109,16 @@ const PageHome = {
         </div>
       </div>
 
+      <!-- 可选控件：下载（特殊交互卡） -->
+      <HomeDownloadWidget
+        v-if="visibleWidgets.download"
+        ref="downloadEl"
+        class="home-download-widget"
+        data-widget="download"
+        :editing="editingLayout"
+        :title="editingLayout ? '拖动调整位置' : '下载'"
+      />
+
       <!-- 可选控件：功能入口小卡片（v-for 渲染除下载外的全部可选功能） -->
       <button v-for="w in navWidgets"
               :key="w.id"
@@ -165,7 +177,7 @@ const PageHome = {
       return Object.keys(this.visibleWidgets).length;
     },
     navWidgets() {
-      return OPTIONAL_WIDGETS.filter((w) => w.icon);
+      return OPTIONAL_WIDGETS.filter((w) => w.action !== 'download' && w.icon);
     }
   },
   methods: {
@@ -177,6 +189,7 @@ const PageHome = {
         version: this.$refs.versionEl,
         launch: this.$refs.launchEl,
         running: this.$refs.runningEl,
+        download: this.$refs.downloadEl ? (this.$refs.downloadEl.$el || this.$refs.downloadEl) : null
       }[key];
       if (fixed) return fixed;
 
@@ -316,7 +329,7 @@ const PageHome = {
         ? (viewportWidth / 2) - pageRect.left
         : pw / 2;
       const layoutKeys = ['title', 'avatar', 'version', 'launch', 'running'];
-      // 已添加的可选控件全部参与布局收敛（导航小卡片）
+      // 已添加的可选控件全部参与布局收敛（download 走专属卡片，其余走导航卡）
       for (const w of this.optionalWidgets) {
         if (this.visibleWidgets[w.id]) layoutKeys.push(w.id);
       }
@@ -342,7 +355,7 @@ const PageHome = {
           el.style.transform = '';
           // 居中控件以窗口中心为 left（CSS 的 translateX(-50%) 继续负责自身半宽修正）；
           // 运行卡片、下载卡与导航卡保持 CSS 停靠，不参与窗口居中。
-          const centered = key !== 'running'
+          const centered = key !== 'running' && key !== 'download'
             && !(WIDGETS[key] && WIDGETS[key].core === false);
           if (centered) el.style.left = defaultCenterLeft + 'px';
         }
@@ -421,6 +434,11 @@ const PageHome = {
     bindOptionalWidgets() {
       const self = this;
       // 下载卡
+      const dl = this.widgetByKey('download');
+      if (dl && this._boundDownloadEl !== dl) {
+        this._boundDownloadEl = dl;
+        this.bindDrag(dl, 'download', null, 'button, input, a, .home-download-actions');
+      }
       // 导航小卡片：v-show 控制显隐，元素在首次渲染后就存在
       for (const w of this.navWidgets) {
         const refs = this.$refs['navEl_' + w.id];

@@ -14,6 +14,7 @@ import { S } from './init-setup-state.js';
 import { backgroundLoadWallpaper, setupWindowMemoryEvents } from './init-setup-window.js';
 import { setupNavigation, setupTabs, setupLaunchBar } from './init-setup-nav.js';
 import { setupModBrowse, setupAccountButtons, setupSettingsPage } from './init-setup-pages.js';
+import { initDownloadBridge } from '../home/download-bridge.js';
 
 async function init() {
   // 禁用 WebView2 浏览器默认右键菜单（刷新/另存为/检查等），输入区域保留复制粘贴
@@ -281,6 +282,11 @@ async function init() {
   if (typeof initWallpaper === 'function') {
     setTimeout(() => { try { backgroundLoadWallpaper(); } catch (e) {} }, 0);
   }
+
+  // 浏览器下载接管：窗口出现后拉一次待处理请求，把它填进下载控件（绝不自动开始）
+  setTimeout(() => {
+    try { initDownloadBridge(); } catch (e) { console.error('[init] 下载接管初始化失败:', e); }
+  }, 0);
 
   // 写入启动阶段计时（诊断用）：各阶段耗时，用于定位启动慢的瓶颈
   try {

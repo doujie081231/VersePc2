@@ -5,6 +5,7 @@
  *   1. 控件清单（覆盖软件全部功能页面）与默认位置
  *   2. 布局读写（localStorage v2）+ v1 旧数据兼容
  *   3. 「已添加控件」集合（visible），编辑布局时通过加号面板增删
+ *   4. 待处理下载请求的进程内广播（下载控件、工具箱卡片共用）
  *
  * 依赖方向：features/home → core（单向，符合架构约束）
  */
@@ -25,6 +26,7 @@ const LEGACY_LAYOUT_KEY = 'versepc_home_layout_v1';
  * core   : 主页核心控件，默认存在、不可移除
  * action : 非 core 控件渲染方式
  *          'nav'      → 小卡片，点击跳页面
+ *          'download' → 下载卡（特殊交互，走 home-download-widget）
  */
 export const WIDGETS = {
     // ── 核心控件（默认布局，不可移除）──
@@ -35,6 +37,7 @@ export const WIDGETS = {
     running: { id: 'running', name: '启动任务', desc: '运行中的游戏实例（有实例时才显示）', icon: null, page: 'home',            core: true, removable: false },
 
     // ── 可添加控件（覆盖侧边栏全部功能）──
+    download:      { id: 'download',      name: '下载自定义文件', desc: '浏览器接管 / 任意链接高速下载', icon: 'icon-download',    page: 'toolbox',        core: false, removable: true, action: 'download' },
     versions:      { id: 'versions',      name: '版本下载',       desc: '原版 / Forge / Fabric 安装',   icon: 'icon-package',     page: 'versions',       core: false, removable: true },
     mods:          { id: 'mods',          name: '模组',           desc: 'Modrinth / CurseForge 搜索',   icon: 'icon-package',     page: 'mods',           core: false, removable: true },
     modpacks:      { id: 'modpacks',      name: '整合包',         desc: '整合包浏览与一键导入',         icon: 'icon-package',     page: 'modpacks',       core: false, removable: true },
@@ -107,7 +110,7 @@ function pushLayoutToBackend(norm) {
 }
 
 /**
- * 读取布局：{ title:{x,y}, avatar:{x,y,s}, ..., visible:{ mods:true, ... } }
+ * 读取布局：{ title:{x,y}, avatar:{x,y,s}, ..., visible:{ download:true, ... } }
  * 旧版（v1）没有 visible 字段，迁移时按「未添加」处理。
  */
 export function loadHomeLayout() {
@@ -276,4 +279,29 @@ export function onLayoutChange(fn) {
     const handler = (e) => fn(e && e.detail ? e.detail : {});
     window.addEventListener(LAYOUT_EVENT, handler);
     return () => window.removeEventListener(LAYOUT_EVENT, handler);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 待处理下载请求广播（进程内）
+// ─────────────────────────────────────────────────────────────
+
+const REQUEST_EVENT = 'versepc-download-request';
+let _pendingRequest = null;
+
+export function onPendingDownloadRequest(req) {
+    _pendingRequest = req || null;
+    try {
+        window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: req }));
+    } catch (e) {}
+}
+
+export function getPendingDownloadRequest() {
+    return _pendingRequest;
+}
+
+export function subscribeDownloadRequest(fn) {
+    if (typeof fn !== 'function') return () => {};
+    const handler = (e) => fn(e && e.detail ? e.detail : null);
+    window.addEventListener(REQUEST_EVENT, handler);
+    return () => window.removeEventListener(REQUEST_EVENT, handler);
 }

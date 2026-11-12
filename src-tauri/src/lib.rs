@@ -3,6 +3,7 @@
 
 mod api;
 mod ai;
+pub(crate) mod bridge;
 mod auth;
 mod avatar;
 mod commands_paths;
@@ -535,6 +536,14 @@ fn install_panic_hook() {
 pub fn run() {
     install_panic_hook();
 
+    // 浏览器扩展桥接：
+    //   --native-host   浏览器拉起的原生消息宿主（只跑 stdio 帧循环，不建窗口）
+    //   --download ...  外部传入下载请求（已运行实例则转发后退出，否则排队继续启动）
+    // 必须放在提权分支之前判定：宿主模式不需要任何窗口/运行时资源。
+    if crate::bridge::handle_startup() {
+        return;
+    }
+
     // 提权子进程模式：由主进程通过 runas 启动，仅作为命名管道执行端，
     // 不启动完整的 Tauri（窗口/异步 runtime），执行完命令后直接退出。
     if crate::promote::try_run_promote_process() {
@@ -583,6 +592,19 @@ pub fn run() {
             if let Some(main_win) = app.get_webview_window("main") {
                 apply_saved_window_state(&main_win);
             }
+
+            // 启动单实例命名管道：浏览器扩展/命令行二次启动时把请求转发到这里。
+            // 抢不到管道名说明已有实例在跑，accept_loop 会自行安静退出。
+            crate::bridge::install(app.handle().clone());
+
+            // 浏览器扩展自检（后台，不阻塞启动）：
+            //   · 释放内嵌的扩展文件到 <data>/extension（内容一致时跳过写盘）
+            //   · 原生宿主清单里的 exe 路径若因挪动文件夹而失效，自动重写注册
+            tauri::async_runtime::spawn_blocking(|| {
+                if let Err(e) = crate::bridge::extension::prepare_for_launch() {
+                    eprintln!("[boot] 浏览器扩展准备失败（不影响启动）: {}", e);
+                }
+            });
 
             // 后台预热 Java 探测缓存：在启动时后台刷新 Java 列表，
             // 避免真正启动游戏时才在启动流程里同步跑每个 Java 的 -version 探测，造成卡顿
@@ -784,6 +806,16 @@ pub fn run() {
             // 存档管理
             saves::version_list_saves,
             saves::version_save_update,
+            // 浏览器下载接管：原生宿主注册/卸载/状态
+            bridge::register::bridge_install_native_host,
+            bridge::register::bridge_uninstall_native_host,
+            bridge::register::bridge_native_host_status,
+            // 浏览器扩展：只需点一下，自动释放文件 + 注册 + 拉起浏览器
+            bridge::extension::bridge_install_extension,
+            bridge::extension::bridge_prepare_extension,
+            bridge::extension::bridge_uninstall_extension,
+            bridge::extension::bridge_extension_status,
+            bridge::extension::bridge_open_extension_dir,
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" {

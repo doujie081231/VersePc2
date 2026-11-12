@@ -15,13 +15,16 @@ import {
   listVisibleWidgets,
   resetWidgetPositions,
   onLayoutChange,
+  onPendingDownloadRequest,
+  getPendingDownloadRequest,
+  subscribeDownloadRequest,
 } from './home-widgets.js';
 
 describe('控件注册表', () => {
   it('核心控件不可移除，可选控件可移除', () => {
     expect(CORE_WIDGETS).toContain('launch');
-    expect(CORE_WIDGETS).not.toContain('mods');
-    // 注册表覆盖软件全部功能页面，模组只是其中之一
+    expect(CORE_WIDGETS).not.toContain('download');
+    // 注册表覆盖软件全部功能页面，下载只是其中之一
     expect(OPTIONAL_WIDGETS.length).toBeGreaterThan(5);
     for (const w of OPTIONAL_WIDGETS) expect(w.id).not.toBe('title');
     expect(ALL_WIDGET_IDS).toEqual(Object.keys(WIDGETS));
@@ -33,7 +36,7 @@ describe('控件注册表', () => {
       expect(w.desc).toBeTruthy();
       expect(typeof w.removable).toBe('boolean');
     }
-    // 全部可选控件都要能被点击跳转（每一项的 page 都必须是真实页面）
+    // 全部可选控件都要能被点击跳转（download 的 page 也必须是真实页面）
     for (const w of OPTIONAL_WIDGETS) {
       expect(typeof w.page).toBe('string');
       expect(w.page.length).toBeGreaterThan(0);
@@ -84,13 +87,13 @@ describe('控件可见性', () => {
   it('核心控件始终可见', () => {
     const layout = loadHomeLayout();
     expect(isWidgetVisible(layout, 'launch')).toBe(true);
-    expect(isWidgetVisible(layout, 'mods')).toBe(false);
+    expect(isWidgetVisible(layout, 'download')).toBe(false);
   });
 
   it('ensureWidgetVisible 首次返回 true，再次返回 false', () => {
-    expect(ensureWidgetVisible('mods')).toBe(true);
-    expect(ensureWidgetVisible('mods')).toBe(false);
-    expect(listVisibleWidgets()).toContain('mods');
+    expect(ensureWidgetVisible('download')).toBe(true);
+    expect(ensureWidgetVisible('download')).toBe(false);
+    expect(listVisibleWidgets()).toContain('download');
   });
 
   it('核心控件不能用 ensureWidgetVisible 添加', () => {
@@ -98,19 +101,19 @@ describe('控件可见性', () => {
   });
 
   it('removeWidget 移除后不可见，核心控件拒绝移除', () => {
-    ensureWidgetVisible('mods');
-    expect(removeWidget('mods')).toBe(true);
-    expect(listVisibleWidgets()).not.toContain('mods');
+    ensureWidgetVisible('download');
+    expect(removeWidget('download')).toBe(true);
+    expect(listVisibleWidgets()).not.toContain('download');
     expect(removeWidget('launch')).toBe(false);
   });
 
   it('resetWidgetPositions 清坐标但保留已添加控件', () => {
-    ensureWidgetVisible('mods');
+    ensureWidgetVisible('download');
     saveHomeLayout({ ...loadHomeLayout(), title: { x: 9, y: 9 } });
     resetWidgetPositions();
     const layout = loadHomeLayout();
     expect(layout.title).toBeUndefined();
-    expect(layout.visible.mods).toBe(true);
+    expect(layout.visible.download).toBe(true);
   });
 });
 
@@ -120,19 +123,27 @@ describe('事件广播', () => {
   it('onLayoutChange 在添加控件时触发', () => {
     const seen = [];
     const off = onLayoutChange((d) => seen.push(d));
-    ensureWidgetVisible('mods');
+    ensureWidgetVisible('download');
     off();
-    expect(seen[0]).toMatchObject({ type: 'add', id: 'mods' });
+    expect(seen[0]).toMatchObject({ type: 'add', id: 'download' });
   });
 
   it('取消订阅后不再收到事件', () => {
     const seen = [];
     const off = onLayoutChange((d) => seen.push(d));
     off();
-    ensureWidgetVisible('mods');
+    ensureWidgetVisible('download');
     expect(seen).toHaveLength(0);
   });
 
+  it('下载请求广播可被订阅者读到', () => {
+    const got = [];
+    const off = subscribeDownloadRequest((r) => got.push(r));
+    onPendingDownloadRequest({ url: 'https://x/y.zip', filename: 'y.zip' });
+    off();
+    expect(got[0].url).toBe('https://x/y.zip');
+    expect(getPendingDownloadRequest().filename).toBe('y.zip');
+  });
   it('已添加但缺坐标的控件会自动补坐标（不再叠在一起）', () => {
     localStorage.setItem('versepc_home_layout_v2', JSON.stringify({
       visible: { mods: true, lan_portmap: true, settings: true },

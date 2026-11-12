@@ -497,6 +497,19 @@ export const bridge = (function () {
   });
 
   // ============== 额外：暴露 api_proxy 让 api.js 使用 ==============
+  // 通用命令调用：features 层需要调用自定义 #[tauri::command] 时统一走这里，
+  // 避免各模块直接摸 window.__TAURI__（架构护栏会拦）。
+  bridgeObj.invoke = function (cmd, args) {
+    return invoke(cmd, args || {});
+  };
+
+  // 浏览器下载接管：订阅后端推送的 download-request
+  bridgeObj.onDownloadRequest = function (callback) {
+    return onTauriEvent('download-request', function (payload) {
+      if (typeof callback === 'function') callback(payload);
+    });
+  };
+
   bridgeObj.apiProxy = function (method, path, params, body) {
     return invoke('api_proxy', {
       method: method,

@@ -7,6 +7,7 @@ pub mod authlib;
 pub mod cloud;
 pub mod crash;
 pub mod download;
+pub mod download_custom;
 pub mod favorites;
 pub mod game;
 pub mod home_layout;
@@ -84,6 +85,13 @@ pub async fn api_proxy(
         && let Some(r) = home_layout::handle(&method, &path, &body) {
             return r;
         }
+
+    // 自定义文件下载（浏览器下载接管落地 / 工具箱「下载自定义文件」）
+    if path.starts_with("/api/download-custom")
+        && let Some(r) = download_custom::handle(&app, &method, &path, &params, &body).await {
+            return r;
+        }
+
     // 下载/安装相关路由（async，优先处理）
     if (path.starts_with("/api/install")
         || path == "/api/check-version-name"
