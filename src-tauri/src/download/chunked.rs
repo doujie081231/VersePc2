@@ -27,10 +27,14 @@ const MIN_CHUNK_SIZE: u64 = 512 * 1024;
 const MAX_CHUNKS: usize = 64;
 /// 单块 stall 超时（秒）：默认 30s
 const CHUNK_STALL_SECS: u64 = 30;
-/// 初始并发分块数（前 4 个分块不受速度限制）
-const INITIAL_CHUNKS: usize = 4;
-/// 速度下限（字节/秒）：低于此值才新增分块并发（初始 256KB/s）
-const SPEED_FLOOR_BASE: u64 = 256 * 1024;
+/// 初始并发分块数（前 N 个分块不受速度限制）
+/// GitHub 代理单连接 ~300KB/s，8 并发到 2.6MB/s、16 并发到 5.4MB/s，
+/// 所以起步就给 8，再按速度继续加。
+const INITIAL_CHUNKS: usize = 8;
+/// 目标速度（字节/秒）：低于它就继续增加分块并发。
+/// 512KB/s 是经验值 —— 低于这个说明单连接被源站限速（GitHub 直连约 47KB/s，
+/// 走加速代理约 300KB/s），必须靠并发叠加带宽。
+const SPEED_TARGET: u64 = 512 * 1024;
 
 /// 全局连接预算：限制所有文件的分块连接总数，避免多个大文件各开满并发导致
 /// 连接爆炸（如 64 mod × 64 分块 = 4096 连接），从而触发 CDN 限流反而拖慢速度。
@@ -105,11 +109,14 @@ impl ChunkScheduler {
         if launched >= self.max_chunks {
             return false;
         }
-        // 速度下限 = max(256KB/s, 实际平均速度 * 0.85)
+        // 目标速度：至少 512KB/s 才算"够快"。低于它说明单连接被限速，
+        // 必须继续加并发（GitHub/代理这类源单连接只有 50–300KB/s，
+        // 加到 16 并发能到 5MB/s）。
+        //
+        // 注意这里**不能**用 "speed * 0.85" 作阈值：那个写法恒为真，
+        // 永远不会增加并发（历史上就是这样，导致始终只有初始 4 个分块）。
         let speed = self.sample_speed();
-        let floor = SPEED_FLOOR_BASE.max(speed * 85 / 100);
-        // 速度达标：不再新增并发，避免无谓堆连接触发限流
-        speed >= floor
+        speed < SPEED_TARGET
     }
 
     fn mark_launched(&self) {
@@ -130,15 +137,41 @@ impl ChunkScheduler {
 async fn probe(client: &reqwest::Client, url: &str, timeout_secs: u64) -> Result<(u64, bool), String> {
     // 探测用独立短超时（最多 15 秒），避免服务器不响应头时长时间卡住
     let probe_timeout = Duration::from_secs(timeout_secs.clamp(5, 15));
-    let resp = client
-        .get(url)
-        .header("Range", "bytes=0-0")
-        .timeout(probe_timeout)
-        .send()
-        .await
+    let resp = super::single::apply_site_headers(
+        client.get(url).header("Range", "bytes=0-0").timeout(probe_timeout),
+        url,
+    )
+    .send()
+    .await
         .map_err(|e| format!("探测请求失败: {}", e))?;
 
     let status = resp.status().as_u16();
+
+    // 403：多半是缺 Referer，用推断的站点根重试一次
+    if status == 403 || status == 451 {
+        let guessed = super::mirror::guess_referer(url);
+        if !guessed.is_empty() {
+            let retry = super::single::apply_site_headers(
+                client.get(url).header("Range", "bytes=0-0").timeout(probe_timeout),
+                url,
+            )
+            .header(reqwest::header::REFERER, &guessed);
+            if let Ok(Ok(r2)) = tokio::time::timeout(probe_timeout, retry.send()).await {
+                let st2 = r2.status().as_u16();
+                if st2 == 206 {
+                    let size = r2.headers()
+                        .get("content-range")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.split('/').nth(1))
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    super::diag::log(&format!("  probe 403 retry ok referer={}", guessed));
+                    return Ok((size, true));
+                }
+            }
+        }
+    }
+
     if status == 206 {
         let size = resp
             .headers()
@@ -193,6 +226,10 @@ async fn download_chunked_once(
 
     // 分块
     let chunk_count = calc_chunk_count(file_size, max_chunks);
+    super::diag::log(&format!(
+        "  chunked url={} size={} chunks={} range={}",
+        url, file_size, chunk_count, supports_range
+    ));
     let base_size = file_size / chunk_count as u64;
     let mut chunks: Vec<(u64, u64)> = Vec::with_capacity(chunk_count);
     for i in 0..chunk_count as u64 {
@@ -288,10 +325,11 @@ async fn download_chunked_once(
 
             let mut req = client.get(&url).header("Range", format!("bytes={}-{}", start, e));
             req = req.timeout(Duration::from_secs(timeout_secs));
+            req = super::single::apply_site_headers(req, &url);
 
             // TTFB 超时保护：分块请求同样可能卡在等待响应头上（Modrinth CDN 跳转后
             // 慢速响应），必须及时中断，避免分块长期挂起导致"下载卡住"。
-            let resp = match tokio::time::timeout(
+            let mut resp = match tokio::time::timeout(
                 Duration::from_secs(20),
                 req.send(),
             )
@@ -308,8 +346,27 @@ async fn download_chunked_once(
                 }
             };
             if resp.status().as_u16() != 206 {
-                failed.store(true, Ordering::SeqCst);
-                return Err(format!("分块 {} HTTP {}", idx, resp.status()));
+                // 403：补 Referer 再试一次（同一分块，同一 Range）
+                let st = resp.status().as_u16();
+                if st == 403 || st == 451 {
+                    let guessed = super::mirror::guess_referer(&url);
+                    let retry = super::single::apply_site_headers(
+                        client.get(&url).header("Range", format!("bytes={}-{}", start, e))
+                            .timeout(Duration::from_secs(timeout_secs)),
+                        &url,
+                    )
+                    .header(reqwest::header::REFERER, &guessed);
+                    if let Ok(Ok(r2)) = tokio::time::timeout(Duration::from_secs(20), retry.send()).await
+                        && r2.status().as_u16() == 206 {
+                            resp = r2;
+                        } else {
+                            failed.store(true, Ordering::SeqCst);
+                            return Err(format!("分块 {} HTTP {}", idx, st));
+                        }
+                } else {
+                    failed.store(true, Ordering::SeqCst);
+                    return Err(format!("分块 {} HTTP {}", idx, st));
+                }
             }
 
             // 追加模式打开
@@ -519,9 +576,20 @@ pub async fn download_chunked_with_mirror(
                 Ok(false) => return Ok(false), // 不支持分块，交给单流
                 Err(e) => {
                     last_err = e.clone();
-                    // 源本身慢（低速检测）或 TTFB 超时（响应头迟迟不回）→ 立即换源；
-                    // 否则为临时失败，续传重试
-                    if e.contains("速度过低") || e.contains("TTFB 超时") {
+                    // 以下情况立即换源，不要在同一源上重试（重试只会浪费时间）：
+                    //  · 源本身慢（低速检测）
+                    //  · 响应头迟迟不回（TTFB 超时）
+                    //  · 被限流（429）
+                    //  · 明确被拒（403/451）
+                    if e.contains("速度过低")
+                        || e.contains("TTFB 超时")
+                        || e.contains("429")
+                        || e.contains("403")
+                        || e.contains("451")
+                    {
+                        crate::download::diag::log(&format!(
+                            "  fast-fail switch source: {} :: {}", url, e
+                        ));
                         break;
                     }
                     if attempt < 2 {
@@ -543,4 +611,47 @@ pub async fn download_chunked_with_mirror(
         }
     }
     Err(last_err)
+}
+
+#[cfg(test)]
+mod scheduler_tests {
+    use super::*;
+
+    /// 并发调度器必须"慢的时候会更激进地开新分块"。
+    /// 历史 bug：阈值写成 speed * 0.85，恒为真 → 永远只有初始并发。
+    #[test]
+    fn slow_source_triggers_more_chunks() {
+        let bytes = Arc::new(AtomicU64::new(0));
+        let s = ChunkScheduler::new(32, bytes.clone());
+
+        // 起步阶段（未到 INITIAL_CHUNKS）一定允许
+        for _ in 0..INITIAL_CHUNKS {
+            assert!(s.should_add(), "前 {INITIAL_CHUNKS} 个分块应无条件启动");
+            s.mark_launched();
+            s.mark_active_start();
+        }
+        assert_eq!(s.launched.load(Ordering::SeqCst), INITIAL_CHUNKS);
+
+        // 速度远低于目标（0 字节/秒）→ 应该继续加并发
+        assert!(s.should_add(), "速度为 0 时必须继续增加并发");
+
+        // 模拟达到高速（10MB/s）→ 不再无谓加并发
+        bytes.store(10 * 1024 * 1024, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(220));
+        bytes.store(20 * 1024 * 1024, Ordering::SeqCst);
+        assert!(!s.should_add(), "速度远高于目标时不该继续加并发");
+    }
+
+    #[test]
+    fn respects_max_chunks() {
+        // 注意：new() 会把 max_chunks 抬到至少 INITIAL_CHUNKS，
+        // 所以这里必须用 >= INITIAL_CHUNKS 的值来验证上限。
+        let bytes = Arc::new(AtomicU64::new(0));
+        let s = ChunkScheduler::new(INITIAL_CHUNKS, bytes.clone());
+        for _ in 0..INITIAL_CHUNKS {
+            s.mark_launched();
+            s.mark_active_start();
+        }
+        assert!(!s.should_add(), "达到上限后不能再加");
+    }
 }

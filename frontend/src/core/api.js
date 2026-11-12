@@ -334,8 +334,7 @@ const API = {
     memoryOptimize: () => bridge?.memoryOptimize?.() || Promise.reject(new Error('记忆优化能力不可用')),
 
     // === 游戏版本管理 ===
-    getVersions: (refresh = false, installedOnly = false) =>
-        apiGet('/api/versions', { refresh: refresh ? 'true' : '', installed: installedOnly ? 'true' : '' }),
+    getVersions: (refresh = false) => apiGet('/api/versions', { refresh: refresh ? 'true' : '' }),
     deleteVersion: (versionId, permanent) => apiPost('/api/version/delete', { versionId, permanent: !!permanent }),
     getDeleteChain: (versionId) => apiPost('/api/version/delete-chain', { versionId }),
     openVersionFolder: (versionId, folderType) => apiGet('/api/version/open-folder', { versionId, folderType }),
@@ -496,8 +495,8 @@ const API = {
     getInstalledJava: () => apiGet('/api/java/installed'),
     getJavaInstallStatus: (sessionId) =>
         apiGet('/api/java/install-status', { sessionId }),
-    autoInstallJava: (requiredVersion = 17, maxVersion = 999) =>
-        apiPost('/api/java/auto-install', { requiredVersion, maxVersion }),
+    autoInstallJava: (requiredVersion = 17) =>
+        apiPost('/api/java/auto-install', { requiredVersion }),
     getJavaDownloadSources: () => apiGet('/api/java/download-sources'),
     downloadJava: (majorVersion) => apiPost('/api/java/download', { majorVersion }),
     cancelJavaDownload: (sessionId) => apiPost('/api/java/cancel', { sessionId }),
@@ -611,6 +610,28 @@ const API = {
     },
 };
 
-export { ERROR_MESSAGES, getUserFriendlyMessage, ErrorHandler, API_BASE, _isTauri, _tauriApiProxy, _isApiPath, fetchWithTimeout, apiGet, apiPost, apiDelete, API };
+/* 自定义文件下载（浏览器下载接管 / 工具箱「下载自定义文件」） */
+// 取走一条待确认请求（来自扩展或命令行，取后即清）
+function getPendingDownload() { return apiGet('/api/download-custom/pending'); }
+// 开始下载：{ url, savePath, fileName }
+function startCustomDownload(payload) { return apiPost('/api/download-custom', payload); }
+// 查询进度 / 取消 / 读写保存目录
+function getCustomDownloadStatus(sessionId) { return apiGet('/api/download-custom/status', { sessionId }); }
+function cancelCustomDownload(sessionId) { return apiPost('/api/download-custom/cancel', { sessionId }); }
+function resolveCustomDownloadName(payload) { return apiPost('/api/download-custom/resolve-name', payload); }
+function pauseCustomDownload(sessionId) { return apiPost('/api/download-custom/pause', { sessionId }); }
+function resumeCustomDownload(sessionId) { return apiPost('/api/download-custom/resume', { sessionId }); }
+function getCustomDownloadFolder() { return apiGet('/api/download-custom/default-folder'); }
+function saveCustomDownloadFolder(folder) { return apiPost('/api/download-custom/save-folder', { folder }); }
+
+Object.assign(API, {
+    getPendingDownload, startCustomDownload, getCustomDownloadStatus,
+    cancelCustomDownload, getCustomDownloadFolder, saveCustomDownloadFolder,
+    resolveCustomDownloadName, pauseCustomDownload, resumeCustomDownload,
+});
+
+export { ERROR_MESSAGES, getUserFriendlyMessage, ErrorHandler, API_BASE, _isTauri, _tauriApiProxy, _isApiPath, fetchWithTimeout, apiGet, apiPost, apiDelete, API,
+    getPendingDownload, startCustomDownload, getCustomDownloadStatus, cancelCustomDownload,
+    getCustomDownloadFolder, saveCustomDownloadFolder };
 
 /* @versepc-protected: anti-ai-plagiarism-v1.0 */
