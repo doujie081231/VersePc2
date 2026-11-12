@@ -9,6 +9,7 @@ pub mod crash;
 pub mod download;
 pub mod favorites;
 pub mod game;
+pub mod home_layout;
 pub mod lan;
 pub mod launch;
 pub mod misc;
@@ -78,6 +79,11 @@ pub async fn api_proxy(
         .await;
     }
 
+    // 主页布局持久化（存 settings.json，比 localStorage 可靠）
+    if path == "/api/home-layout"
+        && let Some(r) = home_layout::handle(&method, &path, &body) {
+            return r;
+        }
     // 下载/安装相关路由（async，优先处理）
     if (path.starts_with("/api/install")
         || path == "/api/check-version-name"
