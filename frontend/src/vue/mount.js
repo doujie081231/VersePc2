@@ -26,6 +26,7 @@ const OTHER_PAGES = [
   ['PageCommunity', '#page-community', () => import('./pages/page-community.js')],
   ['PageSkin', '#page-skin', () => import('./pages/page-skin.js')],
   ['PageAccounts', '#page-accounts', () => import('./pages/page-accounts.js')],
+  ['PageSkinLibrary', '#page-skin-library', () => import('./pages/page-skin-library.js')],
   ['PageSettingsLaunch', '#page-settings-launch', () => import('./pages/page-settings-launch.js')],
   ['PageSettingsPersonalize', '#page-settings-personalize', () => import('./pages/page-settings-personalize.js')],
   ['PageSettingsOther', '#page-settings-other', () => import('./pages/page-settings-other.js')],

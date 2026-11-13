@@ -198,11 +198,19 @@
     min-width: 340px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    /* 不可用 justify-content:center：内容超高时上半部分会溢出到滚动原点之外，滚轮无法滚回顶部 */
+    justify-content: flex-start;
     padding: 44px 40px;
     background: #fff;
     gap: 0;
     overflow-y: auto;
+}
+/* 内容不足时保持视觉居中；内容溢出时 auto 外边距归零，顶部内容仍可完整滚动到 */
+.acct-detail-right > :first-child {
+    margin-top: auto;
+}
+.acct-detail-right > :last-child {
+    margin-bottom: auto;
 }
 .acct-detail-header-area {
     display: flex;

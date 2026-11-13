@@ -15,6 +15,8 @@ export const accountsState = {
   _carouselDrag: null,
   ADD_CARD_ID: '__ADD_ACCOUNT__',
   _currentDetailAccount: null,
+  // 从账户详情页进入皮肤库时保存的账户快照（离开账户页会清空 _currentDetailAccount）
+  _skinLibraryAccount: null,
   _skinViewer: null,
   _skinResizeObserver: null,
   _skinResizeTimer: null,

@@ -15,6 +15,12 @@ name = "verse_tauri_lib"
 # ?? "unable to find library -lkernel32" ???????????????
 crate-type = ["rlib"]
 
+[features]
+# Tauri production builds must enable this feature. Without it,
+# generate_context! takes the dev branch and embeds NO frontend assets
+# (the binary only tries devUrl, so the window renders blank).
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
