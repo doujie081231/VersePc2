@@ -2,7 +2,7 @@ import { reactive } from 'vue';
 import { API, apiPost } from '../../core/api.js';
 import { bridge } from '../../core/tauri-bridge.js';
 
-import { showToast } from '../misc/ui-components.js';
+import { showToast, showConfirmDialog } from '../misc/ui-components.js';
 
 import { dlManager, clearCompletedDownloads } from './custom-download-tasks.js';
 
@@ -76,6 +76,52 @@ function openCustomDlFolder() {
     apiPost('/api/open-folder', { folder: 'custom', customPath: dir }).catch(() => {});
 }
 
+/// 浏览器扩展商店地址（Edge Add-ons，扩展 ID 由商店分配）
+const EXTENSION_STORE_URL =
+    'https://microsoftedge.microsoft.com/addons/detail/hjimmjkhbblbbbbmhlagchfdohoelbbi';
+
+/// 用户关掉过"安装扩展"提示后，本次启动不再打扰（内存态，不落盘）
+let _extensionTipDismissed = false;
+
+/// 前往浏览器扩展商店：优先 Edge，没装 Edge 用默认浏览器
+function openExtensionStore() {
+    try {
+        if (bridge.openExtensionStore) {
+            bridge.openExtensionStore().catch(() => {
+                // 降级：至少用默认浏览器打开，别让按钮点了没反应
+                bridge.openExternal(EXTENSION_STORE_URL);
+            });
+            return;
+        }
+        bridge.openExternal(EXTENSION_STORE_URL);
+    } catch (e) {
+        console.error('[custom-dl] 打开扩展商店失败:', e);
+        showToast('打开扩展商店失败，请手动访问 ' + EXTENSION_STORE_URL, 'error');
+    }
+}
+
+/// 使用下载功能时提示"去装浏览器扩展"。
+///
+/// 只在"用户可能想接管浏览器下载"时出现，且每次启动最多提醒一次，
+/// 用户点"以后再说"后本次不再打扰。不阻塞下载流程。
+async function promptInstallExtensionOnce() {
+    if (_extensionTipDismissed) return false;
+    _extensionTipDismissed = true;
+    try {
+        const ok = await showConfirmDialog(
+            '安装浏览器扩展，下载更省事',
+            '装好扩展后，在浏览器里点下载链接会自动交给启动器，<b>地址和文件名都帮你填好</b>。<br><br>' +
+            '不装也能用：把下载链接粘贴到下面的「下载地址」里，同样走高速多线程下载。',
+            '前往安装',
+            '以后再说'
+        );
+        if (ok) openExtensionStore();
+        return ok;
+    } catch (e) {
+        return false;
+    }
+}
+
 /**
  * 开始下载
  * @param {{url?:string, savePath?:string, fileName?:string}} [override]
@@ -90,6 +136,12 @@ async function startCustomDownload(override) {
     if (!url) { showToast('请输入下载地址', 'error'); return; }
     if (!savePath) { showToast('请选择保存位置', 'error'); return; }
     try { new URL(url); } catch (e) { showToast('请输入有效的下载地址', 'error'); return; }
+
+    // 手动下载也提醒一次：装了浏览器扩展就不用再往这里粘链接
+    // （只在用户真的要点下载时才问，不打扰浏览页面的人）
+    if (!override && !_extensionTipDismissed) {
+        await promptInstallExtensionOnce();
+    }
 
     _setDisplay('custom-dl-start-btn', 'none');
     _setDisplay('custom-dl-cancel-btn', '');
@@ -398,4 +450,6 @@ export {
     // 主页下载控件与浏览器接管所需
     customDlState, onCustomDownloadChange, fetchPendingDownload, applyPendingDownload,
     ensureCustomDlFolder, pauseCustomDownload, resumeCustomDownload,
+    // 「安装浏览器扩展」引导
+    openExtensionStore, promptInstallExtensionOnce, EXTENSION_STORE_URL,
 };

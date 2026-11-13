@@ -273,6 +273,14 @@ export const bridge = (function () {
     openExternal: function (url) {
       return invoke('open_external', { url: url });
     },
+    // 打开浏览器扩展商店：优先 Edge，没装 Edge 时用默认浏览器（Rust 侧决定）
+    openExtensionStore: function () {
+      return invoke('open_extension_store', {});
+    },
+    // 打开任意 URL，但优先用 Edge（用于"这个链接在 Edge 里打开更合适"的场景）
+    openExternalInEdge: function (url) {
+      return invoke('open_external_in_edge', { url: url });
+    },
     getDefaultModPath: function (versionId) {
       return invoke('get_default_mod_path', versionId ? { versionId: versionId } : {}).then(function (result) {
         if (result && result.success) return result.path;
@@ -462,6 +470,8 @@ export const bridge = (function () {
     isLinux: system.isLinux,
     memoryOptimize: system.memoryOptimize,
     openExternal: system.openExternal,
+    openExtensionStore: system.openExtensionStore,
+    openExternalInEdge: system.openExternalInEdge,
     getDefaultModPath: system.getDefaultModPath,
     getDefaultModSaveFolder: system.getDefaultModSaveFolder,
     getDroppedFilePath: system.getDroppedFilePath,

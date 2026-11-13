@@ -23,6 +23,7 @@ import {
   ensureCustomDlFolder,
   pauseCustomDownload,
   resumeCustomDownload,
+  openExtensionStore,
 } from '../../features/versions/custom-download.js';
 import { subscribeDownloadRequest } from '../../features/home/home-widgets.js';
 import { showToast } from '../../features/misc/ui-components.js';
@@ -176,7 +177,7 @@ export default {
     return {
       expanded, url, fileName, savePath, highlighted,
       status, running, paused, active, hasTask, progress, displayName, statusText, canStart,
-      toggleExpand, pickFolder, onStart, onCancel, onOpenFolder, onTogglePause,
+      toggleExpand, pickFolder, onStart, onCancel, onOpenFolder, onTogglePause, openExtensionStore,
     };
   },
   template: `
@@ -191,6 +192,19 @@ export default {
           <span class="home-download-name" :title="displayName">{{ displayName }}</span>
           <span class="home-download-status">{{ statusText }}</span>
         </div>
+        <button
+          v-if="!editing"
+          class="home-download-ext-btn"
+          type="button"
+          title="安装浏览器扩展：装好后在浏览器里点下载会自动填好"
+          @click.stop="openExtensionStore"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v6M12 2l-3 3M12 2l3 3"/>
+            <rect x="3" y="9" width="18" height="12" rx="2"/>
+            <path d="M8 15h8"/>
+          </svg>
+        </button>
         <svg class="home-download-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M6 9l6 6 6-6"/>
         </svg>
@@ -227,6 +241,7 @@ export default {
             <VButton variant="secondary" size="sm" @click.stop="onTogglePause">{{ paused ? '继续' : '暂停' }}</VButton>
           </template>
           <VButton v-if="!active" variant="secondary" size="sm" @click.stop="onOpenFolder">打开文件夹</VButton>
+          <VButton v-if="!active" variant="ghost" size="sm" @click.stop="openExtensionStore">安装扩展</VButton>
         </div>
       </div>
     </div>

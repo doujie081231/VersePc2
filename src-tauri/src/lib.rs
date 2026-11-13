@@ -473,6 +473,104 @@ fn store_delete(state: tauri::State<storage::Store>, key: String) -> bool {
 
 // ============== 系统工具命令 ==============
 
+/// 扩展商店页面（Edge Add-ons）
+pub const EDGE_ADDON_URL: &str =
+    "https://microsoftedge.microsoft.com/addons/detail/hjimmjkhbblbbbbmhlagchfdohoelbbi";
+/// Chrome 应用商店页面（Edge 没装时的替代入口，里面同一个扩展也上架了才用得上）
+pub const CHROME_ADDON_URL: &str =
+    "https://chrome.google.com/webstore/detail/hjimmjkhbblbbbbmhlagchfdohoelbbi";
+
+/// 优先用 Edge 打开 URL；没装 Edge（或启动失败）则退回默认浏览器。
+///
+/// 为什么不用 `open::that`：它只会交给系统默认浏览器，用户默认浏览器是
+/// Chrome/Firefox 时，商店页面会打开在错误的商店里（扩展是 Edge 装上的却跳到 Chrome）。
+#[cfg(target_os = "windows")]
+fn open_in_edge(url: &str) -> bool {
+    use std::os::windows::process::CommandExt;
+    // 探测 Edge 的常见安装位置（HKCU 安装 + 系统安装 + 企业安装）
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        candidates.push(std::path::Path::new(&local).join(r"Microsoft\Edge\Application\msedge.exe"));
+    }
+    for env in ["ProgramFiles(x86)", "ProgramFiles"] {
+        if let Ok(pf) = std::env::var(env) {
+            candidates.push(std::path::Path::new(&pf).join(r"Microsoft\Edge\Application\msedge.exe"));
+        }
+    }
+
+    for exe in candidates {
+        if !exe.exists() {
+            continue;
+        }
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.arg(url);
+        // CREATE_NO_WINDOW：不要为浏览器弹一个控制台窗口
+        cmd.creation_flags(0x0800_0000);
+        match cmd.spawn() {
+            Ok(_) => {
+                eprintln!("[open_edge] 已用 Edge 打开: {}", url);
+                return true;
+            }
+            Err(e) => eprintln!("[open_edge] 启动 {} 失败: {}，改用默认浏览器", exe.display(), e),
+        }
+    }
+
+    // 兜底：查注册表里的 App Paths（非标准安装目录也能命中）
+    #[cfg(target_os = "windows")]
+    if let Some(path) = edge_from_registry() {
+        let mut cmd = std::process::Command::new(&path);
+        cmd.arg(url);
+        cmd.creation_flags(0x0800_0000);
+        if cmd.spawn().is_ok() {
+            eprintln!("[open_edge] 已用注册表里的 Edge 打开: {}", url);
+            return true;
+        }
+    }
+
+    eprintln!("[open_edge] 没找到 Edge，退回默认浏览器: {}", url);
+    open::that(url).is_ok()
+}
+
+/// 从注册表 App Paths 找 Edge
+#[cfg(target_os = "windows")]
+fn edge_from_registry() -> Option<std::path::PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let hk = RegKey::predef(hive);
+        if let Ok(key) = hk.open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe")
+            && let Ok(v) = key.get_value::<String, _>("")
+        {
+            let p = std::path::PathBuf::from(v.trim_matches('"'));
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn open_in_edge(_url: &str) -> bool {
+    open::that(_url).is_ok()
+}
+
+/// 打开浏览器扩展商店：优先 Edge，没有就默认浏览器
+#[tauri::command]
+fn open_extension_store() -> bool {
+    open_in_edge(EDGE_ADDON_URL)
+}
+
+/// 直接打开任意 URL，优先 Edge（供"前往安装扩展"以外的场景复用）
+#[tauri::command]
+fn open_external_in_edge(url: String) -> bool {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return false;
+    }
+    open_in_edge(&url)
+}
+
 #[tauri::command]
 fn open_external(url: String) -> bool {
     // 在默认浏览器中打开 URL（支持 http/https/mailto 等协议）
@@ -740,6 +838,8 @@ pub fn run() {
             write_startup_timing,
             // 系统工具
             open_external,
+            open_extension_store,
+            open_external_in_edge,
             // TTS 语音合成
             tts_speak,
             // AI 对话代理

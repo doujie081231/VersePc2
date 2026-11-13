@@ -12,10 +12,8 @@ import { handleCheckUpdate, handleSkipVersion, handleDownloadUpdate, handleInsta
 import { showUpdateAnnouncement } from '../../features/misc/announcement.js';
 import {
   installBrowserBridge, uninstallBrowserBridge, refreshBrowserBridgeStatus,
-  openExtensionDir, copyExtensionDir, initBrowserBridgeCard, browserBridgeState,
-  saveStoreUrl, loadStoreUrl,
+  initBrowserBridgeCard, browserBridgeState, openExtensionStore,
 } from '../../features/settings/browser-download.js';
-import { ref } from 'vue';
 import { bridge } from '../../core/tauri-bridge.js';
 import VButton from '@/components/verse/VButton.vue';
 import VInput from '@/components/verse/VInput.vue';
@@ -43,14 +41,7 @@ const PageSettingsOther = {
   setup() {
     // 进页面即拉一次浏览器下载接管状态
     initBrowserBridgeCard();
-    // 进页面时主动读一次（initBrowserBridgeCard 可能已在别处跑过，不能依赖它）
-    const storeUrl = ref(loadStoreUrl() || browserBridgeState.storeUrl || '');
-    const onStoreUrlChange = (v) => {
-      const v2 = String(v || '').trim();
-      saveStoreUrl(v2);
-      storeUrl.value = v2;
-    };
-    return { storeUrl, onStoreUrlChange, installBrowserBridge, uninstallBrowserBridge, refreshBrowserBridgeStatus, openExtensionDir, copyExtensionDir, browserBridgeState,
+    return { installBrowserBridge, uninstallBrowserBridge, refreshBrowserBridgeStatus, browserBridgeState, openExtensionStore,
       openSponsorDino, toggleShowMoreSponsors, copyFeedbackEmail, browseFolder, doMemoryOptimize, openFolder, cleanupScan, cleanupRun, handleCheckUpdate, handleSkipVersion, handleDownloadUpdate, handleInstallUpdate, showUpdateAnnouncement, createDesktopShortcut, saveOtherSettings, resetOtherSettings, openExternalUrl, openUrl, openReleasePage,
       // 原先通过内联 oninput 调用，靠 window 全局名解析但并未挂载，改为模板事件后需暴露
       filterSponsors, updateSpeedLimitLabel };
@@ -335,56 +326,23 @@ const PageSettingsOther = {
             <!-- 浏览器下载接管 -->
             <div class="card">
               <h3>浏览器下载接管</h3>
-              <p class="form-hint" style="margin-bottom:12px;">
+              <p class="form-hint" style="margin-bottom:14px;">
                 装好后，在网页上点下载会自动召唤 VersePC2 并填好地址与文件名——真正的下载仍由你点「开始下载」。
-                扩展已内置在启动器里，点下面的按钮即可，无需另外下载。
               </p>
 
               <div class="bridge-status-row">
-                <span id="bridge-status-dot" class="bridge-status-dot"></span>
-                <span id="bridge-status-text" class="bridge-status-text">正在检测...</span>
-              </div>
-              <p id="bridge-status-detail" class="form-hint" style="margin:6px 0 14px;"></p>
-
-              <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                <VButton variant="accent" id="bridge-install-btn" @click="installBrowserBridge()">一键安装</VButton>
-                <VButton variant="secondary" id="bridge-uninstall-btn" @click="uninstallBrowserBridge()">卸载</VButton>
-                <VButton variant="secondary" @click="refreshBrowserBridgeStatus()">重新检测</VButton>
-              </div>
-
-              <div class="form-group" style="margin-top:12px;">
-                <span class="form-hint">
-                  想让「点一下就装好」，可以上架 Edge 加载项商店（免费）。
-                  上架后在下面填商店链接，这里会出现「从商店安装」按钮，用户点一下就装完并自动更新。
-                </span>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center;">
-                  <VButton v-if="storeUrl" variant="accent" size="sm" @click="openExternalUrl(storeUrl)">从商店安装</VButton>
-                  <input
-                    class="form-input"
-                    style="flex:1;min-width:220px;max-width:420px;"
-                    placeholder="商店链接，例如 https://microsoftedge.microsoft.com/addons/detail/xxxx"
-                    :value="storeUrl"
-                    @change="onStoreUrlChange($event.target.value)" />
-                </div>
-                <span v-if="storeUrl" class="form-hint" style="color:var(--green,#4ade80);">
-                  已配置商店链接：{{ storeUrl }}
+                <span id="bridge-status-dot" class="bridge-status-dot" :class="browserBridgeState.hostInstalled ? 'is-ok' : 'is-bad'"></span>
+                <span id="bridge-status-text" class="bridge-status-text" :class="{ 'is-ok': browserBridgeState.hostInstalled }">
+                  {{ browserBridgeState.hostInstalled ? '已就绪' : '未就绪' }}
                 </span>
               </div>
 
-              <div id="bridge-dir-wrap" class="form-group" style="margin-top:14px;display:none;">
-                <span class="form-hint">扩展目录</span>
-                <code id="bridge-dir-text" class="bridge-dir-text"></code>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-                  <VButton variant="ghost" size="sm" @click="openExtensionDir()">打开目录</VButton>
-                  <VButton variant="ghost" size="sm" @click="copyExtensionDir()">复制路径</VButton>
-                </div>
-              </div>
-
-              <div class="form-group" style="margin-top:14px;">
-                <span class="form-hint">
-                  安装会做四件事：释放扩展文件 → 注册原生宿主 → 写入浏览器扩展注册表 → 带扩展启动浏览器。
-                  全程只写当前用户注册表，不需要管理员权限。
-                </span>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+                <VButton variant="accent" id="bridge-install-btn" :disabled="browserBridgeState.busy" @click="installBrowserBridge()">
+                  {{ browserBridgeState.hostInstalled ? '前往安装扩展' : '安装' }}
+                </VButton>
+                <VButton v-if="browserBridgeState.hostInstalled" variant="secondary" @click="uninstallBrowserBridge()">移除</VButton>
+                <VButton variant="ghost" @click="refreshBrowserBridgeStatus()">重新检测</VButton>
               </div>
             </div>
 

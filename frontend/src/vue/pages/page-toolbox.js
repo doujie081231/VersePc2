@@ -1,5 +1,5 @@
 /* page-toolbox - 工具箱页 Vue 组件 */
-import { browseCustomDlPath, startCustomDownload, cancelCustomDownload, openCustomDlFolder } from '../../features/versions/custom-download.js';
+import { browseCustomDlPath, startCustomDownload, cancelCustomDownload, openCustomDlFolder, ensureCustomDlFolder, openExtensionStore } from '../../features/versions/custom-download.js';
 import { bridge } from '../../core/tauri-bridge.js';
 import VButton from '@/components/verse/VButton.vue';
 import VInput from '@/components/verse/VInput.vue';
@@ -11,7 +11,9 @@ function openExternal(url) {
 const PageToolbox = {
   components: { VButton, VInput },
   setup() {
-    return { browseCustomDlPath, startCustomDownload, cancelCustomDownload, openCustomDlFolder, openExternal };
+    // 进页面时补齐上次使用的保存目录，减少一次手动选择
+    ensureCustomDlFolder().catch(() => {});
+    return { browseCustomDlPath, startCustomDownload, cancelCustomDownload, openCustomDlFolder, openExternal, openExtensionStore };
   },
   template: `
           <div class="page-header">
@@ -351,6 +353,13 @@ const PageToolbox = {
             <div class="toolbox-grid" style="grid-template-columns:1fr;">
               <div style="background:var(--glass-bg);border-radius:12px;padding:20px;border:1px solid var(--border);">
                 <p class="hint" style="margin-bottom:16px;">使用启动器的高速多线程下载引擎下载任意文件。请注意，部分网站（例如百度网盘）可能会报错（403），无法正常下载。</p>
+                <div class="custom-dl-extension-tip">
+                  <div class="custom-dl-extension-tip-text">
+                    <strong>装个浏览器扩展，点下载自动填好</strong>
+                    <span>在浏览器里点下载链接，启动器会自动弹出并填好地址与文件名。</span>
+                  </div>
+                  <VButton type="button" variant="secondary" size="sm" id="custom-dl-install-ext-btn" @click="openExtensionStore()">前往安装浏览器扩展</VButton>
+                </div>
                 <div class="form-group" style="margin-bottom:12px;">
                   <label style="font-weight:500;margin-bottom:6px;display:block;">下载地址</label>
                   <VInput type="text" id="custom-dl-url" style="width:100%;" placeholder="https://example.com/file.zip" />
@@ -379,6 +388,7 @@ const PageToolbox = {
                   <VButton type="button" variant="accent" id="custom-dl-start-btn" @click="startCustomDownload()">开始下载</VButton>
                   <VButton type="button" variant="secondary" id="custom-dl-cancel-btn" style="display:none;" @click="cancelCustomDownload()">取消下载</VButton>
                   <VButton type="button" variant="secondary" @click="openCustomDlFolder()">打开文件夹</VButton>
+                  <VButton type="button" variant="ghost" @click="openExtensionStore()">前往安装浏览器扩展</VButton>
                 </div>
               </div>
             </div>
