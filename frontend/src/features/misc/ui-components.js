@@ -206,6 +206,7 @@ function generateColorAvatar(username, size) {
 
 const VERSION_TYPE_LABELS = { release: '正式版', snapshot: '快照版', special: '愚人节版', old_beta: '旧测试版', old_alpha: '旧内测版', '(old)': '旧版' };
 function getVersionTypeLabel(v) {
+    if (v.isBedrock) return '基岩版';
     const type = v.type || 'release';
     let label = VERSION_TYPE_LABELS[type] || type;
     if (v.complianceLevel === 0) label = '未混淆';

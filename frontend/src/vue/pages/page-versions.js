@@ -1,18 +1,11 @@
-/* page-versions - 版本管理页 Vue 组件
- * 通用按钮与文本输入走 components/verse 语义层；
- * .btn-icon / 自研 custom-select / 模态框等专有结构保持原样。
- */
-import { syncVersionCardSwitches, toggleVersionCardStyle } from '../../features/versions/versions-list.js';
+/* page-versions - 版本管理页 Vue 组件 */
+import { API } from '../../core/api.js';
+import { syncVersionCardSwitches } from '../../features/versions/versions.js';
 
-import { addExternalFolder, closeExternalFolderModal, selectExternalFolderPath, autoDetectExternalFolders, confirmAddExternalFolder } from '../../features/versions/versions-external.js';
-import { closeInstallModal, cancelInstall } from '../../features/versions/versions-install.js';
-import { closeModLoaderModal, openFabricApiPicker, backFromFabricApiPicker } from '../../features/versions/versions-loaders.js';
+import { toggleVersionCardStyle, addExternalFolder, closeInstallModal, cancelInstall, closeExternalFolderModal, selectExternalFolderPath, autoDetectExternalFolders, confirmAddExternalFolder, closeModLoaderModal, openFabricApiPicker, backFromFabricApiPicker } from '../../features/versions/versions.js';
 import { closeRepairModal, cancelRepair } from '../../features/versions/version-settings.js';
-import VButton from '@/components/verse/VButton.vue';
-import VInput from '@/components/verse/VInput.vue';
 
 const PageVersions = {
-  components: { VButton, VInput },
   setup() {
     return { toggleVersionCardStyle, addExternalFolder, closeInstallModal, cancelInstall, closeRepairModal, cancelRepair, closeExternalFolderModal, selectExternalFolderPath, autoDetectExternalFolders, confirmAddExternalFolder, closeModLoaderModal, openFabricApiPicker, backFromFabricApiPicker };
   },
