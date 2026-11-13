@@ -290,6 +290,20 @@ describe('全局选择器注册', () => {
     expect(customSelectInstances['vset-isolation']).toBe(first);
   });
 
+  it('容器晚于初始化出现时重建失效实例', () => {
+    // 启动时插件页面尚未挂载，构造拿不到容器，实例处于失效状态
+    initAllCustomSelects();
+    expect(customSelectInstances['server-host-version'].valueEl).toBeFalsy();
+
+    buildWrapper('server-host-version-wrapper');
+    initAllCustomSelects();
+
+    const inst = customSelectInstances['server-host-version'];
+    expect(inst.wrapper.id).toBe('server-host-version-wrapper');
+    expect(inst.valueEl).toBeTruthy();
+    expect(() => inst.setValue('')).not.toThrow();
+  });
+
   it('setCustomSelectValue / updateCustomSelectOptions 仅作用于已注册实例', () => {
     buildWrapper('mod-filter-loader-wrapper');
     initAllCustomSelects();

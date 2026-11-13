@@ -154,8 +154,22 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
     let external_root = external_dir.as_ref().and_then(|p| {
         p.parent().and_then(|versions| versions.parent()).map(|root| root.to_path_buf())
     });
-    eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={}",
-        version_id, versions_dir.display(), version_dir.display());
+    // 实际游戏目录：与启动参数/PCL 的 PathIndie 保持一致。
+    // 版本隔离关闭时，资源包、模组、存档等应落在共享 gameDir，而不是 versions/<id>。
+    let game_dir = if version_id.is_empty() {
+        minecraft_dir.clone()
+    } else {
+        crate::launch::args_builder::resolve_game_dir(
+            &version_id,
+            None,
+            external_dir.as_deref(),
+            &settings,
+            &versions_dir,
+            &data_dir,
+        )
+    };
+    eprintln!("[open-folder] selectedVersion={:?} versions_dir={} version_dir={} game_dir={}",
+        version_id, versions_dir.display(), version_dir.display(), game_dir.display());
 
     let path = match folder {
         "minecraft" | "game" => external_root.clone().unwrap_or(minecraft_dir),
@@ -163,14 +177,14 @@ fn resolve_folder_type(folder: &str, custom_path: &str) -> Option<PathBuf> {
             .as_ref()
             .map(|root| root.join("versions"))
             .unwrap_or(versions_dir),
-        "mods" => version_dir.join("mods"),
+        "mods" => game_dir.join("mods"),
         "assets" => version_dir.join("assets"),
-        "logs" => version_dir.join("logs"),
-        "crash-reports" => version_dir.join("crash-reports"),
-        "shaderpacks" => version_dir.join("shaderpacks"),
-        "resourcepacks" => version_dir.join("resourcepacks"),
-        "datapacks" => version_dir.join("datapacks"),
-        "saves" => version_dir.join("saves"),
+        "logs" => game_dir.join("logs"),
+        "crash-reports" => game_dir.join("crash-reports"),
+        "shaderpacks" => game_dir.join("shaderpacks"),
+        "resourcepacks" => game_dir.join("resourcepacks"),
+        "datapacks" => game_dir.join("datapacks"),
+        "saves" => game_dir.join("saves"),
         "data" => data_dir,
         "custom" => {
             if custom_path.is_empty() {
@@ -562,6 +576,12 @@ const READABLE_MEDIA_EXTS: &[&str] = &[
 /// 仅允许在数据目录下读取的日志类扩展名（问题反馈自动收集日志用）
 const READABLE_LOG_EXTS: &[&str] = &["log", "txt", "install"];
 
+/// 插件目录内允许读取的前端资源扩展名。
+/// 插件 UI 由 plugin-runtime 通过 read_file_buffer 读取 JS/CSS/JSON 后执行，
+/// 不做放行会导致所有插件页面空白（审计 P0-3 修复后的回归）。
+/// 仅限 <数据目录>/plugins/ 内部，账号令牌等仍在数据目录其他位置，不受影响。
+const READABLE_PLUGIN_EXTS: &[&str] = &["js", "mjs", "css", "json", "html"];
+
 /// Windows 路径前缀比较（大小写不敏感）
 fn path_starts_with_ci(path: &std::path::Path, prefix: &std::path::Path) -> bool {
     #[cfg(target_os = "windows")]
@@ -615,9 +635,11 @@ fn is_read_allowed(
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
     let under_data = path_starts_with_ci(path, data_dir);
+    let under_plugins = under_data && path_starts_with_ci(path, &data_dir.join("plugins"));
     let is_media = READABLE_MEDIA_EXTS.contains(&ext.as_str());
     let is_log = under_data && READABLE_LOG_EXTS.contains(&ext.as_str());
-    if !is_media && !is_log {
+    let is_plugin_asset = under_plugins && READABLE_PLUGIN_EXTS.contains(&ext.as_str());
+    if !is_media && !is_log && !is_plugin_asset {
         return false;
     }
     if under_data {
@@ -667,12 +689,18 @@ mod read_guard_tests {
                 .unwrap_or(0)
         ));
         fs::create_dir_all(root.join("data").join("logs")).unwrap();
+        fs::create_dir_all(root.join("data").join("plugins").join("demo")).unwrap();
         fs::create_dir_all(root.join("sensitive")).unwrap();
         fs::write(root.join("pic.png"), b"x").unwrap();
         fs::write(root.join("secret.json"), b"{}").unwrap();
         fs::write(root.join("id_rsa"), b"key").unwrap();
         fs::write(root.join("note.txt"), b"x").unwrap();
         fs::write(root.join("data").join("logs").join("launch-debug.log"), b"log").unwrap();
+        fs::write(root.join("data").join("accounts.json"), b"{}").unwrap();
+        fs::write(root.join("data").join("secret.js"), b"x").unwrap();
+        fs::write(root.join("data").join("plugins").join("demo").join("host.js"), b"x").unwrap();
+        fs::write(root.join("data").join("plugins").join("demo").join("style.css"), b"x").unwrap();
+        fs::write(root.join("data").join("plugins").join("demo").join("data.bin"), b"x").unwrap();
         fs::write(root.join("sensitive").join("photo.jpg"), b"x").unwrap();
         root
     }
@@ -694,6 +722,31 @@ mod read_guard_tests {
         assert!(!is_read_allowed(&canon(root.join("note.txt")), &data, &sensitive));
         assert!(is_read_allowed(
             &canon(root.join("data").join("logs").join("launch-debug.log")),
+            &data,
+            &sensitive
+        ));
+    }
+
+    #[test]
+    fn plugin_assets_are_allowed_only_inside_plugins_dir() {
+        let root = setup();
+        let data = canon(root.join("data"));
+        let sensitive: Vec<PathBuf> = Vec::new();
+        let plugin = root.join("data").join("plugins").join("demo");
+
+        // 插件 UI 依赖这些文件，必须放行
+        assert!(is_read_allowed(&canon(plugin.join("host.js")), &data, &sensitive));
+        assert!(is_read_allowed(&canon(plugin.join("style.css")), &data, &sensitive));
+        // 插件目录内未知二进制仍拒绝
+        assert!(!is_read_allowed(&canon(plugin.join("data.bin")), &data, &sensitive));
+        // 数据目录里的账号文件 / 普通 JS 不允许借插件规则读取
+        assert!(!is_read_allowed(
+            &canon(root.join("data").join("accounts.json")),
+            &data,
+            &sensitive
+        ));
+        assert!(!is_read_allowed(
+            &canon(root.join("data").join("secret.js")),
             &data,
             &sensitive
         ));

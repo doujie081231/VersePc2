@@ -157,6 +157,43 @@ describe('插件 UI 注册', () => {
     await mod.reloadPluginUI();
     expect(document.querySelectorAll('.plugin-page-btn').length).toBe(0);
   });
+
+  it('插件模板的内联事件改写为监听，点击可调用全局函数', async () => {
+    const dir = 'C:\\plugins\\p3';
+    const pageScript = `
+      window.__inlineClicks = 0;
+      window.__inlinePing = function () { window.__inlineClicks += 1; };
+      window.VersePC = window.VersePC || {};
+      window.VersePC['Plugin_p3_act'] = {
+        template: '<div><button id="inline-btn" onclick="__inlinePing()">点我</button></div>'
+      };
+    `;
+    installTauriMock({
+      commands: {
+        plugin_list: () => ({
+          plugins: [{
+            id: 'p3',
+            installedDir: dir,
+            permissions: {},
+            ui: { pages: [{ id: 'act', title: '动作页', component: 'page.js' }] },
+          }],
+        }),
+        read_file_buffer: ({ path }) => (path === dir + '\\page.js' ? b64(pageScript) : ''),
+      },
+    });
+
+    await mod.reloadPluginUI();
+
+    const page = document.getElementById('page-plugin_p3_act');
+    const btn = page.querySelector('#inline-btn');
+    expect(btn).toBeTruthy();
+    // CSP 会拦截内联事件处理器，挂载后必须改写为 addEventListener
+    await vi.waitFor(() => expect(btn.hasAttribute('onclick')).toBe(false));
+    btn.click();
+    expect(window.__inlineClicks).toBe(1);
+    delete window.__inlineClicks;
+    delete window.__inlinePing;
+  });
 });
 
 describe('插件权限兼容层（非安全边界）', () => {

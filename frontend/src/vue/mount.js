@@ -24,6 +24,7 @@ const OTHER_PAGES = [
   ['PageServerHost', '#page-server-host', () => import('./pages/page-server-host.js')],
   ['PageToolbox', '#page-toolbox', () => import('./pages/page-toolbox.js')],
   ['PageAccounts', '#page-accounts', () => import('./pages/page-accounts.js')],
+  ['PageSkinLibrary', '#page-skin-library', () => import('./pages/page-skin-library.js')],
   ['PageSettingsLaunch', '#page-settings-launch', () => import('./pages/page-settings-launch.js')],
   ['PageSettingsPersonalize', '#page-settings-personalize', () => import('./pages/page-settings-personalize.js')],
   ['PageSettingsOther', '#page-settings-other', () => import('./pages/page-settings-other.js')],

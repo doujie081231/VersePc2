@@ -224,6 +224,15 @@ class CustomSelect {
 const customSelectInstances = {};
 
 function initAllCustomSelects() {
+    // 插件页面在启动后才挂载：启动时构造的实例可能拿不到 wrapper（构造直接返回），
+    // 或 wrapper 已被卸载。这类失效实例必须重建，否则选项永远写不进去。
+    Object.keys(customSelectInstances).forEach((id) => {
+        const inst = customSelectInstances[id];
+        if (!inst || !inst.wrapper || !inst.wrapper.isConnected || !inst.valueEl) {
+            delete customSelectInstances[id];
+        }
+    });
+
     if (!customSelectInstances['vset-isolation']) {
         customSelectInstances['vset-isolation'] = new CustomSelect('vset-isolation-wrapper');
         customSelectInstances['vset-isolation'].setOptions([

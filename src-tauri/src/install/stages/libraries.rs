@@ -276,22 +276,11 @@ async fn download_library(
     if name.is_empty() {
         return Ok(());
     }
-    let parts: Vec<&str> = name.split(':').collect();
-    if parts.len() < 3 {
+    // Maven 名称格式：group:artifact:version[:classifier][@extension]
+    // 必须保留 @ 后的扩展名（Forge 安装器库里有 @zip），否则会拼成 ...@zip.jar 导致 404。
+    let Some((group, rel_path)) = maven_rel_path(name) else {
         return Ok(());
-    }
-    let group = parts[0];
-    let artifact_id = parts[1];
-    let version = parts[2];
-    let classifier = if parts.len() >= 4 {
-        format!("-{}", parts[3])
-    } else {
-        String::new()
     };
-
-    let group_path = group.replace('.', "/");
-    let jar_name = format!("{}-{}{}.jar", artifact_id, version, classifier);
-    let rel_path = format!("{}/{}/{}/{}", group_path, artifact_id, version, jar_name);
     let dest = libraries_dir.join(&rel_path);
 
     // 选择 base URL
@@ -303,7 +292,9 @@ async fn download_library(
     } else if group.contains("forge")
         || group.contains("minecraftforge")
         || group.starts_with("net.minecraft")
+        || group.starts_with("de.oceanlabs.mcp")
     {
+        // de.oceanlabs.mcp（mcp_config 等）同样由 Forge Maven 托管
         "https://maven.minecraftforge.net/"
     } else {
         "https://libraries.minecraft.net/"
@@ -311,4 +302,63 @@ async fn download_library(
     let url = format!("{}{}", base_url, rel_path);
 
     download::download_with_mirror(&url, &dest, None, None, download_source, 120, None).await
+}
+
+/// 解析 Maven 名称并生成 group 与相对路径。
+/// 支持 `group:artifact:version[:classifier][@extension]`，扩展名缺省为 jar。
+fn maven_rel_path(name: &str) -> Option<(String, String)> {
+    let (coords, extension) = match name.split_once('@') {
+        Some((c, ext)) if !ext.is_empty() => (c, ext),
+        _ => (name, "jar"),
+    };
+    let parts: Vec<&str> = coords.split(':').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let group = parts[0];
+    let artifact_id = parts[1];
+    let version = parts[2];
+    let classifier = if parts.len() >= 4 {
+        format!("-{}", parts[3])
+    } else {
+        String::new()
+    };
+
+    let group_path = group.replace('.', "/");
+    let file_name = format!("{}-{}{}.{}", artifact_id, version, classifier, extension);
+    Some((
+        group.to_string(),
+        format!("{}/{}/{}/{}", group_path, artifact_id, version, file_name),
+    ))
+}
+
+#[cfg(test)]
+mod maven_path_tests {
+    use super::maven_rel_path;
+
+    #[test]
+    fn plain_jar_path() {
+        let (group, path) = maven_rel_path("net.minecraftforge:forge:1.20.1-47.4.18").unwrap();
+        assert_eq!(group, "net.minecraftforge");
+        assert_eq!(path, "net/minecraftforge/forge/1.20.1-47.4.18/forge-1.20.1-47.4.18.jar");
+    }
+
+    #[test]
+    fn classifier_jar_path() {
+        let (_, path) = maven_rel_path("net.minecraftforge:ForgeAutoRenamingTool:0.1.22:all").unwrap();
+        assert_eq!(
+            path,
+            "net/minecraftforge/ForgeAutoRenamingTool/0.1.22/ForgeAutoRenamingTool-0.1.22-all.jar"
+        );
+    }
+
+    #[test]
+    fn zip_extension_is_preserved() {
+        let (_, path) =
+            maven_rel_path("de.oceanlabs.mcp:mcp_config:1.20.1-20230612.114412@zip").unwrap();
+        assert_eq!(
+            path,
+            "de/oceanlabs/mcp/mcp_config/1.20.1-20230612.114412/mcp_config-1.20.1-20230612.114412.zip"
+        );
+    }
 }

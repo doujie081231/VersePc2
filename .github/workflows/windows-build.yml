@@ -49,14 +49,17 @@ jobs:
             Write-Host "sponsor-orders-found"
           }
 
-      # 与 macOS/Linux CI 相同：直接 cargo build bin（bundle targets 为空，tauri build 也不会打包安装器）
+      # 直接 cargo build bin（bundle targets 为空，无需 tauri build 打包安装器）。
+      # 关键：必须显式启用 custom-protocol。裸 cargo build 时 generate_context! 走 dev 分支，
+      # 不嵌入 frontend-dist 的 64MB 资源，产物只有约 17MB 且窗口白屏；官方便携版用
+      # `npx tauri build`（CLI 自动带该 feature）才有完整的约 68MB。
       - name: Build release binary
         shell: pwsh
-        run: cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml
+        run: cargo build --release --bin verse-tauri --manifest-path src-tauri/Cargo.toml --features custom-protocol
 
       - name: Run transfer tests
         shell: pwsh
-        run: cargo test --release --manifest-path src-tauri/Cargo.toml transfer -- --nocapture
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml --features custom-protocol transfer -- --nocapture
 
       # 打包：exe + VC 运行库 DLL + 构建产出的全部 DLL，压缩为 zip，解压即用
       - name: Package portable zip
@@ -64,6 +67,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item src-tauri/target/release/verse-tauri.exe dist/VersePC2.exe
+          # 防呆：前端资源嵌入后 exe 约 68MB；若只有约 17MB 说明 custom-protocol 未生效，直接失败而非产出白屏包
+          $exeSize = (Get-Item dist/VersePC2.exe).Length
+          if ($exeSize -lt 40MB) { throw "Frontend assets not embedded: exe is only $exeSize bytes (expected > 40MB). Check custom-protocol feature." }
+          Write-Host "exe size: $exeSize bytes (frontend assets embedded)"
           $dlls = Get-ChildItem src-tauri/target/release/*.dll -ErrorAction SilentlyContinue
           if ($dlls) { Copy-Item $dlls.FullName dist/; Write-Host "构建产出 DLL：$($dlls.Name -join ', ')" }
           # VC 运行库随包（干净系统免装运行库）

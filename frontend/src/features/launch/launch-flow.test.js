@@ -140,6 +140,19 @@ describe('Java 检查与自动补全', () => {
     expect(S.launching).toBe(false);
   });
 
+  it('旧版本 Java 上限随自动安装请求传给后端', async () => {
+    mockApiRoute('/api/launch/check', {
+      ...OK_CHECK(),
+      java: { required: 8, maxVersion: 23, ok: false, message: '缺少 Java 8~23' },
+    });
+    mockApiRoute('/api/java/auto-install', { success: true, javaPath: '/jdk8', version: '8.0.1' });
+
+    await runLaunch();
+
+    const call = getApiCalls().find((c) => c.path === '/api/java/auto-install');
+    expect(call.args.body).toEqual({ requiredVersion: 8, maxVersion: 23 });
+  });
+
   it('Java 自动安装走会话轮询直到完成', async () => {
     let checkCount = 0;
     let statusCount = 0;

@@ -597,7 +597,10 @@ pub(crate) fn get_java_version_range_from_json(version_id: &str, version_json: &
         } else if version_ge(forge, "34.0.0") && version_ge("36.2.25", forge) {
             max = max.min(8); // 1.16.3 ~ 1.16.5，Forge 34.0.0 ~ 36.2.25
         } else if version_ge(forge, "36.2.26") && version_lt(forge, "37.0.0") {
-            max = max.min(23); // 1.16.5，Forge 36.2.26+
+            // 1.16.5 后续 Forge（如 36.2.42）仍是同一 FML/launchwrapper 栈，
+            // 与 PCL 的 1.16 Forge 规则一致，上限保持 Java 8；Java 21/25 会因
+            // LaunchClassLoader/Mixin 不兼容直接崩溃。
+            max = max.min(8);
         } else if version_ge(forge, "37.0.0") && version_ge("37.0.79", forge) {
             max = max.min(16); // 1.17.1
         } else if version_ge(forge, "45.0.21") && version_ge("45.0.65", forge) {

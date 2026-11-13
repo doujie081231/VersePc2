@@ -1,6 +1,6 @@
 [package]
 name = "verse-tauri"
-version = "1.8.6"
+version = "1.8.10"
 description = "VersePC - Minecraft ???"
 license = "GPL-3.0"
 edition = "2024"
@@ -14,6 +14,12 @@ name = "verse_tauri_lib"
 # ??? Linux/macOS ??? cdylib ?????????? #[link]?? Windows ???
 # ?? "unable to find library -lkernel32" ???????????????
 crate-type = ["rlib"]
+
+[features]
+# Tauri production builds must enable this feature. Without it,
+# generate_context! takes the dev branch and embeds NO frontend assets
+# (the binary only tries devUrl, so the window renders blank).
+custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

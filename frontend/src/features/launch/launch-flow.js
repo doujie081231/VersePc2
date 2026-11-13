@@ -87,7 +87,9 @@ async function handleLaunch() {
       // ===== 自动补 Java（对齐 Electron 版 autoInstallJava）=====
       setLaunchStep('java-check', 'running', `未找到 Java ${rangeDesc}，正在自动下载...`);
       try {
-        const ai = await API.autoInstallJava(requiredVer);
+        // 必须把版本上限一起传给后端：仅按“不低于 required”判断会把 Java 25
+        // 误判为可用（Forge 1.16.5 等旧版本只允许 Java 8），从而跳过 Java 8 下载。
+        const ai = await API.autoInstallJava(requiredVer, maxVer);
         if (ai && ai.success && ai.javaPath) {
           setLaunchStep('java-check', 'success', `Java ${ai.version || requiredVer} 已就绪 ✓`);
         } else if (ai && ai.success && ai.sessionId) {

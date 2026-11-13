@@ -201,9 +201,12 @@ async fn download_with_mirror_inner(
     // 均失败"，而官方源其实可用。失败源独立标记，官方源始终可兜底尝试。
     let is_modrinth_official = base_url.contains("cdn.modrinth.com")
         || base_url.contains("cdn-alt.modrinth.com");
+    // 原始地址必须始终保留：Forge 安装器库（ForgeAutoRenamingTool、installertools、
+    // fmlearlydisplay 等）只存在于官方 maven.minecraftforge.net，BMCLAPI/阿里云等
+    // 镜像并不收录。曾经因为一次超时把官方源拉黑，只剩镜像后整批支持库全部 404。
     let urls: Vec<String> = urls
         .into_iter()
-        .filter(|u| is_modrinth_official || !mirror::is_bad_host(u))
+        .filter(|u| u == &base_url || is_modrinth_official || !mirror::is_bad_host(u))
         .collect();
     if urls.is_empty() {
         return Err(format!("所有下载源均已被标记为不可用: {}", base_url));
