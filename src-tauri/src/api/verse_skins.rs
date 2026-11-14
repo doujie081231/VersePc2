@@ -1,19 +1,49 @@
-// api/verse_skins.rs — Verse 皮肤站（Blessing Skin Server）中继
+// api/verse_skins.rs — Verse 皮肤站「受控接口」中继
 //
-// 皮肤站公开接口：
-//   GET /skinlib/list?page=N      公开皮肤库分页列表（tid / name / type / uploader / likes / nickname）
-//   GET /skinlib/info/{tid}      单个皮肤详情（含纹理 hash、type）
-//   GET /textures/{hash}         皮肤纹理 PNG
-//   GET /preview/{tid}           皮肤 3D 效果模型预览图（前端 <img> 直接加载，无需中继）
+// 上游只调用 /api/verse-skins（必须带 X-Api-Key），不再直接打站点自带的
+// /skinlib/list、/skinlib/info/{tid}：那两个是 Blessing Skin 网页皮肤库的
+// 公开接口，不带任何凭据就能拉走全站皮肤数据，会绕过开发者 Key 的调用统计。
 //
-// 皮肤站不返回 CORS 头，WebView 里无法直接 fetch 列表与纹理，因此由 Rust 侧代理。
-// 本模块只负责「取数据」，真正的皮肤写入仍复用 skins 模块已有的
-// /api/upload-skin、/api/ms-skins/import、/api/ms-skins/apply 接口。
+//   GET {SKIN_SITE}/api/verse-skins?page=N&limit=24&sort=new
+//     X-Api-Key: <应用级 Key>
+//     → { page, limit, total, items: [{ tid, name, model, url, likes, uploaded_at }] }
+//
+// 对前端保持原来的本地契约不变：
+//   GET  /api/verse-skins/list?page=N → { success, skins, page, lastPage, total }
+//   POST /api/verse-skins/texture     → { success, fileBase64, model, name, hash }
+//   skins[] 里带上服务端下发的 url，换肤时原样回传，无需再查一次详情。
+//
+// 卡片预览图 /preview/{tid} 与纹理 PNG 是站点公开静态资源（<img> 无法带
+// 自定义请求头），皮肤站网页端同样依赖它们，因此不纳入 Key 保护；
+// 受保护的「皮肤目录数据」由本模块的列表请求统一取回。
 use super::ApiResult;
 use base64::Engine;
 use serde_json::{json, Value};
 
 const SKIN_SITE: &str = "https://skin.verselauncher.cn";
+const SKIN_HOST: &str = "skin.verselauncher.cn";
+/// 前端每页卡片数；同时作为受控接口的 limit（服务端上限 48）
+const PAGE_LIMIT: u64 = 24;
+
+/// 应用级 API Key（uid=0，只能读列表，不能改任何人的角色）。
+/// 与 Android 端 SkinLibraryAppKey 是同一把；每字节异或 0x5A 存放，
+/// 避免明文出现在二进制字符串表里。客户端内置凭据无法真正保密
+/// （CurseForge 的 key 同样处境），服务端可随时轮换。
+const APP_KEY_MASK: u8 = 0x5A;
+const APP_KEY_XOR: [u8; 51] = [
+    44, 49, 5, 111, 63, 111, 110, 107, 111, 59,
+    63, 60, 110, 106, 111, 59, 99, 56, 60, 105,
+    56, 99, 108, 108, 99, 63, 98, 111, 62, 109,
+    110, 98, 111, 63, 111, 98, 60, 110, 56, 59,
+    98, 60, 59, 105, 60, 111, 57, 60, 56, 99, 99,
+];
+
+fn app_key() -> String {
+    APP_KEY_XOR
+        .iter()
+        .map(|b| (*b ^ APP_KEY_MASK) as char)
+        .collect()
+}
 
 /// api_proxy 路由入口
 pub async fn handle(
@@ -49,29 +79,84 @@ fn page_of(params: &Option<Value>) -> u64 {
     value.clamp(1, 100)
 }
 
-/// GET /api/verse-skins/list?page=N → 公开皮肤库分页
+/// 校验纹理直链并取出 hash，拒绝任何非本站地址。
+/// url 来自前端回传，属于不可信输入，这里必须收窄，避免本地服务被当成任意 URL 代理。
+fn texture_hash(url: &str) -> Option<String> {
+    let parsed = reqwest::Url::parse(url).ok()?;
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some(SKIN_HOST)
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+    let hash = parsed.path().strip_prefix("/textures/")?;
+    if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(hash.to_string())
+}
+
+/// GET /api/verse-skins/list?page=N → 受控接口列表，适配成前端原有字段
 async fn list_skins(params: &Option<Value>) -> ApiResult {
     let page = page_of(params);
-    let url = format!("{SKIN_SITE}/skinlib/list?page={page}");
-    let response = match client().get(&url).send().await {
+    let url = format!("{SKIN_SITE}/api/verse-skins?page={page}&limit={PAGE_LIMIT}&sort=new");
+    let response = match client()
+        .get(&url)
+        .header("X-Api-Key", app_key())
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => return ApiResult::err(502, &format!("皮肤站连接失败：{e}")),
     };
-    if !response.status().is_success() {
-        return ApiResult::err(502, &format!("皮肤站返回 HTTP {}", response.status()));
+
+    let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return ApiResult::err(502, "皮肤站 API Key 无效或已撤销，请更新启动器");
+    }
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return ApiResult::err(502, "皮肤站请求过于频繁，请稍后再试");
+    }
+    if !status.is_success() {
+        return ApiResult::err(502, &format!("皮肤站返回 HTTP {status}"));
     }
     let data: Value = match response.json().await {
         Ok(v) => v,
         Err(e) => return ApiResult::err(502, &format!("皮肤站响应解析失败：{e}")),
     };
 
-    let skins = data
-        .get("data")
+    let total = data.get("total").and_then(Value::as_u64).unwrap_or(0);
+    let limit = data
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(PAGE_LIMIT)
+        .max(1);
+    let last_page = total.div_ceil(limit).max(1);
+    let items = data
+        .get("items")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let last_page = data.get("last_page").and_then(Value::as_u64).unwrap_or(1);
-    let total = data.get("total").and_then(Value::as_u64).unwrap_or(0);
+
+    let skins: Vec<Value> = items
+        .iter()
+        .map(|item| {
+            let slim = item.get("model").and_then(Value::as_str) == Some("slim");
+            json!({
+                "tid": item.get("tid").and_then(Value::as_u64).unwrap_or(0),
+                "name": item.get("name").and_then(Value::as_str).unwrap_or("未命名"),
+                // 前端旧字段 type 用 steve/alex，受控接口用 classic/slim
+                "type": if slim { "alex" } else { "steve" },
+                "model": if slim { "slim" } else { "default" },
+                "likes": item.get("likes").and_then(Value::as_u64).unwrap_or(0),
+                // 受控接口刻意不返回上传者信息，前端会显示「匿名」
+                "nickname": "",
+                "url": item.get("url").and_then(Value::as_str).unwrap_or(""),
+                "uploaded_at": item.get("uploaded_at").and_then(Value::as_str).unwrap_or("")
+            })
+        })
+        .collect();
 
     ApiResult::ok(json!({
         "success": true,
@@ -82,47 +167,32 @@ async fn list_skins(params: &Option<Value>) -> ApiResult {
     }))
 }
 
-/// POST /api/verse-skins/texture {tid} → 下载纹理 PNG 并以 base64 返回
-/// 返回的 model 为皮肤站 type 对应值：alex → slim，steve → default。
+/// POST /api/verse-skins/texture {tid, url, name, model} → 下载纹理 PNG 并以 base64 返回
+/// 返回的 model 为 slim / default，与账户域上传接口一致。
 async fn fetch_texture(body: &Option<Value>) -> ApiResult {
-    let Some(tid) = body
-        .as_ref()
-        .and_then(|b| b.get("tid"))
-        .and_then(Value::as_u64)
-    else {
-        return ApiResult::err(400, "缺少有效的皮肤 tid");
+    let Some(body) = body.as_ref() else {
+        return ApiResult::err(400, "缺少皮肤参数");
     };
-
-    let info_url = format!("{SKIN_SITE}/skinlib/info/{tid}");
-    let info_resp = match client().get(&info_url).send().await {
-        Ok(r) => r,
-        Err(e) => return ApiResult::err(502, &format!("皮肤详情获取失败：{e}")),
+    let tex_url = body.get("url").and_then(Value::as_str).unwrap_or("");
+    let Some(hash) = texture_hash(tex_url) else {
+        return ApiResult::err(400, "皮肤纹理地址无效，请从皮肤库列表重新选择");
     };
-    if !info_resp.status().is_success() {
-        return ApiResult::err(502, &format!("皮肤详情返回 HTTP {}", info_resp.status()));
-    }
-    let info: Value = match info_resp.json().await {
-        Ok(v) => v,
-        Err(e) => return ApiResult::err(502, &format!("皮肤详情解析失败：{e}")),
-    };
-
-    let hash = info.get("hash").and_then(Value::as_str).unwrap_or("");
-    // hash 会拼进 URL，严格校验，避免把不可信数据带进请求路径
-    if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return ApiResult::err(502, "皮肤站返回的纹理 hash 无效");
-    }
-    let name = info
+    let name = body
         .get("name")
         .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
         .unwrap_or("Verse 皮肤站皮肤");
-    let model = if info.get("type").and_then(Value::as_str) == Some("alex") {
-        "slim"
-    } else {
-        "default"
+    let model = match body.get("model").and_then(Value::as_str) {
+        Some("slim") => "slim",
+        _ => "default",
     };
 
-    let tex_url = format!("{SKIN_SITE}/textures/{hash}");
-    let tex_resp = match client().get(&tex_url).send().await {
+    let tex_resp = match client()
+        .get(tex_url)
+        .header("X-Api-Key", app_key())
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => return ApiResult::err(502, &format!("皮肤纹理下载失败：{e}")),
     };

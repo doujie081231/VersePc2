@@ -1,7 +1,8 @@
 /* page-skin-library.js — Verse 皮肤库页
  *
- * 数据来源：Verse 皮肤站（Blessing Skin Server），经 Rust 中继 /api/verse-skins/* 获取，
- * 卡片预览直接使用皮肤站的 3D 效果模型图 /preview/{tid}。
+ * 数据来源：Verse 皮肤站的受控接口 /api/verse-skins（携带应用级 API Key），
+ * 由 Rust 中继 /api/verse-skins/* 取回并适配成本页字段；不再直连站点公开的 /skinlib/*。
+ * 卡片预览是皮肤站的 3D 效果模型图 /preview/{tid}，属于公开静态资源。
  * 更换皮肤时复用账户域已有的 /api/upload-skin、/api/ms-skins/import、/api/ms-skins/apply，
  * 保证离线账户与微软账户的写入路径与「导入自定义皮肤」完全一致。
  */
@@ -101,7 +102,14 @@ const PageSkinLibrary = {
       this.applyingTid = skin.tid;
       showToast('正在下载并应用皮肤…', 'info');
       try {
-        const texture = await apiPost('/api/verse-skins/texture', { tid: skin.tid });
+        // url 由受控列表接口下发，原样回传给 Rust 中继下载纹理；
+        // 中继会严格校验必须是皮肤站 /textures/<64位hash>，防止被当任意 URL 代理。
+        const texture = await apiPost('/api/verse-skins/texture', {
+          tid: skin.tid,
+          url: skin.url,
+          name: skin.name,
+          model: skin.type === 'alex' ? 'slim' : 'default'
+        });
         if (!texture || !texture.success || !texture.fileBase64) {
           throw new Error((texture && texture.error) || '获取皮肤纹理失败');
         }
