@@ -61,6 +61,7 @@ pub fn unregister_modpack_abort(token: &str) {
 
 pub mod curseforge;
 pub mod curseforge_shared;
+pub mod mmc;
 pub mod mrpack_native;
 pub mod theseus;
 pub mod theseus_adapter;
@@ -115,6 +116,10 @@ pub async fn import_modpack(
                 cancel_token,
             )
             .await
+        }
+        ModpackFormat::Mmc => {
+            // MultiMC / Prism 格式（mmc-pack.json + patches/ + .minecraft/）
+            mmc::import_mmc(app, file_path, custom_version_name).await
         }
         ModpackFormat::Curseforge => {
             // CurseForge 走独立的 curseforge 模块（theseus 不识别 manifest.json）
@@ -181,6 +186,7 @@ pub async fn import_modpack(
 #[derive(Debug)]
 pub enum ModpackFormat {
     Mrpack,     // Modrinth .mrpack
+    Mmc,        // MultiMC / Prism（含 mmc-pack.json）
     Curseforge, // CurseForge（含 manifest.json 或 minecraftinstance.xml）
     Hmcl,       // HMCL（含 modpack.json）
     RawZip,     // 普通 ZIP
@@ -190,6 +196,7 @@ impl std::fmt::Display for ModpackFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ModpackFormat::Mrpack => write!(f, "Modrinth .mrpack"),
+            ModpackFormat::Mmc => write!(f, "MultiMC"),
             ModpackFormat::Curseforge => write!(f, "CurseForge"),
             ModpackFormat::Hmcl => write!(f, "HMCL"),
             ModpackFormat::RawZip => write!(f, "普通 ZIP"),
@@ -204,6 +211,7 @@ fn detect_format(file_path: &str) -> Result<ModpackFormat, String> {
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("无法读取 ZIP: {}", e))?;
 
+    let mut has_mmc_pack = false;
     let mut has_modrinth_index = false;
     let mut has_curseforge_manifest = false;
     let mut has_curseforge_mci = false;
@@ -214,7 +222,14 @@ fn detect_format(file_path: &str) -> Result<ModpackFormat, String> {
             Ok(e) => e,
             Err(_) => continue,
         };
-        let name = entry.name().to_lowercase();
+        let name = entry.name().replace('\\', "/").to_lowercase();
+        // MMC 整合包：mmc-pack.json 可能在根目录或单层子目录（优先于其它格式判断）
+        if name.ends_with("mmc-pack.json") {
+            let base = &name[..name.len() - "mmc-pack.json".len()];
+            if base.matches('/').count() <= 1 {
+                has_mmc_pack = true;
+            }
+        }
         // 只看根目录下的关键文件
         let is_root = name.matches('/').count() <= 1;
         if !is_root {
@@ -231,7 +246,9 @@ fn detect_format(file_path: &str) -> Result<ModpackFormat, String> {
         }
     }
 
-    if has_modrinth_index {
+    if has_mmc_pack {
+        Ok(ModpackFormat::Mmc)
+    } else if has_modrinth_index {
         Ok(ModpackFormat::Mrpack)
     } else if has_curseforge_manifest || has_curseforge_mci {
         Ok(ModpackFormat::Curseforge)
@@ -317,4 +334,51 @@ pub fn data_dir() -> std::path::PathBuf {
 /// 获取 versions 目录路径
 pub fn versions_dir() -> std::path::PathBuf {
     storage::resolve_data_dir().join("versions")
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn make_zip(entries: &[(&str, &str)]) -> tempfile::NamedTempFile {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        {
+            let mut writer = zip::ZipWriter::new(file.reopen().unwrap());
+            let options = zip::write::SimpleFileOptions::default();
+            for (name, content) in entries {
+                writer.start_file(*name, options).unwrap();
+                writer.write_all(content.as_bytes()).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        file
+    }
+
+    fn detect(entries: &[(&str, &str)]) -> ModpackFormat {
+        let file = make_zip(entries);
+        detect_format(file.path().to_str().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn detect_mmc_pack_at_root_and_subfolder() {
+        assert!(matches!(detect(&[("mmc-pack.json", "{}")]), ModpackFormat::Mmc));
+        assert!(matches!(
+            detect(&[("GTNH/mmc-pack.json", "{}"), ("GTNH/instance.cfg", "name=x")]),
+            ModpackFormat::Mmc
+        ));
+    }
+
+    #[test]
+    fn detect_keeps_existing_formats() {
+        assert!(matches!(
+            detect(&[("modrinth.index.json", "{}")]),
+            ModpackFormat::Mrpack
+        ));
+        assert!(matches!(
+            detect(&[("manifest.json", "{}")]),
+            ModpackFormat::Curseforge
+        ));
+        assert!(matches!(detect(&[("mods/a.jar", "")]), ModpackFormat::RawZip));
+    }
 }
