@@ -520,6 +520,11 @@ export const bridge = (function () {
     });
   };
 
+  // 通用事件订阅：业务域不方便单独封装的场景统一走这里
+  bridgeObj.onEvent = function (eventName, callback) {
+    return onTauriEvent(eventName, callback);
+  };
+
   bridgeObj.apiProxy = function (method, path, params, body) {
     return invoke('api_proxy', {
       method: method,

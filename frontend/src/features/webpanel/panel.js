@@ -5,28 +5,22 @@
 //   · 会话状态轮询与登录态变化后自动刷新
 //   · 爱发电登录（交给 Rust 用独立窗口完成，回来后会话写进软件的 cookie 罐）
 
+import { bridge } from '../../core/tauri-bridge.js';
+
 const KIND_LABEL = {
   community: '社区',
   skin: '皮肤站',
 };
 
-/** 统一 invoke（Tauri v2 的 __TAURI_INTERNALS__ 没有 .core，invoke 在自身） */
+/** 统一 invoke（经 core 桥接层，禁止直接访问宿主全局） */
 function call(cmd, args) {
-  const t = window.__TAURI__;
-  const core = (t && t.core) || window.__TAURI_INTERNALS__;
-  if (!core || typeof core.invoke !== 'function') {
-    return Promise.reject(new Error('Tauri invoke 不可用: ' + cmd));
-  }
-  return core.invoke(cmd, args || {});
+  return bridge.invoke(cmd, args || {});
 }
 
 /** 监听 Tauri 事件（拿不到就以轮询兜底） */
 function listen(event, handler) {
   try {
-    const t = window.__TAURI__;
-    if (t && t.event && typeof t.event.listen === 'function') {
-      t.event.listen(event, (e) => handler(e && e.payload));
-    }
+    return bridge.onEvent(event, handler);
   } catch (e) {}
 }
 
