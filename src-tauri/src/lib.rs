@@ -54,6 +54,8 @@ mod updater;
 mod utils;
 mod versions;
 mod wallpaper_engine;
+#[allow(dead_code)]
+mod web_panel;
 mod scene_renderer;
 
 use serde_json::{json, Value};
@@ -789,6 +791,9 @@ pub fn run() {
             let app_handle = app.handle().clone();
             modpack::theseus::event::set_app_handle(app_handle);
 
+            // 内置网页面板（社区 / 皮肤站）：启动本地转发代理
+            crate::web_panel::init(app.handle().clone());
+
             println!("[boot] setup done {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             Ok(())
         })
@@ -920,6 +925,12 @@ pub fn run() {
             bridge::extension::bridge_uninstall_extension,
             bridge::extension::bridge_extension_status,
             bridge::extension::bridge_open_extension_dir,
+            // 内置网页面板（社区 / 皮肤站）
+            web_panel::web_panel_endpoints,
+            web_panel::web_panel_set_cookies,
+            web_panel::web_panel_open_external,
+            web_panel::web_panel_session_keys,
+            web_panel::web_panel_login_in_app,
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" {
