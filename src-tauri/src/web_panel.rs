@@ -363,22 +363,22 @@ fn parse_cookie_pairs(raw: &str) -> Vec<(String, String)> {
         return out;
     }
     // JSON 形态
-    if text.starts_with('{') {
-        if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(text) {
-            for (k, v) in map {
-                let k = k.trim().to_string();
-                if !k.is_empty() {
-                    out.push((k, v.trim().to_string()));
-                }
+    if text.starts_with('{')
+        && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(text)
+    {
+        for (k, v) in map {
+            let k = k.trim().to_string();
+            if !k.is_empty() {
+                out.push((k, v.trim().to_string()));
             }
-            return out;
         }
+        return out;
     }
     let cleaned = text
         .strip_prefix("Cookie:")
         .map(|s| s.trim())
         .unwrap_or(text);
-    for part in cleaned.split(|c| c == ';' || c == '\n' || c == '\r') {
+    for part in cleaned.split([';', '\n', '\r']) {
         let item = part.trim();
         if item.is_empty() {
             continue;
@@ -534,9 +534,7 @@ fn absolutize(base: &str, loc: &str) -> String {
         },
         None => base.to_string(),
     };
-    if l.starts_with('/') {
-        format!("{scheme_host}{l}")
-    } else if l.starts_with('?') {
+    if l.starts_with('/') || l.starts_with('?') {
         format!("{scheme_host}{l}")
     } else {
         format!("{scheme_host}/{l}")
@@ -544,7 +542,7 @@ fn absolutize(base: &str, loc: &str) -> String {
 }
 
 fn host_of(url: &str) -> String {
-    let rest = url.splitn(2, "://").nth(1).unwrap_or("");
+    let rest = url.split_once("://").map(|x| x.1).unwrap_or("");
     let host = rest.split('/').next().unwrap_or("");
     host.to_string()
 }
@@ -567,10 +565,10 @@ fn encode_component(raw: &str) -> String {
 
 fn query_param(query: &str, key: &str) -> Option<String> {
     for part in query.split('&') {
-        if let Some((k, v)) = part.split_once('=') {
-            if k == key {
-                return Some(v.to_string());
-            }
+        if let Some((k, v)) = part.split_once('=')
+            && k == key
+        {
+            return Some(v.to_string());
         }
     }
     None
@@ -712,10 +710,10 @@ async fn afdian_bridge(ctx: Arc<PanelCtx>, path: &str, query: Option<&str>) -> R
             }
             if let Ok(resp) = req.send().await {
                 absorb_set_cookie(&ctx, resp.headers());
-                if let Some(loc) = resp.headers().get("location").and_then(|v| v.to_str().ok()) {
-                    if loc.contains("login_error") {
-                        login_error = Some(loc.to_string());
-                    }
+                if let Some(loc) = resp.headers().get("location").and_then(|v| v.to_str().ok())
+                    && loc.contains("login_error")
+                {
+                    login_error = Some(loc.to_string());
                 }
             }
         }
@@ -935,23 +933,23 @@ async fn panel_handler(State(ctx): State<Arc<PanelCtx>>, req: Request) -> Respon
             .filter_map(|v| v.to_str().ok())
             .map(|s| s.to_string())
             .collect();
-        if !cookies.is_empty() {
-            if let Ok(mut jar) = ctx.jar.lock() {
-                for sc in cookies {
-                    let first = sc.split(';').next().unwrap_or("");
-                    if let Some((k, v)) = first.split_once('=') {
-                        let key = k.trim().to_string();
-                        let val = v.trim().to_string();
-                        if val.is_empty() || sc.to_ascii_lowercase().contains("deleted") {
-                            jar.remove(&key);
-                        } else {
-                            jar.insert(key, val);
-                        }
+        if !cookies.is_empty()
+            && let Ok(mut jar) = ctx.jar.lock()
+        {
+            for sc in cookies {
+                let first = sc.split(';').next().unwrap_or("");
+                if let Some((k, v)) = first.split_once('=') {
+                    let key = k.trim().to_string();
+                    let val = v.trim().to_string();
+                    if val.is_empty() || sc.to_ascii_lowercase().contains("deleted") {
+                        jar.remove(&key);
+                    } else {
+                        jar.insert(key, val);
                     }
                 }
-                // 落盘保存，下次启动继续沿用该会话
-                save_jar(&ctx.jar_file, &jar);
             }
+            // 落盘保存，下次启动继续沿用该会话
+            save_jar(&ctx.jar_file, &jar);
         }
     }
 
@@ -962,14 +960,14 @@ async fn panel_handler(State(ctx): State<Arc<PanelCtx>>, req: Request) -> Respon
             continue;
         }
         let mut v = value.clone();
-        if lower == "location" {
-            if let Ok(text) = value.to_str() {
-                let upstream_base = format!("https://{}", ctx.upstream_host);
-                if let Some(rest) = text.strip_prefix(&upstream_base) {
-                    let replaced = format!("{}{}", ctx.local_base, rest);
-                    if let Ok(nv) = HeaderValue::from_str(&replaced) {
-                        v = nv;
-                    }
+        if lower == "location"
+            && let Ok(text) = value.to_str()
+        {
+            let upstream_base = format!("https://{}", ctx.upstream_host);
+            if let Some(rest) = text.strip_prefix(&upstream_base) {
+                let replaced = format!("{}{}", ctx.local_base, rest);
+                if let Ok(nv) = HeaderValue::from_str(&replaced) {
+                    v = nv;
                 }
             }
         }
@@ -1212,7 +1210,7 @@ fn import_cookies_from(win: &tauri::WebviewWindow, kind: &str) -> Result<usize, 
 #[tauri::command]
 pub async fn web_panel_login_in_app(app: tauri::AppHandle, kind: String) -> Result<(), String> {
     let ctx = ctx_by_kind(&kind).ok_or_else(|| "面板未就绪".to_string())?;
-    let host = ctx.upstream_host.clone();
+    let host = ctx.upstream_host;
     let login_url = if kind == "community" {
         format!("https://{host}/api/afdian/login")
     } else {
@@ -1233,7 +1231,7 @@ pub async fn web_panel_login_in_app(app: tauri::AppHandle, kind: String) -> Resu
 
     let handle = app.clone();
     let kind2 = kind.clone();
-    let host2 = host.clone();
+    let host2 = host;
     std::thread::spawn(move || {
         const APP_URL: &str = "http://tauri.localhost/";
         let app_url = match APP_URL.parse::<tauri::Url>() {
@@ -1256,7 +1254,7 @@ pub async fn web_panel_login_in_app(app: tauri::AppHandle, kind: String) -> Resu
                 // 用户自己退出登录流程
                 break;
             }
-            let landed = cur.contains(&host2)
+            let landed = cur.contains(host2)
                 && !cur.contains("/api/afdian/")
                 && !cur.contains("/auth/login")
                 && !cur.contains("login_error")
