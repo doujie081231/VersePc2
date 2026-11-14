@@ -88,8 +88,11 @@ async function updateVersionSelects() {
 
   if (!currentVal) {
     try {
-      if (appState._cachedLastLaunchVersion === null) {
-        appState._cachedLastLaunchVersion = await bridge.store.get('versepc_last_launch_version') || '';
+      // 初值是 ''（不是 null），所以不能只判 null：
+      // 空字符串同样代表「还没读过 store」，必须真的去读一次，
+      // 否则启动时会用空值覆盖掉上次保存的启动版本。
+      if (!appState._cachedLastLaunchVersion) {
+        appState._cachedLastLaunchVersion = (await bridge.store.get('versepc_last_launch_version')) || '';
       }
       currentVal = appState._cachedLastLaunchVersion;
     } catch (_) {}
@@ -195,7 +198,13 @@ function selectLaunchVersion(versionId) {
   if (!versionId) return;
   appState.currentLaunchVersionId = versionId;
   appState._cachedLastLaunchVersion = versionId;
-  try { bridge.store.set('versepc_last_launch_version', versionId); } catch (_) {}
+  // 这里不 return：后面的「同步底部选择器 / 卡片高亮」还要执行。
+  // 只把写入的 Promise 交给调用方 await（以前发出去就忘，刚切完就退出会丢）。
+  let writePromise;
+  try {
+    writePromise = bridge.store.set('versepc_last_launch_version', versionId);
+    if (writePromise && typeof writePromise.catch === 'function') writePromise.catch(() => {});
+  } catch (_) { writePromise = undefined; }
   // 同步底部启动栏（隐藏）的选择器
   if (appState.launchVersionCustomSelect) {
     appState.launchVersionCustomSelect.setValue(versionId);
@@ -206,6 +215,7 @@ function selectLaunchVersion(versionId) {
   });
   // 更新主页内嵌版本卡片
   renderHomeCurrentVersionCard();
+  return writePromise;
 }
 
 async function quickDeleteErrorVersion(versionId) {

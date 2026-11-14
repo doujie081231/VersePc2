@@ -30,6 +30,8 @@ import {
   WIDGETS,
 } from '../../features/home/home-widgets.js';
 import HomeDownloadWidget from './home-download-widget.js';
+import HomeVersionWidget from './home-version-widget.js';
+import HomeSaveWidget from './home-save-widget.js';
 
 const AVATAR_MIN = 0.5, AVATAR_MAX = 2.0, DRAG_THRESHOLD = 5;
 
@@ -38,7 +40,7 @@ function clampPos(v, min, max) {
 }
 
 const PageHome = {
-  components: { HomeDownloadWidget },
+  components: { HomeDownloadWidget, HomeVersionWidget, HomeSaveWidget },
   data() {
     return {
       layoutReady: false,
@@ -119,6 +121,26 @@ const PageHome = {
         :title="editingLayout ? '拖动调整位置' : '下载'"
       />
 
+      <!-- 可选控件：版本页面（真实列表，点一条切换版本） -->
+      <HomeVersionWidget
+        v-if="visibleWidgets['version-browser']"
+        ref="versionBrowserEl"
+        class="home-side-widget"
+        data-widget="version-browser"
+        :editing="editingLayout"
+        :title="editingLayout ? '拖动调整位置' : '版本页面'"
+      />
+
+      <!-- 可选控件：版本存档（当前版本的存档列表） -->
+      <HomeSaveWidget
+        v-if="visibleWidgets['save-browser']"
+        ref="saveBrowserEl"
+        class="home-side-widget"
+        data-widget="save-browser"
+        :editing="editingLayout"
+        :title="editingLayout ? '拖动调整位置' : '版本存档'"
+      />
+
       <!-- 可选控件：功能入口小卡片（v-for 渲染除下载外的全部可选功能） -->
       <button v-for="w in navWidgets"
               :key="w.id"
@@ -177,7 +199,7 @@ const PageHome = {
       return Object.keys(this.visibleWidgets).length;
     },
     navWidgets() {
-      return OPTIONAL_WIDGETS.filter((w) => w.action !== 'download' && w.icon);
+      return OPTIONAL_WIDGETS.filter((w) => !w.action && w.icon);
     }
   },
   methods: {
@@ -189,7 +211,9 @@ const PageHome = {
         version: this.$refs.versionEl,
         launch: this.$refs.launchEl,
         running: this.$refs.runningEl,
-        download: this.$refs.downloadEl ? (this.$refs.downloadEl.$el || this.$refs.downloadEl) : null
+        download: this.$refs.downloadEl ? (this.$refs.downloadEl.$el || this.$refs.downloadEl) : null,
+        'version-browser': this.$refs.versionBrowserEl ? (this.$refs.versionBrowserEl.$el || this.$refs.versionBrowserEl) : null,
+        'save-browser': this.$refs.saveBrowserEl ? (this.$refs.saveBrowserEl.$el || this.$refs.saveBrowserEl) : null
       }[key];
       if (fixed) return fixed;
 
@@ -438,6 +462,14 @@ const PageHome = {
       if (dl && this._boundDownloadEl !== dl) {
         this._boundDownloadEl = dl;
         this.bindDrag(dl, 'download', null, 'button, input, a, .home-download-actions');
+      }
+      // 版本页面 / 版本存档：有真实内容的卡片，整卡拖动
+      for (const key of ['version-browser', 'save-browser']) {
+        const el = this.widgetByKey(key);
+        if (el && this._boundNav[key] !== el) {
+          this._boundNav[key] = el;
+          this.bindDrag(el, key, null, 'a, button');
+        }
       }
       // 导航小卡片：v-show 控制显隐，元素在首次渲染后就存在
       for (const w of this.navWidgets) {

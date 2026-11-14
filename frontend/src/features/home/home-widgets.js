@@ -27,6 +27,8 @@ const LEGACY_LAYOUT_KEY = 'versepc_home_layout_v1';
  * action : 非 core 控件渲染方式
  *          'nav'      → 小卡片，点击跳页面
  *          'download' → 下载卡（特殊交互，走 home-download-widget）
+ *          'version-browser' → 版本页面卡片（走 home-version-widget）
+ *          'save-browser'    → 版本存档卡片（走 home-save-widget）
  */
 export const WIDGETS = {
     // ── 核心控件（默认布局，不可移除）──
@@ -54,6 +56,9 @@ export const WIDGETS = {
     'lan-enderlink':  { id: 'lan-enderlink',  name: 'EnderLink',  desc: 'EnderLink 联机',               icon: 'icon-globe',       page: 'lan-enderlink',  core: false, removable: true },
     'private-server': { id: 'private-server', name: '一起玩',     desc: '私人服务器列表',               icon: 'icon-server',      page: 'private-server', core: false, removable: true },
     'server-host':    { id: 'server-host',    name: '本地开服',   desc: '一键创建并管理服务端',         icon: 'icon-server-host', page: 'server-host',    core: false, removable: true },
+    // ── 带真实内容的卡片（不只是跳转入口）──
+    'version-browser': { id: 'version-browser', name: '版本页面',   desc: '已安装版本一览，点击直接启动',   icon: 'icon-package',     page: 'versions',       core: false, removable: true, action: 'version-browser' },
+    'save-browser':    { id: 'save-browser',    name: '版本存档',   desc: '当前版本的存档列表，可进入存档', icon: 'icon-package',     page: 'versions',       core: false, removable: true, action: 'save-browser' },
     feedback:      { id: 'feedback',      name: '问题反馈',       desc: '提交反馈与日志',               icon: 'icon-feedback',    page: 'feedback',       core: false, removable: true },
     settings:      { id: 'settings',      name: '设置',           desc: '启动 / 个性化 / 其他',         icon: 'icon-settings',    page: 'settings-launch', core: false, removable: true },
 };

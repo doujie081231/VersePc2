@@ -2503,3 +2503,106 @@ body:has(#game-launch-overlay[style*="flex"]) .sidebar-toggle-fab {
     border-color: rgba(var(--accent-rgb), 0.55);
     background: rgba(var(--accent-rgb), 0.10);
 }
+
+/* ── 主页内容卡（版本页面 / 版本存档）── */
+.home-page > .home-side-widget {
+    position: absolute;
+    top: 34%;
+    right: 28px;
+    width: 210px;
+    z-index: 4;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+}
+.home-page.home-editing .home-side-widget {
+    cursor: grab;
+    touch-action: none;
+    outline: 1px dashed rgba(var(--accent-rgb), 0.45);
+    outline-offset: 6px;
+    border-radius: 12px;
+}
+.home-side-card {
+    background: var(--bg-card-glass);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
+}
+.home-side-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.home-side-card-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.home-side-card-more {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color .15s ease;
+}
+.home-side-card-more:hover { color: var(--accent); }
+.home-side-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.home-side-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 7px;
+    border-radius: 7px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: background .12s ease, color .12s ease;
+}
+.home-side-item:hover {
+    background: rgba(var(--accent-rgb), 0.10);
+    color: var(--text-primary);
+}
+.home-side-item.is-current {
+    background: rgba(var(--accent-rgb), 0.14);
+    color: var(--accent);
+    font-weight: 600;
+}
+.home-side-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.home-side-item-tag {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(var(--accent-rgb), 0.16);
+    color: var(--accent);
+}
+.home-side-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 6px 2px;
+    line-height: 1.5;
+}
+.home-side-empty a { color: var(--accent); }
+.home-side-more {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    padding: 4px 7px;
+    cursor: pointer;
+}
+.home-side-more:hover { color: var(--accent); }
