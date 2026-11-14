@@ -120,11 +120,125 @@ fn temurin_ustc_mirror(github_url: &str) -> Option<String> {
     ))
 }
 
+/// 按域名决定「下载这条 URL 必须带哪些请求头」。
+///
+/// 很多站点的 CDN 会校验 Referer / UA，缺了直接 403：
+///
+///   · 哔哩哔哩（hdslb / bilivideo / bilibili）：必须带 Referer=https://www.bilibili.com/
+///   · 部分网盘 / 图床也会看 Referer
+///
+/// 返回 (referer, extra_headers)。Referer 为空表示不限制。
+pub fn referer_for(url: &str) -> Option<&'static str> {
+    let u = url.to_ascii_lowercase();
+    let host_like = |domains: &[&str]| domains.iter().any(|d| u.contains(d));
+
+    if host_like(&[
+        "bilibili.com",
+        "bilivideo.com",
+        "hdslb.com",
+        "biliapi.net",
+        "bilivideo.cn",
+        "akamaized.net/bilibili",
+    ]) {
+        return Some("https://www.bilibili.com/");
+    }
+    // 少数站点会校验来源页
+    if host_like(&["douyin.com", "douyinpic.com", "douyinvod.com", "bytedance.com"]) {
+        return Some("https://www.douyin.com/");
+    }
+    if host_like(&["weibo.com", "weibocdn.com", "sinaimg.cn"]) {
+        return Some("https://weibo.com/");
+    }
+    if host_like(&["zhihu.com", "zhimg.com"]) {
+        return Some("https://www.zhihu.com/");
+    }
+    if host_like(&["qq.com", "gtimg.com", "qpic.cn"]) {
+        return Some("https://www.qq.com/");
+    }
+    if host_like(&["kuwo.cn", "kugou.com", "music.163.com", "126.net"]) {
+        return Some("https://www.bilibili.com/");
+    }
+    None
+}
+
+/// 从下载地址推断"该带哪个站点作 Referer"（403 重试用）。
+///
+/// 优先用已知映射（B 站/抖音/微博…），否则用 URL 自己的站点根
+/// （例如 https://x.example.com/a/b.mp4 → https://x.example.com/）。
+/// 很多 CDN 只要求 Referer 同域即可，这条兜底能救回大部分 403。
+pub fn guess_referer(url: &str) -> String {
+    if let Some(r) = referer_for(url) {
+        return r.to_string();
+    }
+    // 取 scheme://host/ 作为兜底 Referer
+    if let Some(idx) = url.find("://") {
+        let after = &url[idx + 3..];
+        if let Some(slash) = after.find('/') {
+            return format!("{}://{}/", &url[..idx], &after[..slash]);
+        }
+        return format!("{}/", url);
+    }
+    String::new()
+}
+
+/// GitHub 下载加速代理（前缀式：{proxy}{原始 URL}）
+///
+/// 实测（本机，GitHub Release 2MB Range 探测，2026-11）：
+///   gh-proxy.com  单连接 295KB/s，8 并发合计 1.92MB/s（6.5x）
+///   ghfast.top    单连接 178KB/s，8 并发合计 1.16MB/s（部分返回 429 限流）
+///   ghproxy.net   国内不可用；ghproxy.link / ghps.cc 基本无速率
+/// 因此只保留前两个，且不启用其它不稳定域名。
+pub const GITHUB_PROXIES: &[&str] = &[
+    // 实测 8 并发 8/8 成功、16 并发 16/16，1.4–2.9MB/s，稳定不限流
+    "https://gh-proxy.com/",
+    // 备选：8 并发 8/8，约 650KB/s，比主代理慢但稳定
+    "https://ghfile.geekertao.top/",
+];
+// 注意：ghfast.top 已从列表移除 —— 实测 8 并发只有 4/8 成功、
+// 16 并发大量 429，且它排在前面会先被尝试 3 次再降级，反而拖慢整体。
+
+/// 这个 URL 是否是 GitHub 的文件下载地址。
+///
+/// 覆盖 GitHub 的四种实际下载入口：
+///   1. github.com/<owner>/<repo>/releases/download/...   release 资产
+///   2. github.com/<owner>/<repo>/raw/<ref>/<path>       网页上的 raw（会 302 到 3）
+///   3. raw.githubusercontent.com/<owner>/<repo>/...     直接 raw 域名
+///   4. objects.githubusercontent.com/...                release 资产的真实存储
+///   5. codeload.github.com/<owner>/<repo>/zip|tar.gz/..  "Download ZIP"
+///
+/// 漏掉 3 和 5 是最容易犯的错：raw 域名是独立 host，光判断 github.com 前缀会把它漏掉，
+/// 结果走直连只有 20–50KB/s。
+pub fn is_github_download(url: &str) -> bool {
+    let u = url.to_ascii_lowercase();
+
+    // 独立的 GitHub 文件域名：只要有路径就是文件，不用再看路径特征
+    if u.starts_with("https://raw.githubusercontent.com/")
+        || u.starts_with("https://objects.githubusercontent.com/")
+        || u.starts_with("https://codeload.github.com/")
+        || u.starts_with("https://gist.githubusercontent.com/")
+        || u.starts_with("https://github-releases.githubusercontent.com/")
+        // ★ GitHub Release 的 302 目标：带签名的真实存储域名。
+        // 少了这一条，resolve_final_url 把 URL 换成它之后就认不出是 GitHub，
+        // 代理被整段绕过 → 只剩直连几十 KB/s。
+        || u.starts_with("https://release-assets.githubusercontent.com/")
+    {
+        return true;
+    }
+
+    // github.com 本身：只有带明确文件路径的才算（仓库首页 / issue 不算）
+    u.starts_with("https://github.com/")
+        && (u.contains("/releases/download/") || u.contains("/raw/") || u.contains("/archive/"))
+}
+
 /// 把官方 URL 替换为 BMCLAPI 镜像 URL
 pub fn to_mirror_url(original: &str) -> Option<String> {
     // Adoptium Temurin JDK GitHub 直链 → 中科大 USTC 镜像（Java 下载用）
     if original.starts_with("https://github.com/adoptium/temurin") {
         return temurin_ustc_mirror(original);
+    }
+    // 其它 GitHub 下载 → 走加速代理（取实测最快那个）
+    if is_github_download(original) {
+        return Some(format!("{}{}", GITHUB_PROXIES[0], original));
     }
     // Mojang 官方源 → BMCLAPI
     let mirror = if original.starts_with("https://piston-data.mojang.com/") {
@@ -197,6 +311,60 @@ mod tests {
     }
 
     #[test]
+    fn bilibili_requires_referer() {
+        // B 站 CDN 缺 Referer 会 403
+        assert_eq!(referer_for("https://upos-sz-mirrorcos.bilivideo.com/x.m4s"),
+                   Some("https://www.bilibili.com/"));
+        assert_eq!(referer_for("https://i0.hdslb.com/bfs/a.jpg"),
+                   Some("https://www.bilibili.com/"));
+        assert_eq!(referer_for("https://api.bilibili.com/x"), Some("https://www.bilibili.com/"));
+        // 普通站点不加 Referer
+        assert_eq!(referer_for("https://example.com/a.zip"), None);
+        assert_eq!(referer_for("https://github.com/a/b/releases/download/v1/x.exe"), None);
+    }
+
+    #[test]
+    fn github_downloads_use_fast_proxies() {
+        let _guard = MIRROR_STATE_LOCK.lock().unwrap();
+        mirror_success();
+
+        let gh = "https://github.com/foo/bar/releases/download/v1.0/app.zip";
+        assert!(is_github_download(gh));
+        // release 资产：代理排在最前，官方直连兜底
+        let urls = get_mirror_urls(gh, "china-first");
+        assert!(urls[0].starts_with("https://gh-proxy.com/https://github.com/"));
+        // ghfast.top 已移除（高并发 429），现在备选是 ghfile.geekertao.top
+        assert!(urls.iter().any(|u| u.starts_with("https://ghfile.geekertao.top/")));
+        assert_eq!(urls.last().map(|s| s.as_str()), Some(gh));
+
+        // raw 文件同样走代理
+        let raw = "https://github.com/foo/bar/raw/main/f.txt";
+        assert!(is_github_download(raw));
+
+        // 非下载类 GitHub 页面（仓库首页 / issue）不算
+        assert!(!is_github_download("https://github.com/foo/bar"));
+        assert!(!is_github_download("https://github.com/foo/bar/issues"));
+
+        // 普通站点不受影响
+        assert!(!is_github_download("https://example.com/a.zip"));
+
+        // ★ Release 302 之后的真实存储域名（签名 URL）：必须仍然认成 GitHub，
+        // 否则代理会被绕过，退化成直连几十 KB/s。
+        let signed = "https://release-assets.githubusercontent.com/github-production-release-asset/1/2?v=1&sig=abc";
+        assert!(is_github_download(signed));
+        let proxied = get_mirror_urls(signed, "china-first");
+        assert!(proxied[0].starts_with("https://gh-proxy.com/https://release-assets."));
+
+        // raw 域名同样要能走代理
+        let rawu = "https://raw.githubusercontent.com/foo/bar/main/x.json";
+        assert!(is_github_download(rawu));
+        assert!(get_mirror_urls(rawu, "china-first")[0].starts_with("https://gh-proxy.com/"));
+
+        // codeload（Download ZIP）
+        assert!(is_github_download("https://codeload.github.com/foo/bar/zip/refs/heads/main"));
+    }
+
+    #[test]
     fn neoforge_releases_use_bmclapi_maven_root() {
         // NeoForge 官方仓库固定在 /releases/ 下，BMCLAPI 镜像树没有 releases 段；
         // 映射时必须去掉该段，否则请求 bmclapi/maven/releases/... 会 404
@@ -247,16 +415,6 @@ mod tests {
         assert_eq!(blocked[0], official);
         mirror_success();
         assert!(is_mirror_available());
-    }
-
-    #[test]
-    fn forge_maven_keeps_official_and_files_fallback() {
-        let original = "https://maven.minecraftforge.net/net/minecraftforge/ForgeAutoRenamingTool/0.1.22/ForgeAutoRenamingTool-0.1.22-all.jar";
-        let urls = get_mirror_urls(original, "china-first");
-        assert!(urls.contains(&original.to_string()));
-        assert!(urls
-            .iter()
-            .any(|u| u.starts_with("https://files.minecraftforge.net/maven/")));
     }
 
     #[test]
@@ -311,6 +469,25 @@ pub fn get_mirror_urls(original: &str, download_source: &str) -> Vec<String> {
         return urls;
     }
 
+    // GitHub 下载：把所有实测可用的加速代理都排上。
+    // 单连接只有 ~300KB/s，靠分块并发才能跑满（8 并发实测 1.9MB/s），
+    // 所以这里要给出多个代理，让上层逐个尝试 / 分块竞速。
+    if is_github_download(original) {
+        let proxies: Vec<String> = GITHUB_PROXIES
+            .iter()
+            .map(|p| format!("{}{}", p, original))
+            .collect();
+        if download_source == "china-first" || download_source == "auto" {
+            // 代理在前，官方直连兜底
+            for (i, u) in proxies.into_iter().enumerate() {
+                urls.insert(i, u);
+            }
+        } else {
+            urls.extend(proxies);
+        }
+        return urls;
+    }
+
     if let Some(mirror) = to_mirror_url(original)
         && mirror != original {
             if download_source == "china-first" {
@@ -323,15 +500,6 @@ pub fn get_mirror_urls(original: &str, download_source: &str) -> Vec<String> {
                 urls.push(mirror);
             }
         }
-
-    // Forge 官方 Maven 的备用入口：files.minecraftforge.net/maven 与 maven.minecraftforge.net
-    // 内容一致；部分网络只放行其中一个。安装器支持库只存在于官方仓库，镜像通常没有。
-    if let Some(rest) = original.strip_prefix("https://maven.minecraftforge.net/") {
-        let files_mirror = format!("https://files.minecraftforge.net/maven/{}", rest);
-        if !urls.contains(&files_mirror) {
-            urls.push(files_mirror);
-        }
-    }
 
     // libraries.minecraft.net 额外补 Forge maven 镜像，作为兜底候选
     if original.starts_with("https://libraries.minecraft.net/") {

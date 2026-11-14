@@ -10,6 +10,10 @@ import { doMemoryOptimize, createDesktopShortcut } from '../../features/settings
 import { openFolder, cleanupScan, cleanupRun } from '../../features/launch/java.js';
 import { handleCheckUpdate, handleSkipVersion, handleDownloadUpdate, handleInstallUpdate } from '../../features/settings/updater-ui.js';
 import { showUpdateAnnouncement } from '../../features/misc/announcement.js';
+import {
+  installBrowserBridge, uninstallBrowserBridge, refreshBrowserBridgeStatus,
+  initBrowserBridgeCard, browserBridgeState, openExtensionStore,
+} from '../../features/settings/browser-download.js';
 import { bridge } from '../../core/tauri-bridge.js';
 import VButton from '@/components/verse/VButton.vue';
 import VInput from '@/components/verse/VInput.vue';
@@ -35,7 +39,10 @@ function openReleasePage() {
 const PageSettingsOther = {
   components: { VButton, VInput },
   setup() {
-    return { openSponsorDino, toggleShowMoreSponsors, copyFeedbackEmail, browseFolder, doMemoryOptimize, openFolder, cleanupScan, cleanupRun, handleCheckUpdate, handleSkipVersion, handleDownloadUpdate, handleInstallUpdate, showUpdateAnnouncement, createDesktopShortcut, saveOtherSettings, resetOtherSettings, openExternalUrl, openUrl, openReleasePage,
+    // 进页面即拉一次浏览器下载接管状态
+    initBrowserBridgeCard();
+    return { installBrowserBridge, uninstallBrowserBridge, refreshBrowserBridgeStatus, browserBridgeState, openExtensionStore,
+      openSponsorDino, toggleShowMoreSponsors, copyFeedbackEmail, browseFolder, doMemoryOptimize, openFolder, cleanupScan, cleanupRun, handleCheckUpdate, handleSkipVersion, handleDownloadUpdate, handleInstallUpdate, showUpdateAnnouncement, createDesktopShortcut, saveOtherSettings, resetOtherSettings, openExternalUrl, openUrl, openReleasePage,
       // 原先通过内联 oninput 调用，靠 window 全局名解析但并未挂载，改为模板事件后需暴露
       filterSponsors, updateSpeedLimitLabel };
   },
@@ -313,6 +320,29 @@ const PageSettingsOther = {
                 </button>
                 <VButton variant="secondary" @click="showUpdateAnnouncement()">查看更新公告</VButton>
                 <VButton variant="secondary" @click="createDesktopShortcut()">创建桌面快捷方式</VButton>
+              </div>
+            </div>
+
+            <!-- 浏览器下载接管 -->
+            <div class="card">
+              <h3>浏览器下载接管</h3>
+              <p class="form-hint" style="margin-bottom:14px;">
+                装好后，在网页上点下载会自动召唤 VersePC2 并填好地址与文件名——真正的下载仍由你点「开始下载」。
+              </p>
+
+              <div class="bridge-status-row">
+                <span id="bridge-status-dot" class="bridge-status-dot" :class="browserBridgeState.hostInstalled ? 'is-ok' : 'is-bad'"></span>
+                <span id="bridge-status-text" class="bridge-status-text" :class="{ 'is-ok': browserBridgeState.hostInstalled }">
+                  {{ browserBridgeState.hostInstalled ? '已就绪' : '未就绪' }}
+                </span>
+              </div>
+
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+                <VButton variant="accent" id="bridge-install-btn" :disabled="browserBridgeState.busy" @click="installBrowserBridge()">
+                  {{ browserBridgeState.hostInstalled ? '前往安装扩展' : '安装' }}
+                </VButton>
+                <VButton v-if="browserBridgeState.hostInstalled" variant="secondary" @click="uninstallBrowserBridge()">移除</VButton>
+                <VButton variant="ghost" @click="refreshBrowserBridgeStatus()">重新检测</VButton>
               </div>
             </div>
 

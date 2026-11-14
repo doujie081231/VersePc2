@@ -33,6 +33,18 @@ pub static HTTP_CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLo
         .expect("创建全局 HTTP 客户端失败")
 });
 
+/// 给请求加上站点要求的请求头（Referer 等）。
+/// 返回新的 RequestBuilder，避免每个调用点都重复写这段逻辑。
+pub(crate) fn apply_site_headers(
+    mut req: reqwest::RequestBuilder,
+    url: &str,
+) -> reqwest::RequestBuilder {
+    if let Some(referer) = mirror::referer_for(url) {
+        req = req.header(reqwest::header::REFERER, referer);
+    }
+    req
+}
+
 /// 下载进度回调类型
 pub type ProgressCb = Arc<dyn Fn(&DownloadProgress) + Send + Sync>;
 
@@ -66,7 +78,7 @@ async fn resolve_final_url(url: &str, timeout_secs: u64) -> String {
 
     let mut current = url.to_string();
     for _ in 0..5 {
-        let resp = match client.get(&current).send().await {
+        let resp = match apply_site_headers(client.get(&current), &current).send().await {
             Ok(r) => r,
             Err(_) => return url.to_string(),
         };
@@ -126,11 +138,12 @@ async fn probe_speed_sort(urls: &[String], timeout_secs: u64) -> Vec<String> {
         let url = url.clone();
         futures.push(async move {
             let start = Instant::now();
-            let resp = client
-                .get(&url)
-                .header("Range", "bytes=0-0")
-                .send()
-                .await;
+            let resp = apply_site_headers(
+                client.get(&url).header("Range", "bytes=0-0"),
+                &url,
+            )
+            .send()
+            .await;
             let elapsed = start.elapsed().as_millis();
             match resp {
                 Ok(r) if r.status().as_u16() == 206 || r.status().as_u16() == 200 => (i, elapsed),
@@ -173,11 +186,14 @@ async fn download_with_mirror_inner(
     // 且其官方源在国内 TTFB 极慢（实测 >10s），跳过解析避免白白等官方源。
     // Adoptium Temurin JDK（github.com/adoptium）：走中科大 USTC 镜像，也跳过 GitHub 跳转解析，
     // 否则 302 到 release-assets.githubusercontent.com 后镜像转换将失效。
-    let needs_resolve = (!is_small_file
+    // GitHub 不需要预先解析 302：加速代理自己会跟随重定向，
+    // 而且官方的 302 探测在国内经常要 10 秒以上，白白拖慢启动。
+    let needs_resolve = ((!is_small_file
         && !original_url.contains("cdn.modrinth.com")
         && !original_url.contains("github.com/adoptium"))
         || original_url.contains("edge.forgecdn.net")
-        || original_url.contains("mediafilez.forgecdn.net");
+        || original_url.contains("mediafilez.forgecdn.net"))
+        && !mirror::is_github_download(original_url);
     let base_url = if needs_resolve {
         resolve_final_url(original_url, timeout_secs).await
     } else {
@@ -201,18 +217,29 @@ async fn download_with_mirror_inner(
     // 均失败"，而官方源其实可用。失败源独立标记，官方源始终可兜底尝试。
     let is_modrinth_official = base_url.contains("cdn.modrinth.com")
         || base_url.contains("cdn-alt.modrinth.com");
-    // 原始地址必须始终保留：Forge 安装器库（ForgeAutoRenamingTool、installertools、
-    // fmlearlydisplay 等）只存在于官方 maven.minecraftforge.net，BMCLAPI/阿里云等
-    // 镜像并不收录。曾经因为一次超时把官方源拉黑，只剩镜像后整批支持库全部 404。
     let urls: Vec<String> = urls
         .into_iter()
-        .filter(|u| u == &base_url || is_modrinth_official || !mirror::is_bad_host(u))
+        .filter(|u| is_modrinth_official || !mirror::is_bad_host(u))
         .collect();
     if urls.is_empty() {
         return Err(format!("所有下载源均已被标记为不可用: {}", base_url));
     }
-    // 多个源时并行测速，优先最快的源
-    let urls = probe_speed_sort(&urls, timeout_secs).await;
+    // GitHub（含加速代理）：单连接实测只有 150–300KB/s，8 并发能到 2.6MB/s。
+    // 这里定义得早一点，后面的"跳过测速排序"和"提高分块数"都要用它。
+    let is_github = mirror::is_github_download(original_url)
+        || urls.iter().any(|u| mirror::is_github_download(u));
+
+    // 多个源时并行测速，优先最快的源。
+    //
+    // ★ GitHub 例外：绝不能参与测速排序。
+    //   原因：GitHub 直连的 TTFB 探测有时比代理还快（TCP 握手快但传输被限速到几十 KB/s），
+    //   测速会把直连排到前面，结果先花 1–2 分钟超时，再降级到代理 —— 整体反而更慢。
+    //   所以 GitHub 固定用「代理优先」的顺序（get_mirror_urls 已经排好），不排序。
+    let urls = if is_github {
+        urls
+    } else {
+        probe_speed_sort(&urls, timeout_secs).await
+    };
 
     // 大文件优先走多线程分块下载（读取设置中的并发数）。
     // max_chunks 是"最大分块/线程上限"，默认 32。
@@ -227,11 +254,25 @@ async fn download_with_mirror_inner(
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
+    let max_chunks = if is_github { max_chunks.max(32) } else { max_chunks };
+
     // Modrinth CDN（官方 + mcimirror 镜像）对 Range 分块并发不友好，
     // 单流即可跑满带宽且不会触发限流，直接跳过分块（与镜像解析保持一致）。
     let is_modrinth_cdn = original_url.contains("cdn.modrinth.com")
         || original_url.contains("cdn-alt.modrinth.com")
         || original_url.contains("mod.mcimirror.top");
+
+    // 诊断日志：把"最终用了哪个源、开多少并发"写进 logs/download-diag.log，
+    // 用户反馈"还是慢"时可以直接看这行定位（是走了直连？还是并发没起来？）
+    crate::download::diag::log(&format!(
+        "url={} base={} chunk={} chunks={} src={} candidates={}",
+        original_url,
+        base_url,
+        enable_chunk,
+        max_chunks,
+        effective_source,
+        urls.len()
+    ));
 
     if enable_chunk && !is_small_file && !is_modrinth_cdn {
         match chunked::download_chunked_with_mirror(
@@ -529,6 +570,16 @@ async fn download_with_retry(
             && c.load(Ordering::SeqCst) {
                 return Err("已取消".to_string());
             }
+        // 上一次的错误如果是"限流/被拒/源太慢"，重试同一个源没有意义，
+        // 直接返回让上层换源（代理场景下这一步很关键：能省掉两次无谓等待）。
+        if attempt > 0
+            && (last_err.contains("429")
+                || last_err.contains("403")
+                || last_err.contains("451")
+                || last_err.contains("速度过低"))
+        {
+            return Err(last_err);
+        }
         match download_once(url, dest, expected_size, timeout_secs, on_progress.clone(), cancel).await {
             Ok(actual_size) => {
                 // 校验大小
@@ -613,10 +664,11 @@ async fn download_once(
     if resume_offset > 0 {
         req = req.header("Range", format!("bytes={}-", resume_offset));
     }
+    req = apply_site_headers(req, url);
 
     // TTFB 超时保护：CDN 建立连接后迟迟不回响应头时（Modrinth 官方源国内常见），
     // 立即中断并返回"TTFB 超时"让上层换源，避免一直挂在 send() 上导致"卡住"。
-    let response = match tokio::time::timeout(
+    let mut response = match tokio::time::timeout(
         Duration::from_secs(TTFB_TIMEOUT_SECS),
         req.send(),
     )
@@ -627,7 +679,38 @@ async fn download_once(
         Err(_) => return Err("TTFB 超时：服务器响应头迟迟未返回，切换镜像".to_string()),
     };
 
-    let status = response.status().as_u16();
+    let mut status = response.status().as_u16();
+
+    // 403/451 常见于「CDN 校验 Referer」：B 站视频流、部分网盘直链、
+    // 图床都会在缺 Referer 时直接拒绝。这里用推断出的站点根做 Referer 再试一次，
+    // 成功就继续走下面的正常流程（这也是 IDM / aria2 的常规做法）。
+    if status == 403 || status == 451 {
+        let guessed = mirror::guess_referer(url);
+        if !guessed.is_empty() {
+            let mut retry = client
+                .get(url)
+                .timeout(Duration::from_secs(timeout_secs))
+                .header(reqwest::header::REFERER, &guessed);
+            if resume_offset > 0 {
+                retry = retry.header("Range", format!("bytes={}-", resume_offset));
+            }
+            match tokio::time::timeout(Duration::from_secs(TTFB_TIMEOUT_SECS), retry.send()).await {
+                Ok(Ok(r2)) if r2.status().is_success() || r2.status().as_u16() == 206 => {
+                    crate::download::diag::log(&format!(
+                        "  403 retry with referer={} ok url={}", guessed, url
+                    ));
+                    response = r2;
+                    status = response.status().as_u16();
+                }
+                _ => {
+                    crate::download::diag::log(&format!(
+                        "  403 retry with referer={} failed url={}", guessed, url
+                    ));
+                }
+            }
+        }
+    }
+
     if status == 429 {
         // 限流：等待后重试（对应网络请求中 429 Too Many Requests 的处理）
         return Err("HTTP 429 限流".to_string());

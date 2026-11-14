@@ -3,6 +3,7 @@
 
 mod api;
 mod ai;
+pub(crate) mod bridge;
 mod auth;
 mod avatar;
 mod commands_paths;
@@ -472,6 +473,104 @@ fn store_delete(state: tauri::State<storage::Store>, key: String) -> bool {
 
 // ============== 系统工具命令 ==============
 
+/// 扩展商店页面（Edge Add-ons）
+pub const EDGE_ADDON_URL: &str =
+    "https://microsoftedge.microsoft.com/addons/detail/hjimmjkhbblbbbbmhlagchfdohoelbbi";
+/// Chrome 应用商店页面（Edge 没装时的替代入口，里面同一个扩展也上架了才用得上）
+pub const CHROME_ADDON_URL: &str =
+    "https://chrome.google.com/webstore/detail/hjimmjkhbblbbbbmhlagchfdohoelbbi";
+
+/// 优先用 Edge 打开 URL；没装 Edge（或启动失败）则退回默认浏览器。
+///
+/// 为什么不用 `open::that`：它只会交给系统默认浏览器，用户默认浏览器是
+/// Chrome/Firefox 时，商店页面会打开在错误的商店里（扩展是 Edge 装上的却跳到 Chrome）。
+#[cfg(target_os = "windows")]
+fn open_in_edge(url: &str) -> bool {
+    use std::os::windows::process::CommandExt;
+    // 探测 Edge 的常见安装位置（HKCU 安装 + 系统安装 + 企业安装）
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        candidates.push(std::path::Path::new(&local).join(r"Microsoft\Edge\Application\msedge.exe"));
+    }
+    for env in ["ProgramFiles(x86)", "ProgramFiles"] {
+        if let Ok(pf) = std::env::var(env) {
+            candidates.push(std::path::Path::new(&pf).join(r"Microsoft\Edge\Application\msedge.exe"));
+        }
+    }
+
+    for exe in candidates {
+        if !exe.exists() {
+            continue;
+        }
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.arg(url);
+        // CREATE_NO_WINDOW：不要为浏览器弹一个控制台窗口
+        cmd.creation_flags(0x0800_0000);
+        match cmd.spawn() {
+            Ok(_) => {
+                eprintln!("[open_edge] 已用 Edge 打开: {}", url);
+                return true;
+            }
+            Err(e) => eprintln!("[open_edge] 启动 {} 失败: {}，改用默认浏览器", exe.display(), e),
+        }
+    }
+
+    // 兜底：查注册表里的 App Paths（非标准安装目录也能命中）
+    #[cfg(target_os = "windows")]
+    if let Some(path) = edge_from_registry() {
+        let mut cmd = std::process::Command::new(&path);
+        cmd.arg(url);
+        cmd.creation_flags(0x0800_0000);
+        if cmd.spawn().is_ok() {
+            eprintln!("[open_edge] 已用注册表里的 Edge 打开: {}", url);
+            return true;
+        }
+    }
+
+    eprintln!("[open_edge] 没找到 Edge，退回默认浏览器: {}", url);
+    open::that(url).is_ok()
+}
+
+/// 从注册表 App Paths 找 Edge
+#[cfg(target_os = "windows")]
+fn edge_from_registry() -> Option<std::path::PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let hk = RegKey::predef(hive);
+        if let Ok(key) = hk.open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe")
+            && let Ok(v) = key.get_value::<String, _>("")
+        {
+            let p = std::path::PathBuf::from(v.trim_matches('"'));
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn open_in_edge(_url: &str) -> bool {
+    open::that(_url).is_ok()
+}
+
+/// 打开浏览器扩展商店：优先 Edge，没有就默认浏览器
+#[tauri::command]
+fn open_extension_store() -> bool {
+    open_in_edge(EDGE_ADDON_URL)
+}
+
+/// 直接打开任意 URL，优先 Edge（供"前往安装扩展"以外的场景复用）
+#[tauri::command]
+fn open_external_in_edge(url: String) -> bool {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return false;
+    }
+    open_in_edge(&url)
+}
+
 #[tauri::command]
 fn open_external(url: String) -> bool {
     // 在默认浏览器中打开 URL（支持 http/https/mailto 等协议）
@@ -535,6 +634,14 @@ fn install_panic_hook() {
 pub fn run() {
     install_panic_hook();
 
+    // 浏览器扩展桥接：
+    //   --native-host   浏览器拉起的原生消息宿主（只跑 stdio 帧循环，不建窗口）
+    //   --download ...  外部传入下载请求（已运行实例则转发后退出，否则排队继续启动）
+    // 必须放在提权分支之前判定：宿主模式不需要任何窗口/运行时资源。
+    if crate::bridge::handle_startup() {
+        return;
+    }
+
     // 提权子进程模式：由主进程通过 runas 启动，仅作为命名管道执行端，
     // 不启动完整的 Tauri（窗口/异步 runtime），执行完命令后直接退出。
     if crate::promote::try_run_promote_process() {
@@ -587,6 +694,19 @@ pub fn run() {
             if let Some(main_win) = app.get_webview_window("main") {
                 apply_saved_window_state(&main_win);
             }
+
+            // 启动单实例命名管道：浏览器扩展/命令行二次启动时把请求转发到这里。
+            // 抢不到管道名说明已有实例在跑，accept_loop 会自行安静退出。
+            crate::bridge::install(app.handle().clone());
+
+            // 浏览器扩展自检（后台，不阻塞启动）：
+            //   · 释放内嵌的扩展文件到 <data>/extension（内容一致时跳过写盘）
+            //   · 原生宿主清单里的 exe 路径若因挪动文件夹而失效，自动重写注册
+            tauri::async_runtime::spawn_blocking(|| {
+                if let Err(e) = crate::bridge::extension::prepare_for_launch() {
+                    eprintln!("[boot] 浏览器扩展准备失败（不影响启动）: {}", e);
+                }
+            });
 
             // 后台预热 Java 探测缓存：在启动时后台刷新 Java 列表，
             // 避免真正启动游戏时才在启动流程里同步跑每个 Java 的 -version 探测，造成卡顿
@@ -722,6 +842,8 @@ pub fn run() {
             write_startup_timing,
             // 系统工具
             open_external,
+            open_extension_store,
+            open_external_in_edge,
             // TTS 语音合成
             tts_speak,
             // AI 对话代理
@@ -788,6 +910,16 @@ pub fn run() {
             // 存档管理
             saves::version_list_saves,
             saves::version_save_update,
+            // 浏览器下载接管：原生宿主注册/卸载/状态
+            bridge::register::bridge_install_native_host,
+            bridge::register::bridge_uninstall_native_host,
+            bridge::register::bridge_native_host_status,
+            // 浏览器扩展：只需点一下，自动释放文件 + 注册 + 拉起浏览器
+            bridge::extension::bridge_install_extension,
+            bridge::extension::bridge_prepare_extension,
+            bridge::extension::bridge_uninstall_extension,
+            bridge::extension::bridge_extension_status,
+            bridge::extension::bridge_open_extension_dir,
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" {

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "VersePC2 下载接管",
+  "version": "1.2.3",
+  "description": "拦截浏览器下载，交给你本机的 VersePC2 启动器用高速多线程引擎下载。只填表，绝不自动开始。",
+  "minimum_chrome_version": "102",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2lXD/aqZ+ugiBJ6NTUHpcYLo05Ts1Ojj2aNMQx06CAi06C4U9ybCCykOVq0CJOXywmqS5mvIgl8jIJpg7JdUfwpR60wUIPFiLDtMo4G/wYhlDsFzJnUq7rhY05GA8q/QL2EepMWSY4WzvLpxzE3NYYFwXVq7uahfSya896FHc1M53QK6/WbxDW4SYr6JNxENJAg1OLfPsuvGYmfHPa2KIjY3R1AcAn2z1zqjk6TVojcgoxY0fA1vGfasUhAgvEEvWijxiY0NsJYKqbC1H/93OzC6pJa617jHKd2eR61CoZ6DGcIg3JoIps1Q/44XqJU0YKLKalKNwINFOhWrLxzj/wIDAQAB",
+  "permissions": [
+    "downloads",
+    "nativeMessaging",
+    "storage",
+    "notifications"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "VersePC2 下载接管",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

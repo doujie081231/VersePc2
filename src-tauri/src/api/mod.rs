@@ -7,8 +7,10 @@ pub mod authlib;
 pub mod cloud;
 pub mod crash;
 pub mod download;
+pub mod download_custom;
 pub mod favorites;
 pub mod game;
+pub mod home_layout;
 pub mod lan;
 pub mod launch;
 pub mod misc;
@@ -22,7 +24,6 @@ pub mod settings;
 pub mod skins;
 pub mod sponsor;
 pub mod system;
-pub mod verse_skins;
 
 /// 联机功能总开关（false=关闭；联机相关代码全部保留，置回 true 即恢复）
 pub(crate) const LAN_ENABLED: bool = true;
@@ -77,6 +78,18 @@ pub async fn api_proxy(
         )
         .await;
     }
+
+    // 主页布局持久化（存 settings.json，比 localStorage 可靠）
+    if path == "/api/home-layout"
+        && let Some(r) = home_layout::handle(&method, &path, &body) {
+            return r;
+        }
+
+    // 自定义文件下载（浏览器下载接管落地 / 工具箱「下载自定义文件」）
+    if path.starts_with("/api/download-custom")
+        && let Some(r) = download_custom::handle(&app, &method, &path, &params, &body).await {
+            return r;
+        }
 
     // 下载/安装相关路由（async，优先处理）
     if (path.starts_with("/api/install")
@@ -167,12 +180,6 @@ pub async fn api_proxy(
         || path == "/api/mod-icon"
         || path.starts_with("/api/mods/"))
         && let Some(r) = mods::handle(&app, &method, &path, &params, &body).await {
-            return r;
-        }
-
-    // Verse 皮肤站中继（async，公开皮肤库列表 + 纹理下载）
-    if path.starts_with("/api/verse-skins")
-        && let Some(r) = verse_skins::handle(&method, &path, &params, &body).await {
             return r;
         }
 

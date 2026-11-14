@@ -1258,3 +1258,45 @@
     font-size: 11px;
     color: var(--text-muted);
 }
+
+
+/* ============================================================
+   浏览器下载接管：设置页状态行
+   ============================================================ */
+.bridge-status-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+.bridge-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #64748b;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.bridge-status-dot.is-ok {
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.16);
+}
+.bridge-status-dot.is-warn {
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.16);
+}
+.bridge-status-dot.is-bad {
+  background: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16);
+}
+.bridge-status-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.bridge-status-text.is-ok {
+  color: #4ade80;
+}
+

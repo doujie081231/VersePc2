@@ -7,7 +7,8 @@
  *     只有点击「确认」才会保存位置并恢复启动按钮，点击「取消」恢复原布局。
  *   - 头像：编辑模式下拖动移动 + 滚轮缩放（0.5x ~ 2.0x），默认点击进入账户管理。
  *   - 个性化设置页「恢复主页默认布局」会派发 versepc-home-layout-reset 事件，
- *     本组件监听后清空已保存布局并回到默认位置。
+ *     本组件监听后只重置坐标，保留用户已添加的控件。
+ *   - 编辑布局时工具栏左侧有「+」：打开控件库，可把「下载」等可选控件加进主页。
  */
 
 import { gameStore } from '../../core/game-store.js';
@@ -16,27 +17,39 @@ import { loadAccounts } from '../../features/accounts/accounts-list.js';
 import { updateGameStatus, stopGameInstance } from '../../features/launch/launch.js';
 import { loadVersions } from '../../features/versions/versions-list.js';
 import { navigateToPage } from '../../core/navigation.js';
+import {
+  loadHomeLayout,
+  saveHomeLayout,
+  isWidgetVisible,
+  ensureWidgetVisible,
+  removeWidget,
+  resetWidgetPositions,
+  onLayoutChange,
+  hydrateHomeLayoutFromBackend,
+  OPTIONAL_WIDGETS,
+  WIDGETS,
+} from '../../features/home/home-widgets.js';
+import HomeDownloadWidget from './home-download-widget.js';
+import HomeVersionWidget from './home-version-widget.js';
+import HomeSaveWidget from './home-save-widget.js';
 
-const LAYOUT_KEY = 'versepc_home_layout_v1';
 const AVATAR_MIN = 0.5, AVATAR_MAX = 2.0, DRAG_THRESHOLD = 5;
 
-function loadHomeLayout() {
-  try {
-    return JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}') || {};
-  } catch (e) { return {}; }
-}
-function saveHomeLayout(layout) {
-  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (e) {}
-}
 function clampPos(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
 const PageHome = {
+  components: { HomeDownloadWidget, HomeVersionWidget, HomeSaveWidget },
   data() {
     return {
       layoutReady: false,
       editingLayout: false,
+      widgetPickerOpen: false,       // 控件库面板是否展开
+      visibleWidgets: {},            // { download: true } —— 由 home-widgets 维护
+      _boundNav: {},
+      optionalWidgets: OPTIONAL_WIDGETS,
+      iconPath: (id) => (WIDGETS[id] && WIDGETS[id].icon) || null,
       _draftChanged: {}
     };
   },
@@ -98,9 +111,54 @@ const PageHome = {
         </div>
       </div>
 
-      <!-- 布局编辑入口：默认只显示「编辑布局」，编辑中显示取消/确认 -->
+      <!-- 可选控件：下载（特殊交互卡） -->
+      <HomeDownloadWidget
+        v-if="visibleWidgets.download"
+        ref="downloadEl"
+        class="home-download-widget"
+        data-widget="download"
+        :editing="editingLayout"
+        :title="editingLayout ? '拖动调整位置' : '下载'"
+      />
+
+      <!-- 可选控件：版本页面（真实列表，点一条切换版本） -->
+      <HomeVersionWidget
+        v-if="visibleWidgets['version-browser']"
+        ref="versionBrowserEl"
+        class="home-side-widget"
+        data-widget="version-browser"
+        :editing="editingLayout"
+        :title="editingLayout ? '拖动调整位置' : '版本页面'"
+      />
+
+      <!-- 可选控件：版本存档（当前版本的存档列表） -->
+      <HomeSaveWidget
+        v-if="visibleWidgets['save-browser']"
+        ref="saveBrowserEl"
+        class="home-side-widget"
+        data-widget="save-browser"
+        :editing="editingLayout"
+        :title="editingLayout ? '拖动调整位置' : '版本存档'"
+      />
+
+      <!-- 可选控件：功能入口小卡片（v-for 渲染除下载外的全部可选功能） -->
+      <button v-for="w in navWidgets"
+              :key="w.id"
+              :ref="'navEl_' + w.id"
+              v-show="visibleWidgets[w.id]"
+              class="home-nav-widget"
+              :data-widget="w.id"
+              :title="editingLayout ? '拖动调整位置' : w.name"
+              @click.stop="onNavWidgetClick(w)">
+        <svg class="home-nav-widget-icon"><use :href="'#' + w.icon"/></svg>
+        <span class="home-nav-widget-name">{{ w.name }}</span>
+      </button>
+
+      <!-- 布局编辑入口：默认只显示「编辑布局」，编辑中显示「+」/提示/取消/确认 -->
       <div class="home-edit-toolbar" :class="{ 'home-edit-toolbar-active': editingLayout }">
-        <span v-if="editingLayout" class="home-edit-hint">拖动控件调整位置</span>
+        <button v-if="editingLayout" type="button" id="home-widget-add-btn"
+                class="home-widget-add-btn" title="添加控件"
+                @click.stop="toggleWidgetPicker">+</button>
         <button v-if="!editingLayout" type="button" id="home-edit-layout-btn"
                 class="btn btn-secondary btn-sm" @click.stop="beginLayoutEdit">编辑布局</button>
         <template v-else>
@@ -110,34 +168,146 @@ const PageHome = {
                   class="btn btn-primary btn-sm" @click.stop="confirmLayoutEdit">确认</button>
         </template>
       </div>
+
+      <!-- 控件库：编辑模式下点「+」展开，覆盖软件全部功能 -->
+      <div v-if="widgetPickerOpen && editingLayout"
+           class="home-widget-picker" @click.stop>
+        <div class="home-widget-picker-head">
+          <span>添加功能到主页</span>
+          <span class="home-widget-picker-count">{{ visibleCount }}/{{ optionalWidgets.length }}</span>
+          <button type="button" class="home-widget-picker-close" @click.stop="widgetPickerOpen = false">×</button>
+        </div>
+        <div class="home-widget-picker-grid">
+          <button v-for="w in optionalWidgets" :key="w.id" type="button"
+                  class="home-widget-picker-item"
+                  :class="{ 'is-added': visibleWidgets[w.id] }"
+                  :title="w.desc"
+                  @click.stop="toggleWidget(w.id)">
+            <svg v-if="w.icon" class="home-widget-picker-icon"><use :href="'#' + w.icon"/></svg>
+            <span class="home-widget-picker-name">{{ w.name }}</span>
+            <span class="home-widget-picker-state">{{ visibleWidgets[w.id] ? '✓' : '+' }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   `,
   computed: {
     gameInstances() {
       return gameStore ? gameStore.instances : [];
+    },
+    visibleCount() {
+      return Object.keys(this.visibleWidgets).length;
+    },
+    navWidgets() {
+      return OPTIONAL_WIDGETS.filter((w) => !w.action && w.icon);
     }
   },
   methods: {
     widgetByKey(key) {
-      return {
+      // 核心控件用 ref 拿（它们不是 v-for 生成的）
+      const fixed = {
         title: this.$refs.titleEl,
         avatar: this.$refs.avatarEl,
         version: this.$refs.versionEl,
         launch: this.$refs.launchEl,
-        running: this.$refs.runningEl
+        running: this.$refs.runningEl,
+        download: this.$refs.downloadEl ? (this.$refs.downloadEl.$el || this.$refs.downloadEl) : null,
+        'version-browser': this.$refs.versionBrowserEl ? (this.$refs.versionBrowserEl.$el || this.$refs.versionBrowserEl) : null,
+        'save-browser': this.$refs.saveBrowserEl ? (this.$refs.saveBrowserEl.$el || this.$refs.saveBrowserEl) : null
       }[key];
+      if (fixed) return fixed;
+
+      // 可选控件（模组/光影包/设置…）由 v-for 渲染，字符串 ref 在生产版 Vue 里
+      // 结构不稳定（可能是数组、也可能为空），所以直接按 data-widget 查 DOM。
+      // 早先这里没有这条分支，applyLayout 里 if (!el) continue 会把它们全部跳过，
+      // 导致可选控件的坐标永远应用不上，看起来就是"布局没保存/全叠在一起"。
+      const scope = this.$refs.homePage || document;
+      return scope.querySelector('[data-widget="' + key + '"]');
+    },
+    // ── 控件库 ──
+    /** 展开/收起控件库面板 */
+    toggleWidgetPicker() {
+      this.widgetPickerOpen = !this.widgetPickerOpen;
+    },
+    /** 点击导航类控件主体：跳到对应功能页（拖动由 bindDrag 处理） */
+    onNavWidgetClick(w) {
+      if (typeof navigateToPage === 'function' && w.page) navigateToPage(w.page);
+    },
+    /** 添加/移除一个可选控件 */
+    toggleWidget(id) {
+      if (this.visibleWidgets[id]) {
+        if (!removeWidget(id)) return;
+      } else {
+        ensureWidgetVisible(id);
+        // 新增控件必须立刻分配一个空闲坐标并落盘。
+        // 否则它没有位置数据 → applyLayout 走「回退 CSS 默认」→ 所有导航卡
+        // 叠在同一个默认位置，用户看起来就是"布局变回默认/控件重叠"。
+        this.assignFreeSlot(id);
+      }
+      this.syncVisibleWidgets();
+      // 新增控件后下一帧重新收敛坐标（元素刚挂载时尺寸还是 0）
+      this.$nextTick(() => { this.applyLayout(); this.bindOptionalWidgets(); });
+    },
+    /**
+     * 给控件找一个不与现有控件重叠的坐标并写入布局。
+     * 网格布局：从右上角开始，按 COL_W × ROW_H 排布，扫描已占用点。
+     */
+    assignFreeSlot(id) {
+      const layout = loadHomeLayout();
+      const page = this.$refs.homePage;
+      if (!page) return;
+      const pw = page.clientWidth || 1000;
+      const ph = page.clientHeight || 700;
+      const CARD_W = 110, CARD_H = 64, GAP = 14;
+      const cols = Math.max(1, Math.floor((pw - 24) / (CARD_W + GAP)));
+      const rows = Math.max(1, Math.floor((ph - 24) / (CARD_H + GAP)));
+      // 已占用的格子（核心控件 + 已添加的可选控件，凡是有坐标的都算）
+      const taken = new Set();
+      const mark = (pos) => {
+        if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return;
+        const c = Math.round(pos.x / (CARD_W + GAP));
+        const r = Math.round(pos.y / (CARD_H + GAP));
+        if (c >= 0 && r >= 0 && c < cols && r < rows) taken.add(c + ',' + r);
+      };
+      for (const key of ['title', 'avatar', 'version', 'launch', 'running']) mark(layout[key]);
+      for (const w of this.optionalWidgets) {
+        if (w.id !== id) mark(layout[w.id]);
+      }
+      // 从左下开始找空位（右上通常被版本卡占着）
+      for (let r = rows - 1; r >= 0; r--) {
+        for (let c = 0; c < cols; c++) {
+          if (taken.has(c + ',' + r)) continue;
+          layout[id] = { x: c * (CARD_W + GAP) + 12, y: r * (CARD_H + GAP) + 12 };
+          saveHomeLayout(layout);
+          return;
+        }
+      }
+      // 全满：退化为右下角堆叠
+      layout[id] = { x: pw - CARD_W - 12, y: ph - CARD_H - 12 };
+      saveHomeLayout(layout);
+    },
+    /** 从 home-widgets 同步「已添加」集合到视图 */
+    syncVisibleWidgets() {
+      const layout = loadHomeLayout();
+      const next = {};
+      for (const w of OPTIONAL_WIDGETS) {
+        if (isWidgetVisible(layout, w.id)) next[w.id] = true;
+      }
+      this.visibleWidgets = next;
     },
     // ── 布局编辑 ──
     /** 进入编辑：只记录草稿位置，不写 localStorage */
     beginLayoutEdit() {
       if (this.editingLayout) return;
       this.editingLayout = true;
+      this.widgetPickerOpen = false;
       this._draftChanged = {};
     },
     /** 取消编辑：丢弃草稿，恢复已保存布局 */
     cancelLayoutEdit() {
       if (!this.editingLayout) return;
       this.editingLayout = false;
+      this.widgetPickerOpen = false;
       this._draftChanged = {};
       this.applyLayout();
     },
@@ -155,6 +325,7 @@ const PageHome = {
       }
       saveHomeLayout(layout);
       this.editingLayout = false;
+      this.widgetPickerOpen = false;
       this._draftChanged = {};
       this.applyLayout();
     },
@@ -181,7 +352,12 @@ const PageHome = {
       const defaultCenterLeft = viewportWidth > 0
         ? (viewportWidth / 2) - pageRect.left
         : pw / 2;
-      for (const key of ['title', 'avatar', 'version', 'launch', 'running']) {
+      const layoutKeys = ['title', 'avatar', 'version', 'launch', 'running'];
+      // 已添加的可选控件全部参与布局收敛（download 走专属卡片，其余走导航卡）
+      for (const w of this.optionalWidgets) {
+        if (this.visibleWidgets[w.id]) layoutKeys.push(w.id);
+      }
+      for (const key of layoutKeys) {
         const el = this.widgetByKey(key);
         if (!el) continue;
         const pos = (!force && layout[key]) ? layout[key] : null;
@@ -202,8 +378,10 @@ const PageHome = {
           el.style.bottom = '';
           el.style.transform = '';
           // 居中控件以窗口中心为 left（CSS 的 translateX(-50%) 继续负责自身半宽修正）；
-          // 运行卡片保持 CSS 的左下停靠，不参与窗口居中。
-          if (key !== 'running') el.style.left = defaultCenterLeft + 'px';
+          // 运行卡片、下载卡与导航卡保持 CSS 停靠，不参与窗口居中。
+          const centered = key !== 'running' && key !== 'download'
+            && !(WIDGETS[key] && WIDGETS[key].core === false);
+          if (centered) el.style.left = defaultCenterLeft + 'px';
         }
       }
       // 头像缩放（恢复默认时重置为 1）
@@ -276,6 +454,32 @@ const PageHome = {
         document.addEventListener('pointercancel', onUp);
       });
     },
+    /** 绑定可选控件的拖动（元素存在与否都要安全） */
+    bindOptionalWidgets() {
+      const self = this;
+      // 下载卡
+      const dl = this.widgetByKey('download');
+      if (dl && this._boundDownloadEl !== dl) {
+        this._boundDownloadEl = dl;
+        this.bindDrag(dl, 'download', null, 'button, input, a, .home-download-actions');
+      }
+      // 版本页面 / 版本存档：有真实内容的卡片，整卡拖动
+      for (const key of ['version-browser', 'save-browser']) {
+        const el = this.widgetByKey(key);
+        if (el && this._boundNav[key] !== el) {
+          this._boundNav[key] = el;
+          this.bindDrag(el, key, null, 'a, button');
+        }
+      }
+      // 导航小卡片：v-show 控制显隐，元素在首次渲染后就存在
+      for (const w of this.navWidgets) {
+        const refs = this.$refs['navEl_' + w.id];
+        const el = refs && refs.length ? refs[0] : refs;
+        if (!el || this._boundNav[w.id] === el) continue;
+        this._boundNav[w.id] = el;
+        this.bindDrag(el, w.id, function () { self.onNavWidgetClick(w); });
+      }
+    },
     /** 编辑模式下拦截控件点击，只有工具栏按钮可用 */
     setupEditClickGuard() {
       const self = this;
@@ -283,7 +487,9 @@ const PageHome = {
       if (!page) return;
       page.addEventListener('click', function (e) {
         if (!self.editingLayout) return;
-        if (e.target && e.target.closest && e.target.closest('.home-edit-toolbar')) return;
+        if (!e.target || !e.target.closest) return;
+        // 工具栏与控件库面板是编辑期唯一可交互的区域
+        if (e.target.closest('.home-edit-toolbar') || e.target.closest('.home-widget-picker')) return;
         e.preventDefault();
         e.stopImmediatePropagation();
       }, true);
@@ -327,7 +533,14 @@ const PageHome = {
       this.bindDrag(this.$refs.launchEl, 'launch', null);
       // 运行卡片：编辑模式下拖动（排除内部「停止」按钮，避免点击停止被拖动吞掉）
       this.bindDrag(this.$refs.runningEl, 'running', null, '.home-running-stop');
+      // 下载控件：只有添加后才存在；排除内部按钮，避免拖动吞掉点击
+      this.bindOptionalWidgets();
       this.setupEditClickGuard();
+      // 控件库添加/移除后同步视图（可能在别处被触发，比如浏览器请求自动添加）
+      this._offLayoutChange = onLayoutChange(function () {
+        self.syncVisibleWidgets();
+        self.$nextTick(function () { self.applyLayout(); self.bindOptionalWidgets(); });
+      });
       // 窗口尺寸变化时把控件收回可视区域；编辑中保留草稿位置，不重读已保存布局
       window.addEventListener('resize', function () { if (!self.editingLayout) self.applyLayout(); });
       // 页面自身尺寸变化同样要重新收敛：导航模式切换的 padding 过渡、侧栏展开/收起、
@@ -351,11 +564,14 @@ const PageHome = {
           self.syncRunningCard();
         });
       });
-      // 个性化页「恢复主页默认布局」
+      // 个性化页「恢复主页默认布局」：只重置坐标，保留已添加的控件集合
       window.addEventListener('versepc-home-layout-reset', function () {
         self.editingLayout = false;
+        self.widgetPickerOpen = false;
         self._draftChanged = {};
-        self.applyLayout(true);
+        resetWidgetPositions();
+        self.syncVisibleWidgets();
+        self.$nextTick(function () { self.applyLayout(true); self.bindOptionalWidgets(); });
       });
     },
     /** 运行卡片由 v-if 延迟挂载：出现后应用保存位置并绑定拖动 */
@@ -388,6 +604,8 @@ const PageHome = {
     }
   },
   beforeUnmount() {
+    if (typeof this._offLayoutChange === 'function') { this._offLayoutChange(); this._offLayoutChange = null; }
+    if (typeof this._offRequest === 'function') { this._offRequest(); this._offRequest = null; }
     if (this._layoutObserver) {
       this._layoutObserver.disconnect();
       this._layoutObserver = null;
@@ -411,9 +629,21 @@ const PageHome = {
       if (typeof updateGameStatus === 'function') {
         updateGameStatus().catch(function (e) { console.error('[PageHome] updateGameStatus error:', e); });
       }
-      // 应用持久化布局 / 默认位置，并绑定拖动与缩放
-      self.applyLayout();
-      self.setupWidgets();
+      // 先对齐后端保存的布局（localStorage 可能因强杀丢数据），
+      // 再同步「已添加控件」集合，最后收敛坐标。
+      hydrateHomeLayoutFromBackend().then(function () {
+        self.syncVisibleWidgets();
+        self.$nextTick(function () {
+          self.applyLayout();
+          self.setupWidgets();
+        });
+      }).catch(function () {
+        self.syncVisibleWidgets();
+        self.$nextTick(function () {
+          self.applyLayout();
+          self.setupWidgets();
+        });
+      });
       // 运行卡片由 v-if 延迟挂载，轮询检测其出现并应用布局
       self.syncRunningCard();
       self._runningTimer = setInterval(function () { self.syncRunningCard(); }, 1200);

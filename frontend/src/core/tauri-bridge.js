@@ -273,6 +273,14 @@ export const bridge = (function () {
     openExternal: function (url) {
       return invoke('open_external', { url: url });
     },
+    // 打开浏览器扩展商店：优先 Edge，没装 Edge 时用默认浏览器（Rust 侧决定）
+    openExtensionStore: function () {
+      return invoke('open_extension_store', {});
+    },
+    // 打开任意 URL，但优先用 Edge（用于"这个链接在 Edge 里打开更合适"的场景）
+    openExternalInEdge: function (url) {
+      return invoke('open_external_in_edge', { url: url });
+    },
     getDefaultModPath: function (versionId) {
       return invoke('get_default_mod_path', versionId ? { versionId: versionId } : {}).then(function (result) {
         if (result && result.success) return result.path;
@@ -462,6 +470,8 @@ export const bridge = (function () {
     isLinux: system.isLinux,
     memoryOptimize: system.memoryOptimize,
     openExternal: system.openExternal,
+    openExtensionStore: system.openExtensionStore,
+    openExternalInEdge: system.openExternalInEdge,
     getDefaultModPath: system.getDefaultModPath,
     getDefaultModSaveFolder: system.getDefaultModSaveFolder,
     getDroppedFilePath: system.getDroppedFilePath,
@@ -497,6 +507,19 @@ export const bridge = (function () {
   });
 
   // ============== 额外：暴露 api_proxy 让 api.js 使用 ==============
+  // 通用命令调用：features 层需要调用自定义 #[tauri::command] 时统一走这里，
+  // 避免各模块直接摸 window.__TAURI__（架构护栏会拦）。
+  bridgeObj.invoke = function (cmd, args) {
+    return invoke(cmd, args || {});
+  };
+
+  // 浏览器下载接管：订阅后端推送的 download-request
+  bridgeObj.onDownloadRequest = function (callback) {
+    return onTauriEvent('download-request', function (payload) {
+      if (typeof callback === 'function') callback(payload);
+    });
+  };
+
   bridgeObj.apiProxy = function (method, path, params, body) {
     return invoke('api_proxy', {
       method: method,
