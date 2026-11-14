@@ -14,6 +14,17 @@ use crate::storage;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+/// 加载器安装进度回调：百分比（0-100）+ 当前步骤文案。
+/// 由安装编排层注入，用于把「下载支持库 / 运行安装器」等耗时步骤反馈到安装界面。
+pub type LoaderProgress = std::sync::Arc<dyn Fn(u32, &str) + Send + Sync>;
+
+/// 安全触发进度回调（未注入时什么也不做）
+pub(crate) fn report_progress(progress: Option<&LoaderProgress>, pct: u32, msg: &str) {
+    if let Some(cb) = progress {
+        cb(pct.min(100), msg);
+    }
+}
+
 /// 共享 HTTP 客户端（懒加载）
 static HTTP_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
 
@@ -854,6 +865,7 @@ pub async fn run_subprocess_with_timeout(
 pub(crate) async fn prefetch_installer_libraries(
     installer_path: &std::path::Path,
     label: &str,
+    progress: Option<&LoaderProgress>,
 ) -> Result<usize, String> {
     fn entry_bytes<R: std::io::Read + std::io::Seek>(
         archive: &mut zip::ZipArchive<R>,
@@ -927,7 +939,14 @@ pub(crate) async fn prefetch_installer_libraries(
 
     let libs_dir = libraries_dir();
     let mut handled = 0usize;
-    for (name, path, url, sha1, size) in &libs {
+    let total = libs.len();
+    for (idx, (name, path, url, sha1, size)) in libs.iter().enumerate() {
+        // 逐个文件上报进度，避免安装界面长时间停在同一个百分比上（PCL 同样显示当前下载项）
+        report_progress(
+            progress,
+            20 + (idx as u32 * 60 / total.max(1) as u32),
+            &format!("正在下载{}支持库 {}/{}：{}", label, idx + 1, total, name),
+        );
         let dest = libs_dir.join(path);
         let internal_err = match crate::download::single::download_with_mirror(
             url,
@@ -975,6 +994,7 @@ pub(crate) async fn prefetch_installer_libraries(
     }
     Ok(handled)
 }
+
 
 /// 用系统自带的 curl 下载文件（绕过程序内部网络无法连接某些源的情况）
 /// curl 使用系统网络通道和系统证书，能连上程序内部连不上的地址。

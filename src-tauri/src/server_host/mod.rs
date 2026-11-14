@@ -960,3 +960,22 @@ mod install;
 pub(crate) use install::*;
 mod mods;
 pub(crate) use mods::*;
+
+#[cfg(test)]
+mod id_tests {
+    use super::*;
+
+    #[test]
+    fn gen_id_is_base36_and_never_panics() {
+        for _ in 0..2000 {
+            let id = gen_id();
+            let suffix = id.strip_prefix("srv_").expect("id 前缀");
+            let (ts, rand) = suffix.split_once('_').expect("id 分隔符");
+            assert!(!ts.is_empty() && ts.chars().all(|c| c.is_ascii_hexdigit()));
+            assert_eq!(rand.len(), 5);
+            // 原实现会生成 q..z 之外的越界字符并 panic，这里要求全部落在 0-9a-z
+            assert!(rand.chars().all(|c| c.is_ascii_digit() || c.is_ascii_lowercase()));
+        }
+    }
+}
+

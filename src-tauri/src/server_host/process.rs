@@ -135,15 +135,10 @@ pub(crate) fn gen_id() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
+    // 直接取 36 进制字符：原实现把 10..35 映射到 26..51，超过基数 36 时
+    // from_digit 返回 None 并 panic，创建服务器会随机卡死。
     let rand_part: String = (0..5)
-        .map(|_| {
-            let n = rand::random::<u32>() % 36;
-            if n < 10 {
-                char::from_digit(n, 10).unwrap()
-            } else {
-                char::from_digit(n - 10 + 26, 36).unwrap()
-            }
-        })
+        .map(|_| char::from_digit(rand::random::<u32>() % 36, 36).unwrap_or('0'))
         .collect();
     format!("srv_{:x}_{}", ts, rand_part)
 }

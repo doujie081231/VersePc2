@@ -547,6 +547,10 @@ pub fn run() {
         .register_uri_scheme_protocol("wewp", |_app, request| {
             wallpaper_engine::handle_wewp_request(&request)
         })
+        // wpfile:// 协议：壁纸视频/图片按 Range 直接读取本地文件（仅媒体扩展名 + 白名单）
+        .register_uri_scheme_protocol("wpfile", |_app, request| {
+            wallpaper_engine::handle_wpfile_request(&request)
+        })
         .setup(|app| {
             println!("[boot] setup start {}", chrono::Local::now().format("%H:%M:%S%.3f"));
             // 初始化存储：使用便携版数据目录（数据跟 exe 走）

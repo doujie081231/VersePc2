@@ -210,6 +210,7 @@ pub async fn install_neoforge(
     game_version: &str,
     neo_version: &str,
     target_version_id: Option<&str>,
+    progress: Option<&shared::LoaderProgress>,
 ) -> Value {
     eprintln!(
         "[NeoForge] 安装 game={} neo={} target={:?}",
@@ -260,6 +261,7 @@ pub async fn install_neoforge(
     }
 
     let mut installer_ok = false;
+    shared::report_progress(progress, 2, "正在下载 NeoForge 安装器...");
     for url in &installer_urls {
         eprintln!("[NeoForge] 下载 installer: {}", url);
         let mut downloaded_ok = false;
@@ -365,7 +367,8 @@ pub async fn install_neoforge(
 
     // 安装器内部按 install_profile.json 里的官方 Maven 地址下载依赖，
     // 国内直连常见超时；先按库清单预下载到 libraries，安装器校验通过后会跳过联网下载。
-    match shared::prefetch_installer_libraries(&installer_path, "NeoForge").await {
+    shared::report_progress(progress, 18, "正在准备 NeoForge 支持库...");
+    match shared::prefetch_installer_libraries(&installer_path, "NeoForge", progress).await {
         Ok(count) => eprintln!("[NeoForge] 支持库预下载完成: {} 个", count),
         Err(e) => {
             let _ = std::fs::remove_file(&installer_path);
@@ -387,6 +390,11 @@ pub async fn install_neoforge(
     eprintln!(
         "[NeoForge] 执行: java -jar ... --installClient {}",
         data_dir.display()
+    );
+    shared::report_progress(
+        progress,
+        82,
+        "正在运行 NeoForge 安装器（下载/处理支持库，可能需要几分钟）...",
     );
 
     let mut last_error: Option<String> = None;
@@ -489,6 +497,7 @@ pub async fn install_neoforge(
             "error": format!("NeoForge installer 失败（所有 Java 候选均失败）: {}", err_tail)
         });
     }
+    shared::report_progress(progress, 92, "NeoForge 安装器执行完成，正在整理版本文件...");
 
     // 6. 定位 installer 生成的版本目录
     // NeoForge installer 创建的版本目录名可能因 installer 版本不同而变化

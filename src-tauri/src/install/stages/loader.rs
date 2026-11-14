@@ -42,6 +42,20 @@ pub(crate) async fn run(ctx: &InstallCtx) -> Result<(), StageError> {
     );
 
     let game_version = ctx.game_version().to_string();
+    // 把安装器内部的耗时步骤（下载支持库 / 运行安装器）反馈到安装进度，
+    // 避免长时间停在同一百分比让用户以为卡死（PCL 同样显示当前子步骤）。
+    let progress_cb: modloaders::shared::LoaderProgress = {
+        let app = ctx.app.clone();
+        let sid = ctx.session_id.clone();
+        std::sync::Arc::new(move |pct: u32, msg: &str| {
+            session::update_session(&app, &sid, |s| {
+                s.progress = crate::install::context::calc_progress(&session::InstallStage::Loader, pct);
+                s.stage = session::InstallStage::Loader;
+                s.message = msg.to_string();
+            });
+        })
+    };
+    let progress = Some(&progress_cb);
     let mut result = json!({ "success": false, "error": "未知加载器类型" });
     match loader_type {
         "forge" => {
@@ -49,6 +63,7 @@ pub(crate) async fn run(ctx: &InstallCtx) -> Result<(), StageError> {
                 &game_version,
                 loader_version,
                 Some(&ctx.actual_version_id),
+                progress,
             )
             .await;
         }
@@ -57,6 +72,7 @@ pub(crate) async fn run(ctx: &InstallCtx) -> Result<(), StageError> {
                 &game_version,
                 loader_version,
                 Some(&ctx.actual_version_id),
+                progress,
             )
             .await;
         }

@@ -674,6 +674,30 @@ pub async fn read_file_buffer(_app: tauri::AppHandle, path: String) -> Result<Ve
     std::fs::read(&normalized).map_err(|e| e.to_string())
 }
 
+/// wpfile:// 媒体协议的白名单校验：仅媒体扩展名，且必须与 read_file_buffer 同源授权。
+/// 供壁纸视频/图片按 Range 直接流式播放，避免把整个视频经 IPC 读成字节数组。
+pub(crate) fn is_stream_media_allowed(path: &std::path::Path) -> bool {
+    let Ok(canonical) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    let normalized = normalize_path_for_allowlist(&canonical);
+    if !normalized.is_file() {
+        return false;
+    }
+    let ext = normalized
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !READABLE_MEDIA_EXTS.contains(&ext.as_str()) {
+        return false;
+    }
+    let data_dir = std::fs::canonicalize(storage::resolve_data_dir())
+        .map(|p| normalize_path_for_allowlist(&p))
+        .unwrap_or_else(|_| normalize_path_for_allowlist(&storage::resolve_data_dir()));
+    is_read_allowed(&normalized, &data_dir, &sensitive_read_roots())
+}
+
 #[cfg(test)]
 mod read_guard_tests {
     use super::*;

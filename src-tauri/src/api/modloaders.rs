@@ -228,6 +228,7 @@ async fn handle_forge_install(body: &Option<Value>) -> ApiResult {
         &game_version,
         &forge_version,
         if target_version_id.is_empty() { None } else { Some(&target_version_id) },
+        None,
     )
     .await;
 
@@ -259,6 +260,7 @@ async fn handle_neoforge_install(body: &Option<Value>) -> ApiResult {
         &game_version,
         &neo_version,
         if target_version_id.is_empty() { None } else { Some(&target_version_id) },
+        None,
     )
     .await;
 

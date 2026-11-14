@@ -173,6 +173,7 @@ pub async fn install_forge(
     game_version: &str,
     forge_version: &str,
     target_version_id: Option<&str>,
+    progress: Option<&shared::LoaderProgress>,
 ) -> Value {
     eprintln!(
         "[Forge] 安装 game={} forge={} target={:?}",
@@ -221,6 +222,7 @@ pub async fn install_forge(
     }
 
     let mut installer_ok = false;
+    shared::report_progress(progress, 2, "正在下载 Forge 安装器...");
     for url in &installer_urls {
         eprintln!("[Forge] 下载 installer: {}", url);
         let mut downloaded_ok = false;
@@ -311,7 +313,8 @@ pub async fn install_forge(
     // 现代 Forge installer 会在联网阶段(其内置的 CreeperHost/官方源)逐个下载这些库,
     // 国内网络经常读取超时导致整次安装失败。这里先按 installer 声明的库清单
     // 走本地镜像链路下载到位,installer 检测到文件已存在且校验通过即跳过联网下载。
-    match prefetch_installer_libraries(&installer_path).await {
+    shared::report_progress(progress, 18, "正在准备 Forge 支持库...");
+    match prefetch_installer_libraries(&installer_path, progress).await {
         Ok(count) => {
             eprintln!("[Forge] 支持库预下载完成: {} 个", count);
         }
@@ -354,6 +357,11 @@ pub async fn install_forge(
     shared::ensure_launcher_profile(game_version);
 
     eprintln!("[Forge] 执行: java -jar ... --installClient {}", data_dir.display());
+    shared::report_progress(
+        progress,
+        82,
+        "正在运行 Forge 安装器（下载/处理支持库，可能需要几分钟）...",
+    );
 
     let mut last_error: Option<String> = None;
     let mut installed = false;
@@ -424,6 +432,7 @@ pub async fn install_forge(
             "error": format!("Forge installer 失败（所有 Java 候选均失败）: {}", err_tail)
         });
     }
+    shared::report_progress(progress, 92, "Forge 安装器执行完成，正在整理版本文件...");
 
     // 6. 定位 installer 生成的版本目录
     // Forge installer 会创建 versions/<default_version_id>/<default_version_id>.json
@@ -532,8 +541,11 @@ pub async fn install_forge(
 }
 
 /// 预下载 installer 声明的全部支持库（Forge/NeoForge 共用实现）。
-async fn prefetch_installer_libraries(installer_path: &std::path::Path) -> Result<usize, String> {
-    shared::prefetch_installer_libraries(installer_path, "Forge").await
+async fn prefetch_installer_libraries(
+    installer_path: &std::path::Path,
+    progress: Option<&shared::LoaderProgress>,
+) -> Result<usize, String> {
+    shared::prefetch_installer_libraries(installer_path, "Forge", progress).await
 }
 
 /// 取版本号第一段（点号之前的整数部分）；解析失败返回 0

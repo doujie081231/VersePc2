@@ -1,4 +1,3 @@
-import { bridge as bridge } from '../../core/tauri-bridge.js';
 import { showToast as showToast } from '../misc/ui-components.js';
 import { wpfilePath, wewpVideoPath } from './wallpaper-utils.js';
 
@@ -40,32 +39,19 @@ class CustomVideoRenderer {
             this._brightnessCheckInterval = null;
         }
 
-        // WE 视频壁纸：直接用 wewp 本地协议按 Range 流式读取原文件，
-        // 不再把整个视频经 IPC 序列化成字节数组（大文件会失败/崩溃，且会损失画质）。
+        // WE 视频壁纸：直接用 wewp 本地协议按 Range 流式读取原文件；
+        // 普通自定义视频走 wpfile 协议，同样按 Range 流式播放。
+        // 之前用 readFileBuffer 把整个视频经 IPC 读成字节数组，大文件一定失败，
+        // 失败后回退的 wpfile 协议此前未注册，于是必然提示「视频壁纸加载失败」。
         const weVideo = this.engine.weVideo;
         const isWeStream = !!(weVideo && weVideo.id && weVideo.file);
-        let videoUrl = isWeStream
-            ? wewpVideoPath(weVideo.id, weVideo.file)
-            : filePath;
-        if (videoUrl && filePath && !isWeStream && !filePath.startsWith('blob:') && !filePath.startsWith('wpfile://')) {
-            try {
-                if (bridge && bridge.readFileBuffer) {
-                    const buffer = await bridge.readFileBuffer(filePath);
-                    // Tauri 返回的 Vec<u8> 会序列化为数字数组，需先转成 Uint8Array 才能正确构造 Blob
-                    const u8 = buffer ? (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)) : null;
-                    if (u8 && u8.byteLength > 0) {
-                        const blob = new Blob([u8], { type: 'video/mp4' });
-                        videoUrl = URL.createObjectURL(blob);
-                    } else {
-                        videoUrl = wpfilePath(filePath);
-                    }
-                } else {
-                    videoUrl = wpfilePath(filePath);
-                }
-            } catch (e) {
-                console.error('[Wallpaper] Failed to read video buffer:', e);
-                videoUrl = wpfilePath(filePath);
-            }
+        let videoUrl;
+        if (isWeStream) {
+            videoUrl = wewpVideoPath(weVideo.id, weVideo.file);
+        } else if (filePath && !filePath.startsWith('blob:') && !filePath.startsWith('wpfile://')) {
+            videoUrl = wpfilePath(filePath);
+        } else {
+            videoUrl = filePath;
         }
 
         // 创建 video DOM 元素，用 CSS filter 实现 GPU 加速 blur

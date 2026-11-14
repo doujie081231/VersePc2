@@ -573,11 +573,46 @@ pub fn handle_wewp_request(request: &tauri::http::Request<Vec<u8>>) -> tauri::ht
     if !canon_file.starts_with(&canon_dir) {
         return forbidden_response();
     }
-    let Ok(meta) = std::fs::metadata(&canon_file) else {
+    // 二次校验通过后交给通用 Range 服务
+    let mime = mime_for(&rel_decoded);
+    serve_file(&file_path, mime, request, mime.starts_with("text/html"))
+}
+
+/// wpfile:// 本地媒体协议：让 `<video>` / `<img>` 直接按 Range 流式读取已授权的本地媒体文件。
+/// 之前自定义视频壁纸走 IPC 读整文件，大文件会失败；回退地址又指向不存在的 wpfile 协议，
+/// 结果必然「视频壁纸加载失败」。这里只放行媒体扩展名 + read_file_buffer 同一套白名单。
+pub fn handle_wpfile_request(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    let uri = request.uri().to_string();
+    // Windows 下自定义协议以 http://wpfile.localhost 形式到达
+    let after_scheme = uri
+        .strip_prefix("wpfile://")
+        .or_else(|| uri.strip_prefix("http://wpfile.localhost"))
+        .unwrap_or(&uri);
+    let path_part = after_scheme.split('?').next().unwrap_or(after_scheme);
+    // Windows 本机路径为 /D:/dir/a.mp4，去掉前导斜杠
+    let decoded = percent_decode(path_part.trim_start_matches('/'));
+    if decoded.is_empty() {
+        return not_found_response();
+    }
+    let path = std::path::PathBuf::from(&decoded);
+    if !crate::filesystem::is_stream_media_allowed(&path) {
+        return forbidden_response();
+    }
+    let mime = mime_for(&decoded);
+    serve_file(&path, mime, request, false)
+}
+
+/// 按 HTTP Range 返回本地文件（不支持的请求返回 416）
+fn serve_file(
+    file_path: &std::path::Path,
+    mime: &'static str,
+    request: &tauri::http::Request<Vec<u8>>,
+    inject_html_shim: bool,
+) -> tauri::http::Response<Vec<u8>> {
+    let Ok(meta) = std::fs::metadata(file_path) else {
         return not_found_response();
     };
     let len = meta.len();
-    let mime = mime_for(&rel_decoded);
 
     // WE 视频壁纸通过 wewp:// 直接播放原文件：必须支持 HTTP Range，
     // 否则 WebView 媒体栈会退化为整文件读取（大文件内存暴涨甚至崩溃）。
@@ -598,7 +633,7 @@ pub fn handle_wewp_request(request: &tauri::http::Request<Vec<u8>>) -> tauri::ht
     }
 
     if let Some((start, end)) = range {
-        let mut file = match std::fs::File::open(&file_path) {
+        let mut file = match std::fs::File::open(file_path) {
             Ok(f) => f,
             Err(_) => return not_found_response(),
         };
@@ -620,10 +655,10 @@ pub fn handle_wewp_request(request: &tauri::http::Request<Vec<u8>>) -> tauri::ht
             .unwrap_or_else(|_| not_found_response());
     }
 
-    let Ok(bytes) = std::fs::read(&file_path) else {
+    let Ok(bytes) = std::fs::read(file_path) else {
         return not_found_response();
     };
-    let body = if mime.starts_with("text/html") {
+    let body = if inject_html_shim {
         inject_we_shim(&bytes)
     } else {
         bytes

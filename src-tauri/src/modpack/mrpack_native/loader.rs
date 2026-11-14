@@ -32,6 +32,7 @@ pub(crate) async fn install_loader(
                 mc_version,
                 forge_ver,
                 Some(&target_id),
+                None,
             )
             .await;
             if !r.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
@@ -61,6 +62,7 @@ pub(crate) async fn install_loader(
                 mc_version,
                 neoforge_ver,
                 Some(&target_id),
+                None,
             )
             .await;
             if !r.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {

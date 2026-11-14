@@ -244,7 +244,7 @@ pub async fn ensure_loader_compat(
     let install_result = if loader_type == "fabric" {
         crate::modloaders::fabric::install_fabric_with_target(mc_version, &needed, &new_loader_version_id).await
     } else {
-        crate::modloaders::forge::install_forge(mc_version, &needed, Some(&new_loader_version_id)).await
+        crate::modloaders::forge::install_forge(mc_version, &needed, Some(&new_loader_version_id), None).await
     };
 
     if !install_result
