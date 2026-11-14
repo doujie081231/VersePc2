@@ -4961,7 +4961,7 @@ dependencies = [
 
 [[package]]
 name = "verse-tauri"
-version = "1.9.0"
+version = "1.8.10"
 dependencies = [
  "aes",
  "async-walkdir",
