@@ -47,5 +47,6 @@ if (Get-Command cargo.exe -ErrorAction SilentlyContinue) { Write-Host "cargo: OK
 if (Get-Command node.exe -ErrorAction SilentlyContinue) { Write-Host "node: OK" } else { Write-Host "node: MISSING" }
 
 Set-Location 'D:\Verse Explorer X\versepc2'
-node 'D:\Verse Explorer X\versepc2\scripts\build-portable.mjs'
+# 参数透传：build-msvc.ps1 --fast 走快速自测 profile
+node 'D:\Verse Explorer X\versepc2\scripts\build-portable.mjs' @args
 exit $LASTEXITCODE

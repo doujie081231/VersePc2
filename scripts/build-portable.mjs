@@ -19,6 +19,12 @@ const cargoTargetDir =
   process.env.VERSEPC2_TARGET_DIR ||
   join('E:', 'VerseTools', '.verse-target');
 const portableDir = join(buildRoot, 'dist');
+// 快速验证模式：跳过 LTO/单 codegen-unit 的 release 全量重编译，
+// 只构建 opt-level=0 + 增量 的 fast profile，供本地自测，产物名带 -fast 后缀避免与发布包混淆。
+const fastMode = process.argv.includes('--fast') || process.env.VERSEPC2_FAST === '1';
+const cargoProfile = fastMode ? 'fast' : 'release';
+const exeName = fastMode ? 'VersePC2-fast.exe' : 'VersePC2.exe';
+const buildStart = Date.now();
 
 function run(cmd) {
   console.log(`\n> ${cmd}`);
@@ -32,6 +38,26 @@ function firstExisting(paths) {
   return null;
 }
 
+// 递归取文件/目录树里最新的 mtime（毫秒），用于判断前端产物是否已是最新
+function newestMtime(target) {
+  let newest = 0;
+  let info;
+  try {
+    info = statSync(target);
+  } catch {
+    return 0;
+  }
+  if (!info.isDirectory()) return info.mtimeMs;
+  for (const entry of readdirSync(target, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const filePath = join(entry.parentPath ?? entry.path, entry.name);
+    try {
+      newest = Math.max(newest, statSync(filePath).mtimeMs);
+    } catch { /* 文件刚被删除，忽略 */ }
+  }
+  return Math.max(newest, info.mtimeMs);
+}
+
 // 1. 读取版本号
 const tauriConf = JSON.parse(readFileSync(join(projectRoot, 'src-tauri', 'tauri.conf.json'), 'utf8'));
 const version = tauriConf.version || '0.0.0';
@@ -41,17 +67,37 @@ console.log(`[build-portable] 构建目录: ${buildRoot}`);
 // 2. 重定向 Cargo 构建产物到 E 盘（避免 C 盘 target 目录不断膨胀）
 process.env.CARGO_TARGET_DIR = cargoTargetDir;
 
-// 3. 编译 Tauri（只生成 exe，不打包安装包）
-//    tauri.conf.json 的 beforeBuildCommand 会自动执行 vite build
-run('npx tauri build');
+// 3. 编译 exe
+//    默认走 tauri CLI（release 全量优化：opt-level=z + LTO + 单 codegen-unit），用于正式发布；
+//    --fast 走 fast profile（opt-level=1 + 增量），用于本地自测，改完 Rust/前端只需几十秒。
+if (fastMode) {
+  // 前端源码没比 frontend-dist 新时跳过 vite build：只改 Rust 时省掉约 20 秒，
+  // 且 frontend-dist 不变可让 cargo 直接命中缓存。
+  const webSourceMtime = Math.max(
+    newestMtime(join(projectRoot, 'frontend')),
+    newestMtime(join(projectRoot, 'vite.config.mjs')),
+  );
+  const distMtime = newestMtime(join(projectRoot, 'frontend-dist'));
+  const skipWebBuild =
+    process.argv.includes('--skip-web') || (distMtime > 0 && webSourceMtime <= distMtime);
+  console.log('[build-portable] fast 模式：cargo fast profile（不产物发布包）');
+  if (skipWebBuild) {
+    console.log('[build-portable] 前端产物已是最新，跳过 vite build（--skip-web 可强制跳过）');
+  } else {
+    run('npm run build:web');
+  }
+  run('cargo build --profile fast --bin verse-tauri --features custom-protocol --manifest-path src-tauri/Cargo.toml');
+} else {
+  run('npx tauri build');
+}
 
 // 4. 定位编译产物 exe（CARGO_TARGET_DIR 生效时在 E 盘，否则回退到项目 target）
 const exeSrc = firstExisting([
-  join(cargoTargetDir, 'release', 'verse-tauri.exe'),
-  join(projectRoot, 'src-tauri', 'target', 'release', 'verse-tauri.exe'),
+  join(cargoTargetDir, cargoProfile, 'verse-tauri.exe'),
+  join(projectRoot, 'src-tauri', 'target', cargoProfile, 'verse-tauri.exe'),
 ]);
 if (!exeSrc) {
-  console.error('[build-portable] 错误：找不到编译产物 verse-tauri.exe');
+  console.error(`[build-portable] 错误：找不到编译产物 ${cargoProfile}/verse-tauri.exe`);
   process.exit(1);
 }
 console.log(`[build-portable] 编译产物: ${exeSrc}`);
@@ -60,7 +106,8 @@ mkdirSync(portableDir, { recursive: true });
 
 // 打包产物统一为固定名 VersePC2.exe，不带版本后缀；
 // 升级时更新器把新包覆盖到正在运行的 exe 文件名上，使安装后的 exe 始终是 VersePC2.exe。
-copyFileSync(exeSrc, join(portableDir, 'VersePC2.exe'));
+// fast 模式产物单独命名，避免被误当发布包。
+copyFileSync(exeSrc, join(portableDir, exeName));
 
 // 5. 配套 WebView2Loader.dll（可选）
 //    - MSVC 构建会把 WebView2Loader 静态链接进 exe（import 表不含 WebView2Loader.dll），便携包只需单个 exe；
@@ -128,8 +175,8 @@ if (exeNeedsLoader) {
   // 找不到则中止打包，避免产出缺 DLL 的坏包
   const dllSrc = firstExisting([
     join(projectRoot, 'src-tauri', 'WebView2Loader.dll'),
-    join(cargoTargetDir, 'release', 'WebView2Loader.dll'),
-    join(projectRoot, 'src-tauri', 'target', 'release', 'WebView2Loader.dll'),
+    join(cargoTargetDir, cargoProfile, 'WebView2Loader.dll'),
+    join(projectRoot, 'src-tauri', 'target', cargoProfile, 'WebView2Loader.dll'),
     join(portableDir, 'WebView2Loader.dll'),
   ]);
   if (!dllSrc) {
@@ -205,7 +252,7 @@ function copyDllsClosure(entryFiles, destDir) {
   return copied;
 }
 
-if (process.env.VERSEPC2_BUILD_RENDERER_PACKAGE === '1' && existsSync(join(rendererSrcDir, 'verse-scene-renderer.exe'))) {
+if (!fastMode && process.env.VERSEPC2_BUILD_RENDERER_PACKAGE === '1' && existsSync(join(rendererSrcDir, 'verse-scene-renderer.exe'))) {
   // 闭包收集到 staging 目录 → tar 打包为 zip（zip 根目录即 exe 与 DLL）
   const staging = rendererDestDir;
   rmSync(staging, { recursive: true, force: true });
@@ -227,4 +274,5 @@ if (process.env.VERSEPC2_BUILD_RENDERER_PACKAGE === '1' && existsSync(join(rende
 
 console.log(`\n[build-portable] 便携版打包完成！`);
 console.log(`[build-portable] 输出目录: ${portableDir}`);
-console.log(`[build-portable] 产物: VersePC2.exe`);
+console.log(`[build-portable] 产物: ${exeName}`);
+console.log(`[build-portable] 耗时: ${((Date.now() - buildStart) / 1000).toFixed(1)}s`);

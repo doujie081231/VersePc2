@@ -8,6 +8,7 @@
     "dev": "tauri dev",
     "dev:web": "vite",
     "build": "node scripts/build-portable.mjs",
+    "build:fast": "node scripts/build-portable.mjs --fast",
     "build:web": "vite build",
     "build:setup": "tauri build --bundles nsis",
     "build:portable": "node scripts/build-portable.mjs",
