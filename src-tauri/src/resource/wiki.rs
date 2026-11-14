@@ -281,10 +281,7 @@ pub fn extract_words(entry: &WikiEntry, source: Platform) -> Vec<String> {
                 && v > 0.0 {
                     return false;
                 }
-            if !w.is_ascii() {
-                return false;
-            }
-            true
+            w.is_ascii()
         })
         .collect();
     words.dedup();

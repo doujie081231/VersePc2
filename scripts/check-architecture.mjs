@@ -117,6 +117,8 @@ const LEGACY_CSS_SNAPSHOT = new Set([
   'frontend/public/css/components/toolbox.css',
   'frontend/public/css/components/version-settings.css',
   'frontend/public/css/components/version-ui.css',
+  // 内置社区/皮肤站面板（PR #19 引入，按快照登记）
+  'frontend/public/css/components/webpanel.css',
   'frontend/public/dino/index.css',
   'frontend/public/v-island/dynamic-island.css',
 ]);
@@ -277,7 +279,11 @@ const TAURI_GLOBAL_BASELINE = new Map([
 //     记录当前域到域的 import 边，只允许减少；新增跨域调用必须走 core 中立入口。
 const FEATURE_CROSS_DOMAIN_BASELINE = new Map([
   ['accounts->misc', 6],
+  // 主页下载控件与下载桥（PR #22）：主页复用下载管理与提示组件
+  ['home->misc', 1],
+  ['home->versions', 1],
   ['launch->accounts', 3],
+  ['launch->home', 1],
   ['launch->misc', 20],
   ['launch->mods', 5],
   ['launch->settings', 13],
@@ -290,7 +296,7 @@ const FEATURE_CROSS_DOMAIN_BASELINE = new Map([
   ['mods->versions', 13],
   ['settings->accounts', 3],
   ['settings->launch', 4],
-  ['settings->misc', 12],
+  ['settings->misc', 13],
   ['settings->versions', 3],
   ['versions->accounts', 1],
   ['versions->launch', 1],

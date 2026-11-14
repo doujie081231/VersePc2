@@ -109,7 +109,7 @@ test('主页布局编辑需要显式进入并确认，默认不再显示存档�
 
 test('主页布局切页返回后按保存位置重新收敛', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('versepc_home_layout_v1', JSON.stringify({
+    localStorage.setItem('versepc_home_layout_v2', JSON.stringify({
       avatar: { x: 320, y: 180, s: 1 },
       version: { x: 430, y: 320 },
       launch: { x: 520, y: 430 },
@@ -148,7 +148,7 @@ test('主页返回时未保存位置的控件不会被入场动画推离居中�
   // 旧实现会给主页控件套通用入场动画，动画期间 transform 覆盖 translateX(-50%)，
   // 标题/头像先右移半个自身宽度，动画结束后再跳回；影响“返回主页弹跳卡顿”问题。
   await page.addInitScript(() => {
-    localStorage.setItem('versepc_home_layout_v1', JSON.stringify({
+    localStorage.setItem('versepc_home_layout_v2', JSON.stringify({
       version: { x: 430, y: 320 },
       launch: { x: 520, y: 430 },
     }));
@@ -213,7 +213,7 @@ test('主页布局拖动只有确认后才写入存储，取消会还原', async
   await clickPage(page, 'home');
   await expect(page.locator('.home-page')).not.toHaveClass(/home-layout-pending/, { timeout: 5000 });
 
-  const before = await page.evaluate(() => localStorage.getItem('versepc_home_layout_v1'));
+  const before = await page.evaluate(() => localStorage.getItem('versepc_home_layout_v2'));
 
   // 编辑模式下拖动头像
   const dragAvatar = async () => {
@@ -227,15 +227,15 @@ test('主页布局拖动只有确认后才写入存储，取消会还原', async
   await page.locator('#home-edit-layout-btn').click();
   await dragAvatar();
   // 未确认：存储不变
-  expect(await page.evaluate(() => localStorage.getItem('versepc_home_layout_v1'))).toBe(before);
+  expect(await page.evaluate(() => localStorage.getItem('versepc_home_layout_v2'))).toBe(before);
   await page.locator('#home-edit-cancel-btn').click();
-  expect(await page.evaluate(() => localStorage.getItem('versepc_home_layout_v1'))).toBe(before);
+  expect(await page.evaluate(() => localStorage.getItem('versepc_home_layout_v2'))).toBe(before);
 
   // 再次编辑并确认：位置写入存储
   await page.locator('#home-edit-layout-btn').click();
   await dragAvatar();
   await page.locator('#home-edit-confirm-btn').click();
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('versepc_home_layout_v1') || '{}'));
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('versepc_home_layout_v2') || '{}'));
   expect(saved.avatar).toBeTruthy();
   expect(Number.isFinite(saved.avatar.x)).toBe(true);
   expect(Number.isFinite(saved.avatar.y)).toBe(true);
