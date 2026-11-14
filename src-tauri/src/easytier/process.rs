@@ -178,6 +178,91 @@ async fn http_get_raw(http_port: u16, path: &str) -> Result<Value, String> {
     Err(last_err.unwrap_or_else(|| "未知错误".into()))
 }
 
+/// 单次、短超时的控制请求：只用于停止流程里的 graceful 通知，失败不重试、不阻塞。
+async fn http_get_quick(http_port: u16, path: &str) -> Option<Value> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(1500))
+        .no_proxy()
+        .build()
+        .ok()?;
+    let resp = client
+        .get(format!("http://127.0.0.1:{}{}", http_port, path))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let text = resp.text().await.ok()?;
+    if text.trim().is_empty() {
+        return Some(json!({ "ok": true }));
+    }
+    Some(serde_json::from_str::<Value>(&text).unwrap_or_else(|_| json!({ "text": text })))
+}
+
+/// 结束 terracotta 进程树。
+/// 只 kill 直接子进程会留下 easytier-core 等孙进程，它们继续占着虚拟网卡和房间会话，
+/// 导致下次创建房间被节点判定为「房间人数已达上限」，往往要重启电脑才能恢复。
+async fn kill_child_tree(child: &mut Child) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(pid) = child.id() {
+            let mut cmd = tokio::process::Command::new("taskkill");
+            cmd.args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            cmd.creation_flags(0x08000000);
+            let _ = cmd.status().await;
+        }
+    }
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+}
+
+/// 清理上一次启动器退出/崩溃后残留的 terracotta 进程（含派生子进程）。
+/// 陶瓦内核由本启动器独占管理，按镜像名清理不会误伤其它功能。
+fn kill_stale_processes() {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("taskkill");
+        cmd.args(["/IM", "terracotta.exe", "/T", "/F"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        cmd.creation_flags(0x08000000);
+        let _ = cmd.status();
+    }
+}
+
+/// 应用退出时同步清理：否则残留进程会继续占着虚拟网卡与房间会话，
+/// 下次启动创建房间会提示房间人数已满。
+pub fn shutdown_blocking() {
+    {
+        let mut g = POLLER.lock().unwrap();
+        if let Some(h) = g.take() {
+            h.abort();
+        }
+    }
+    let child_opt = {
+        let mut g = CHILD.lock().unwrap();
+        g.take()
+    };
+    if let Some(mut child) = child_opt {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(pid) = child.id() {
+                let mut cmd = std::process::Command::new("taskkill");
+                cmd.args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null());
+                cmd.creation_flags(0x08000000);
+                let _ = cmd.status();
+            }
+        }
+        let _ = child.start_kill();
+        let _ = child.try_wait();
+    }
+}
+
 /// 递归收集目录下所有文件
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(entries) = std::fs::read_dir(dir) {
@@ -357,6 +442,8 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
     // 内部启动前先停旧进程：不要清 saved_*，不要设 MANUAL_STOP
     stop_internal(false).await;
     *MANUAL_STOP.lock().unwrap() = false;
+    // 清理上次启动器异常退出后残留的内核进程，避免新旧会话同时占用虚拟网卡/房间
+    kill_stale_processes();
 
     let bin_path = state::get_binary_path();
     let port_file = std::env::temp_dir().join(format!("versepc-terracotta-{}.http", std::process::id()));
@@ -462,6 +549,8 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
     // 内部启动前先停旧进程：不要清 saved_*，不要设 MANUAL_STOP
     stop_internal(false).await;
     *MANUAL_STOP.lock().unwrap() = false;
+    // 清理上次启动器异常退出后残留的内核进程，避免新旧会话同时占用虚拟网卡/房间
+    kill_stale_processes();
 
     let bin_path = state::get_binary_path();
     let port_file = std::env::temp_dir().join(format!("versepc-terracotta-{}.http", std::process::id()));
@@ -560,6 +649,16 @@ async fn stop_internal(manual: bool) {
         *MANUAL_STOP.lock().unwrap() = true;
     }
 
+    // 先让内核回到空闲态，主动离开当前房间：直接杀进程会把房间会话留在节点侧，
+    // 短时间内重新开房会被判定为「房间人数已达上限」。
+    let http_port = state::get_status()
+        .get("httpPort")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u16;
+    if http_port != 0 {
+        let _ = http_get_quick(http_port, "/state/ide").await;
+    }
+
     // 停止轮询
     {
         let mut g = POLLER.lock().unwrap();
@@ -573,9 +672,11 @@ async fn stop_internal(manual: bool) {
         g.take()
     };
     if let Some(mut child) = child_opt {
-        let _ = child.kill().await;
-        let _ = child.wait().await;
+        kill_child_tree(&mut child).await;
     }
+
+    // 等虚拟网卡/端口释放，避免紧接着重启时与旧连接冲突
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     state::reset_to_idle();
     if manual {

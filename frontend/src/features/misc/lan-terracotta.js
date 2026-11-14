@@ -246,14 +246,86 @@ function initTerracottaPage() {
     const ob = document.getElementById('terracotta-onboarding');
     const main = document.getElementById('terracotta-main');
     if (!ob || !main) return;
-    // 核心已安装 → 直接显示主界面；未安装 → 首次使用引导
+    // 核心已安装 → 直接显示主界面；若后台仍有运行中的房间，恢复到对应房间界面
     API.easytierStatus().then(st => {
         if (st && st.installed) {
+            if (st.running && terracottaRestoreFromStatus(st)) return;
             showTerracottaMain();
         } else {
             showTerracottaOnboarding();
         }
     }).catch(() => showTerracottaOnboarding());
+}
+
+// 从后台状态恢复房间界面：离开页面（如切到设置）再回来时，后端隧道仍在运行，
+// 直接回到主机/客户端的分步界面，避免用户以为房间已丢失而重复创建。
+function terracottaRestoreFromStatus(st) {
+    const main = document.getElementById('terracotta-main');
+    const home = document.getElementById('terracotta-home');
+    if (!main || !home || !st) return false;
+    const mode = st.mode;
+    if (mode !== 'host' && mode !== 'guest') return false;
+
+    const ob = document.getElementById('terracotta-onboarding');
+    if (ob) ob.style.display = 'none';
+    main.style.display = '';
+    if (S.terracottaGamePoll) { clearInterval(S.terracottaGamePoll); S.terracottaGamePoll = null; }
+    home.style.display = 'none';
+    S.terracottaState = { mode, connected: true };
+
+    const raw = st.state || {};
+    const hint = document.getElementById('terracotta-hint');
+    if (mode === 'host') {
+        document.getElementById('terracotta-join-panel').style.display = 'none';
+        document.getElementById('terracotta-host-panel').style.display = '';
+        showTerracottaStep('host', 3);
+
+        const roomObj = raw.room;
+        const roomCode = (typeof roomObj === 'object' && roomObj !== null)
+            ? (roomObj.code || '')
+            : (roomObj || st.roomCode || '');
+        const codeEl = document.getElementById('terracotta-roomcode');
+        if (codeEl) codeEl.textContent = roomCode || '等待分配房间码...';
+
+        const virtualIp = st.virtualIP || raw.virtualIP || '';
+        const gamePort = st.gamePort || raw.gamePort || '';
+        const connectAddr = virtualIp && gamePort ? `${virtualIp}:${gamePort}` : '';
+        const connectAddrEl = document.getElementById('terracotta-connect-addr');
+        const connectRow = document.getElementById('terracotta-connect-row');
+        if (connectAddrEl) connectAddrEl.textContent = connectAddr || '--';
+        if (connectRow) connectRow.style.display = connectAddr ? '' : 'none';
+
+        if (hint) {
+            hint.textContent = roomCode ? '将房间码发送给朋友即可联机' : '正在恢复房间状态...';
+            hint.style.display = '';
+            hint.style.background = 'rgba(16,185,129,0.1)';
+            hint.style.color = 'var(--green)';
+        }
+        updateTerracottaStatus('陶瓦联机 - 主机', roomCode ? `房间码: ${roomCode}` : '正在恢复房间状态...', 'connected');
+    } else {
+        document.getElementById('terracotta-host-panel').style.display = 'none';
+        document.getElementById('terracotta-join-panel').style.display = '';
+        showTerracottaStep('join', 3);
+
+        const rawUrl = raw.url || st.virtualIP || '';
+        const connectUrl = rawUrl
+            ? (rawUrl.startsWith('127.0.0.1') ? rawUrl : `127.0.0.1${rawUrl.includes(':') ? ':' + rawUrl.split(':').pop() : ''}`)
+            : '';
+        const connectAddrEl = document.getElementById('terracotta-connect-addr');
+        if (connectAddrEl) connectAddrEl.textContent = connectUrl || '--';
+        if (hint) {
+            hint.textContent = connectUrl
+                ? `在Minecraft多人游戏中添加服务器地址: ${connectUrl}`
+                : '正在恢复房间状态...';
+            hint.style.display = '';
+            hint.style.background = 'rgba(16,185,129,0.1)';
+            hint.style.color = 'var(--green)';
+        }
+        updateTerracottaStatus('陶瓦联机 - 客户端', connectUrl ? `连接地址: ${connectUrl}` : '正在恢复连接...', 'connected');
+    }
+
+    terracottaStartPolling();
+    return true;
 }
 
 function showTerracottaOnboarding() {
@@ -455,4 +527,4 @@ function terracottaStartPolling() {
     }, 30000);
 }
 
-export { updateTerracottaStatus, terracottaHostStep1, terracottaHostNext, terracottaJoinStep1, terracottaJoinCodeInput, terracottaJoinNext, showTerracottaStep, terracottaBackToHome, terracottaHide, terracottaDisconnect, terracottaCopyRoomCode, terracottaCopyAddr, terracottaShowAgreement, terracottaExportLog, initTerracottaPage, showTerracottaOnboarding, showTerracottaMain, terracottaDownloadCore, completeTerracottaOnboarding, failTerracottaDownload, terracottaStartPolling };
+export { updateTerracottaStatus, terracottaHostStep1, terracottaHostNext, terracottaJoinStep1, terracottaJoinCodeInput, terracottaJoinNext, showTerracottaStep, terracottaBackToHome, terracottaHide, terracottaDisconnect, terracottaCopyRoomCode, terracottaCopyAddr, terracottaShowAgreement, terracottaExportLog, initTerracottaPage, terracottaRestoreFromStatus, showTerracottaOnboarding, showTerracottaMain, terracottaDownloadCore, completeTerracottaOnboarding, failTerracottaDownload, terracottaStartPolling };

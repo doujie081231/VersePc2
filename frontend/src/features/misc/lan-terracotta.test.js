@@ -591,6 +591,60 @@ describe('onboarding', () => {
   });
 });
 
+describe('运行中的房间恢复', () => {
+  it('后台仍有主机房间时恢复到房间码界面', async () => {
+    mockApiRoute('/api/easytier/status', {
+      installed: true,
+      running: true,
+      mode: 'host',
+      roomCode: 'A1B2C',
+      virtualIP: '10.144.1.2',
+      gamePort: 25565,
+      state: { state: 'host-ok', room: { code: 'A1B2C' } },
+      stateIndex: 7,
+    });
+
+    mod.initTerracottaPage();
+    await settle();
+
+    expect(document.getElementById('terracotta-main').style.display).toBe('');
+    expect(document.getElementById('terracotta-home').style.display).toBe('none');
+    expect(document.getElementById('terracotta-host-panel').style.display).toBe('');
+    expect(document.getElementById('terracotta-host-step3').style.display).toBe('');
+    expect(document.getElementById('terracotta-roomcode').textContent).toBe('A1B2C');
+    expect(document.getElementById('terracotta-status-title').textContent).toBe('陶瓦联机 - 主机');
+    expect(S.terracottaState).toEqual({ mode: 'host', connected: true });
+  });
+
+  it('后台仍有客户端房间时恢复到连接地址界面', async () => {
+    mockApiRoute('/api/easytier/status', {
+      installed: true,
+      running: true,
+      mode: 'guest',
+      state: { state: 'guest-ok', url: '10.144.1.3:25565' },
+      stateIndex: 5,
+    });
+
+    mod.initTerracottaPage();
+    await settle();
+
+    expect(document.getElementById('terracotta-join-panel').style.display).toBe('');
+    expect(document.getElementById('terracotta-join-step3').style.display).toBe('');
+    expect(document.getElementById('terracotta-connect-addr').textContent).toBe('127.0.0.1:25565');
+    expect(S.terracottaState).toEqual({ mode: 'guest', connected: true });
+  });
+
+  it('未运行时仍回落到主页', async () => {
+    mockApiRoute('/api/easytier/status', { installed: true, running: false, mode: 'idle' });
+
+    mod.initTerracottaPage();
+    await settle();
+
+    expect(document.getElementById('terracotta-home').style.display).toBe('');
+    expect(S.terracottaState).toEqual({ mode: null, connected: false });
+  });
+});
+
 describe('terracottaDownloadCore', () => {
   it('下载完成后打钩并在动画结束后进入主界面', async () => {
     mockApiRoute('/api/easytier/download', { ok: true });

@@ -957,6 +957,8 @@ pub fn run() {
                     // 窗口销毁时清理 Wallpaper Engine 场景壁纸渲染进程，防止残留
                     tauri::WindowEvent::Destroyed => {
                         crate::scene_renderer::shutdown_renderer();
+                        // 同步清理陶瓦联机内核，避免残留进程占着虚拟网卡与房间会话
+                        crate::easytier::process::shutdown_blocking();
                     }
                     _ => {}
                 }
