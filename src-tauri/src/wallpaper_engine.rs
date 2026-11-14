@@ -583,12 +583,17 @@ pub fn handle_wewp_request(request: &tauri::http::Request<Vec<u8>>) -> tauri::ht
 /// 结果必然「视频壁纸加载失败」。这里只放行媒体扩展名 + read_file_buffer 同一套白名单。
 pub fn handle_wpfile_request(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
     let uri = request.uri().to_string();
-    // Windows 下自定义协议以 http://wpfile.localhost 形式到达
+    // Windows 下自定义协议以 http://wpfile.localhost 形式到达；也可能保留 wpfile://localhost 主机段。
+    // 与 wewp 一致：先定位第一个 '/'，丢弃主机段后再取路径。
     let after_scheme = uri
         .strip_prefix("wpfile://")
         .or_else(|| uri.strip_prefix("http://wpfile.localhost"))
         .unwrap_or(&uri);
-    let path_part = after_scheme.split('?').next().unwrap_or(after_scheme);
+    let path_part = match after_scheme.find('/') {
+        Some(idx) => &after_scheme[idx..],
+        None => after_scheme,
+    };
+    let path_part = path_part.split('?').next().unwrap_or(path_part);
     // Windows 本机路径为 /D:/dir/a.mp4，去掉前导斜杠
     let decoded = percent_decode(path_part.trim_start_matches('/'));
     if decoded.is_empty() {

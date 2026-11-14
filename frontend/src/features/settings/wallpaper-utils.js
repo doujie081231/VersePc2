@@ -7,7 +7,11 @@ export function wpfilePath(filePath) {
     if (!filePath) return '';
     if (filePath.startsWith('wpfile://') || filePath.startsWith('blob:')) return filePath;
     const normalized = filePath.replace(/\\/g, '/');
-    return 'wpfile:///' + normalized.split('/').map(encodeURIComponent).join('/');
+    const segs = normalized.split('/').map(encodeURIComponent).join('/');
+    // 与 wewp 同理：WebView2 把自定义协议映射成 http://<scheme>.localhost，
+    // <video>/<img> 直接用 http 地址才能在 Windows 上正常加载。
+    const isWindows = !bridge || bridge.isWindows;
+    return isWindows ? 'http://wpfile.localhost/' + segs : 'wpfile:///' + segs;
 }
 
 export function wewpVideoPath(workshopId, relFile) {
