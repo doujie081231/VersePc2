@@ -335,9 +335,9 @@ body.minimal-nav .nav-sub-btn > span {
     display: none;
 }
 
+/* 经典导航下子页面按钮只显示名称，不显示图标（简约导航仍是图标模式） */
 body.classic-nav .nav-sub-btn svg {
-    width: 13px;
-    height: 13px;
+    display: none;
 }
 
 body.classic-nav .nav-sub-btn:hover {
