@@ -159,44 +159,81 @@ fn dashed_uuid(uuid: &str) -> String {
     }
 }
 
-/// 从 Session Server 的 profile 接口解析出皮肤纹理 URL（现代 Yggdrasil 皮肤站标准方式）
-/// 请求 {server}/sessionserver/session/minecraft/profile/{uuid}，解析 textures 的 base64
-async fn fetch_skin_url_from_session(uuid: &str, server_url: &str) -> Option<String> {
+/// 统一皮肤模型值：Mojang 返回 "SLIM"，部分皮肤站用 "alex"，前端只认 "slim"/"default"
+fn normalize_skin_model(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "slim" | "alex" => "slim".to_string(),
+        _ => "default".to_string(),
+    }
+}
+
+/// 从 Session Server 的 profile 接口解析出皮肤纹理 URL 与模型（现代 Yggdrasil 皮肤站标准方式）
+/// 请求 {server}/sessionserver/session/minecraft/profile/{uuid}，解析 textures 的 base64。
+/// UUID 先按无横杠查询；部分皮肤站（Blessing Skin）对带横杠 UUID 返回 204，
+/// 因此失败后再用带横杠格式重试一次。
+async fn fetch_skin_url_from_session(uuid: &str, server_url: &str) -> Option<(String, String)> {
     if server_url.is_empty() {
         return None;
     }
     let clean = clean_server_url(server_url);
-    let url = format!(
-        "{}/sessionserver/session/minecraft/profile/{}",
-        clean,
-        dashed_uuid(uuid)
-    );
+    let undashed = uuid.replace('-', "");
+    let dashed = dashed_uuid(uuid);
+    let mut candidates = vec![undashed];
+    if candidates[0] != dashed {
+        candidates.push(dashed);
+    }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .user_agent("VersePC-Tauri/1.0")
         .build()
         .ok()?;
-    let resp = client.get(&url).send().await.ok()?;
-    if !resp.status().is_success() {
-        return None;
+    for id in candidates {
+        let url = format!(
+            "{}/sessionserver/session/minecraft/profile/{}",
+            clean, id
+        );
+        let Ok(resp) = client.get(&url).send().await else {
+            continue;
+        };
+        if !resp.status().is_success() {
+            continue;
+        }
+        let Ok(v) = resp.json::<Value>().await else {
+            continue;
+        };
+        let Some(props) = v.get("properties").and_then(|x| x.as_array()) else {
+            continue;
+        };
+        let Some(textures_val) = props
+            .iter()
+            .find(|p| p.get("name").and_then(|x| x.as_str()) == Some("textures"))
+            .and_then(|p| p.get("value"))
+            .and_then(|x| x.as_str())
+        else {
+            continue;
+        };
+        use base64::Engine;
+        let Ok(dec) = base64::engine::general_purpose::STANDARD.decode(textures_val) else {
+            continue;
+        };
+        let Ok(tv) = serde_json::from_slice::<Value>(&dec) else {
+            continue;
+        };
+        let Some(skin) = tv.get("textures").and_then(|t| t.get("SKIN")) else {
+            continue;
+        };
+        let Some(skin_url) = skin.get("url").and_then(|x| x.as_str()) else {
+            continue;
+        };
+        let model = skin
+            .get("metadata")
+            .and_then(|m| m.get("model"))
+            .and_then(|x| x.as_str())
+            .map(normalize_skin_model)
+            .unwrap_or_else(|| "default".to_string());
+        return Some((skin_url.to_string(), model));
     }
-    let v: Value = resp.json().await.ok()?;
-    let props = v.get("properties")?.as_array()?;
-    let textures_val = props
-        .iter()
-        .find(|p| p.get("name").and_then(|x| x.as_str()) == Some("textures"))?
-        .get("value")?
-        .as_str()?;
-    use base64::Engine;
-    let dec = base64::engine::general_purpose::STANDARD
-        .decode(textures_val)
-        .ok()?;
-    let tv: Value = serde_json::from_slice(&dec).ok()?;
-    tv.get("textures")?
-        .get("SKIN")?
-        .get("url")?
-        .as_str()
-        .map(String::from)
+    None
 }
 
 /// 从 CSL（统一通行证）API 拉皮肤：{server}/csl/{username}.json → /textures/{hash}
@@ -394,7 +431,7 @@ pub async fn get_avatar(
     // 3.6 外置服务器 Session Server（Yggdrasil 标准）：解析 profile 里的 textures 皮肤 URL
     if !server_url.is_empty() {
         println!("[avatar] trying session server");
-        if let Some(skin_texture_url) = fetch_skin_url_from_session(&uuid, &server_url).await
+        if let Some((skin_texture_url, _model)) = fetch_skin_url_from_session(&uuid, &server_url).await
             && let Some(skin_bytes) = fetch_url_bytes(&skin_texture_url).await {
                 let data_url = crate::utils::bytes_to_data_url(&skin_bytes, "image/png");
                 return json!({
@@ -482,7 +519,8 @@ pub async fn get_skin_texture(
             .find(|a| utils::get_str(a, "uuid").replace('-', "") == clean_uuid)
         {
             let skin_file = utils::get_str(acc, "skinFile");
-            let skin_model = utils::get_str(acc, "skinModel");
+            // 微软账号存的是 Mojang 原值（"SLIM"/"CLASSIC"），统一成前端认的取值
+            let skin_model = normalize_skin_model(&utils::get_str(acc, "skinModel"));
 
             if !skin_file.is_empty() {
                 // 内置皮肤：直接用编译期嵌入的整皮字节（不依赖 DATA_DIR/img）
@@ -525,10 +563,10 @@ pub async fn get_skin_texture(
 
     // 2.6 外置服务器 Session Server（Yggdrasil 标准）
     if !server_url.is_empty()
-        && let Some(skin_texture_url) = fetch_skin_url_from_session(&uuid, &server_url).await
+        && let Some((skin_texture_url, model)) = fetch_skin_url_from_session(&uuid, &server_url).await
             && let Some(bytes) = fetch_url_bytes(&skin_texture_url).await {
                 let data_url = utils::bytes_to_data_url(&bytes, "image/png");
-                return SkinTextureResult { data_url, model: "default".to_string(), success: true };
+                return SkinTextureResult { data_url, model, success: true };
             }
 
     // 3. 无外置服务器时，公共皮肤服务（整皮）
@@ -549,4 +587,34 @@ pub async fn get_skin_texture(
 
     // 4. 全部失败
     SkinTextureResult { data_url: String::new(), model: "default".to_string(), success: false }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_skin_model_maps_uppercase_and_alex() {
+        assert_eq!(normalize_skin_model("SLIM"), "slim");
+        assert_eq!(normalize_skin_model("alex"), "slim");
+        assert_eq!(normalize_skin_model("CLASSIC"), "default");
+        assert_eq!(normalize_skin_model(""), "default");
+    }
+
+    #[test]
+    fn clean_server_url_strips_suffix_and_yggdrasil_tail() {
+        assert_eq!(
+            clean_server_url("https://skin.example.com/api/yggdrasil/"),
+            "https://skin.example.com"
+        );
+        assert_eq!(
+            clean_server_url("https://skin.example.com/api/yggdrasil@@@1.2.3.4"),
+            "https://skin.example.com"
+        );
+        // 自定义 API 根（如 /api/verse）应原样保留
+        assert_eq!(
+            clean_server_url("https://skin.verselauncher.cn/api/verse"),
+            "https://skin.verselauncher.cn/api/verse"
+        );
+    }
 }

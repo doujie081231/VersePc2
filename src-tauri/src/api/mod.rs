@@ -24,6 +24,7 @@ pub mod settings;
 pub mod skins;
 pub mod sponsor;
 pub mod system;
+pub mod verse_skins;
 
 /// 联机功能总开关（false=关闭；联机相关代码全部保留，置回 true 即恢复）
 pub(crate) const LAN_ENABLED: bool = true;
@@ -156,6 +157,12 @@ pub async fn api_proxy(
         || path == "/api/save-background"
         || path == "/api/clear-background")
         && let Some(r) = misc::handle(&app, &method, &path, &params, &body).await {
+            return r;
+        }
+
+    // Verse 皮肤站受控接口中继（/api/verse-skins/*，async HTTP）
+    if path.starts_with("/api/verse-skins")
+        && let Some(r) = verse_skins::handle(&method, &path, &params, &body).await {
             return r;
         }
 
