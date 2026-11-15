@@ -2606,3 +2606,31 @@ body:has(#game-launch-overlay[style*="flex"]) .sidebar-toggle-fab {
     cursor: pointer;
 }
 .home-side-more:hover { color: var(--accent); }
+
+/* 存档条目右侧的「启动并进入」按钮 */
+.home-side-item .home-save-launch-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color .15s ease, background .15s ease;
+}
+.home-side-item .home-save-launch-btn svg {
+    width: 9px;
+    height: 9px;
+}
+.home-side-item .home-save-launch-btn:hover {
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.16);
+}
+.home-page.home-editing .home-side-item .home-save-launch-btn {
+    display: none;
+}

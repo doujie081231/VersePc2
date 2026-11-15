@@ -278,6 +278,28 @@ function notifyLayoutChange(detail) {
     } catch (e) {}
 }
 
+const VERSION_EVENT = 'versepc-launch-version-changed';
+
+/**
+ * 广播「启动版本变了」。
+ *
+ * 主页的「版本页面」卡片切换版本后调用，让「版本存档」卡片跟着换存档列表，
+ * 两个卡片之间不直接互相引用，走事件解耦。
+ */
+export function notifyLaunchVersionChanged(versionId) {
+    try {
+        window.dispatchEvent(new CustomEvent(VERSION_EVENT, { detail: { versionId: versionId || '' } }));
+    } catch (e) {}
+}
+
+/** 订阅启动版本变化，返回取消函数 */
+export function onLaunchVersionChanged(fn) {
+    if (typeof fn !== 'function') return () => {};
+    const handler = (e) => fn((e && e.detail ? e.detail.versionId : '') || '');
+    window.addEventListener(VERSION_EVENT, handler);
+    return () => window.removeEventListener(VERSION_EVENT, handler);
+}
+
 /** 订阅布局变化，返回取消函数 */
 export function onLayoutChange(fn) {
     if (typeof fn !== 'function') return () => {};

@@ -13,6 +13,7 @@ import { selectLaunchVersion } from '../../features/versions/versions-list.js';
 import { appState } from '../../core/app-state.js';
 import { bridge } from '../../core/tauri-bridge.js';
 import { navigateToPage } from '../../core/navigation.js';
+import { notifyLaunchVersionChanged } from '../../features/home/home-widgets.js';
 import { showToast } from '../../features/misc/ui-components.js';
 
 export default {
@@ -71,6 +72,8 @@ export default {
         // selectLaunchVersion 只管底部选择器，这里再显式写一次兜底
         try { await bridge.store.set('versepc_last_launch_version', v.id); } catch (e) {}
         showToast('已切换到 ' + v.name, 'success');
+        // 通知「版本存档」卡片换成本版本的存档
+        notifyLaunchVersionChanged(v.id);
       } catch (err) {
         console.error('[home-version] 切换失败:', err);
         showToast('切换版本失败', 'error');
