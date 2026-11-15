@@ -154,7 +154,7 @@ const PageSkinLibrary = {
     }
   },
   template: `
-    <div class="flex flex-col gap-4 h-full p-6 overflow-y-auto">
+    <div class="flex w-full min-w-0 flex-col gap-4 h-full p-6 overflow-y-auto">
       <div class="flex items-center gap-3 flex-wrap">
         <VButton variant="ghost" size="sm" @click="goBack()">← 返回账户</VButton>
         <h2 class="text-xl font-semibold m-0">Verse 皮肤库</h2>
