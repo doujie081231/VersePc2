@@ -16,6 +16,13 @@ export const coreMethods = {
       this.versionId = versionId;
       this.modsLoaded = false;
       this.exportLoaded = false;
+      // 存档也属于「跟版本走」的懒加载数据：不重置的话，
+      // 打开过 A 版本的存档页后 savesLoaded 一直是 true，
+      // 再打开 B 版本时 watch 里的 !this.savesLoaded 不成立，
+      // loadSaves() 永远不再执行 → 一直显示「暂无存档」。
+      this.savesLoaded = false;
+      this.saves = [];
+      this.savesLoading = false;
       this.versionId = versionId;
       const versionInfo = (typeof appState.installedVersions !== 'undefined' && appState.installedVersions || []).find(v => v.id === versionId);
       this.customName = (versionInfo && versionInfo.customName) || versionName || versionId;
@@ -39,6 +46,9 @@ export const coreMethods = {
       if (ca) ca.classList.remove('no-scroll');
       navigateToPage((typeof appState.previousPage !== 'undefined' && appState.previousPage) || 'home');
       this.versionId = null;
+      // 清掉本次的存档缓存，下次打开别的版本不会先闪一下上一个版本的存档
+      this.savesLoaded = false;
+      this.saves = [];
     },
     // ===== 设置加载 / 保存 =====
     async loadSettings() {
@@ -194,6 +204,8 @@ export const coreMethods = {
     },
     // ===== 存档管理 =====
     async loadSaves() {
+      // 没有 versionId 时不标记 savesLoaded：
+      // 否则下次切到存档页会因为 !savesLoaded 不成立而永远不加载。
       if (!this.versionId) return;
       this.savesLoading = true;
       try {

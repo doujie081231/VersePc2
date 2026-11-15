@@ -7,7 +7,7 @@ import { S } from './launch-state.js';
 import { refreshGameStatusAfterLaunch, _onGameRunning, startGameLogStream } from './launch-runtime.js';
 import { showLaunchModal, closeLaunchModal, updateLaunchProgress, setLaunchStep, showLaunchError, hideLaunchError, pollLaunchDownload } from './launch-modal.js';
 
-async function handleLaunch() {
+export async function handleLaunch() {
   // 读取本次快速进世界目标并立即清空，避免下次普通启动误进上一次的世界
   const _quickPlayWorld = appState.quickPlayWorld;
   appState.quickPlayWorld = '';
@@ -72,9 +72,7 @@ async function handleLaunch() {
       // ===== 自动补 Java（对齐 Electron 版 autoInstallJava）=====
       setLaunchStep('java-check', 'running', `未找到 Java ${rangeDesc}，正在自动下载...`);
       try {
-        // 必须把版本上限一起传给后端：仅按“不低于 required”判断会把 Java 25
-        // 误判为可用（Forge 1.16.5 等旧版本只允许 Java 8），从而跳过 Java 8 下载。
-        const ai = await API.autoInstallJava(requiredVer, maxVer);
+        const ai = await API.autoInstallJava(requiredVer);
         if (ai && ai.success && ai.javaPath) {
           setLaunchStep('java-check', 'success', `Java ${ai.version || requiredVer} 已就绪 ✓`);
         } else if (ai && ai.success && ai.sessionId) {
@@ -341,4 +339,4 @@ function cancelLaunchFlow() {
   if (homeLaunchBtn) homeLaunchBtn.disabled = false;
 }
 
-export { handleLaunch, waitJavaAutoInstall, getCurrentWindowSize, cancelLaunchFlow };
+export { waitJavaAutoInstall, getCurrentWindowSize, cancelLaunchFlow };

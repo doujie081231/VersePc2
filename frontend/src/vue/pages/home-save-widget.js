@@ -11,8 +11,10 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { API } from '../../core/api.js';
 import { bridge } from '../../core/tauri-bridge.js';
 import { showToast } from '../../features/misc/ui-components.js';
-import { navigateToPage } from '../../core/navigation.js';
 import { vmHolders } from '../../core/vm-holders.js';
+import { onLaunchVersionChanged } from '../../features/home/home-widgets.js';
+import { appState } from '../../core/app-state.js';
+import { handleLaunch } from '../../features/launch/launch.js';
 
 export default {
   name: 'HomeSaveWidget',
@@ -26,6 +28,7 @@ export default {
     const failed = ref(false);
     const versionId = ref('');
     let timer = null;
+    let _offVersion = null;
 
     const shown = computed(() => saves.value.slice(0, 4));
     const more = computed(() => Math.max(0, saves.value.length - shown.value.length));
@@ -45,14 +48,23 @@ export default {
       });
     }
 
-    async function load() {
+    /**
+     * 加载存档。
+     * @param {string} [overrideVid] 指定版本（版本卡切换时直接传进来，省一次查询）
+     */
+    async function load(overrideVid) {
       try {
-        // 先拿当前启动版本
-        let vid = '';
-        try {
-          const s = await API.getSettings();
-          vid = (s && s.selectedVersion) || '';
-        } catch (e) {}
+        let vid = overrideVid || '';
+        if (!vid) {
+          // 先拿当前启动版本：appState 是运行时的权威来源
+          vid = appState.currentLaunchVersionId || '';
+        }
+        if (!vid) {
+          try {
+            const s = await API.getSettings();
+            vid = (s && s.selectedVersion) || '';
+          } catch (e) {}
+        }
         if (!vid) {
           // settings 里没存（没手动切过版本）→ 用主页版本卡当前显示的那个。
           // 卡片可能在主页版本卡渲染之前就挂载了，这里轮询等一会儿（最多 3 秒）。
@@ -77,22 +89,74 @@ export default {
       }
     }
 
-    function openSave(s) {
+    /**
+     * 点存档条目：打开该存档的编辑弹窗。
+     *
+     * 关键：必须先 vm.openFor(versionId) 把版本设置页初始化到这个版本。
+     * 早先只 navigateToPage + switchTab，versionId 还是 null：
+     * 标题退化成「版本设置」，loadSaves() 又因 !versionId 直接返回，
+     * 于是页面永远显示「暂无存档」。
+     */
+    async function openSave(s) {
       if (props.editing) return;
-      // 复用版本设置页：跳过去并打开「存档」页签
+      const vid = versionId.value;
+      if (!vid) { showToast('还没选择启动版本', 'error'); return; }
+
       try {
-        API.saveSetting('selectedVersion', versionId.value).catch(() => {});
-        navigateToPage('version-settings');
-        setTimeout(() => {
-          const vm = vmHolders && vmHolders.versionSettings;
-          if (vm && typeof vm.switchTab === 'function') vm.switchTab('saves');
-          if (vm && typeof vm.openSaveEditor === 'function' && s.folder) {
-            const hit = (vm.saves || []).find((x) => (x.folder || x.name) === s.folder);
-            if (hit) vm.openSaveEditor(hit);
-          }
-        }, 320);
+        // 等页面组件挂载（它可能还没被创建过）
+        const vm = await waitVersionSettingsVm();
+        if (!vm || typeof vm.openFor !== 'function') {
+          showToast('版本设置页还没准备好，请稍后重试', 'error');
+          return;
+        }
+        // 1) 初始化到本版本（会重置 savesLoaded 并跳转到该页）
+        await vm.openFor(vid, vid);
+        // 2) 切到存档页签：watch 会自动 loadSaves（savesLoaded 刚被 openFor 重置）
+        if (typeof vm.switchTab === 'function') vm.switchTab('saves');
+        // 兜底：若 watch 没触发（activeTab 本来就是 saves），这里补一次
+        await new Promise((r) => setTimeout(r, 60));
+        if (!vm.savesLoaded && typeof vm.loadSaves === 'function') await vm.loadSaves();
+        // 3) 打开对应存档的编辑弹窗
+        if (s.folder && typeof vm.openSaveEditor === 'function') {
+          const hit = (vm.saves || []).find((x) => (x.folder || x.name) === s.folder);
+          if (hit) vm.openSaveEditor(hit);
+        }
       } catch (e) {
+        console.error('[home-save] 打开存档失败:', e);
         showToast('打开存档失败', 'error');
+      }
+    }
+
+    /** 等版本设置页组件挂载好（最多约 3 秒） */
+    function waitVersionSettingsVm() {
+      return new Promise((resolve) => {
+        let tries = 0;
+        const tick = () => {
+          const vm = vmHolders && vmHolders.versionSettings;
+          if (vm && typeof vm.openFor === 'function') { resolve(vm); return; }
+          if (++tries > 30) { resolve(null); return; }
+          setTimeout(tick, 100);
+        };
+        tick();
+      });
+    }
+
+    /**
+     * 启动并直接进入该存档。
+     * 与版本设置页存档卡上的 ▶ 按钮完全等价：设 appState.quickPlayWorld 后走 handleLaunch，
+     * 后端拿 quickPlaySingleplayer 变量拼出 --quickPlaySingleplayer <世界名>。
+     */
+    async function launchSave(s) {
+      if (props.editing) return;
+      if (!versionId.value) { showToast('还没选择启动版本', 'error'); return; }
+      try {
+        // 让启动流程以这个版本为准（和版本设置页的 launchSave 一致）
+        appState.currentLaunchVersionId = versionId.value;
+        appState.quickPlayWorld = s.folder;
+        await handleLaunch();
+      } catch (e) {
+        console.error('[home-save] 启动存档失败:', e);
+        showToast('启动失败：' + ((e && e.message) || e), 'error');
       }
     }
 
@@ -105,10 +169,18 @@ export default {
     onMounted(() => {
       load();
       timer = setInterval(load, 45000);
+      // 版本卡切换版本 → 立刻换成那个版本的存档
+      _offVersion = onLaunchVersionChanged((vid) => {
+        loading.value = true;
+        load(vid);
+      });
     });
-    onBeforeUnmount(() => { if (timer) clearInterval(timer); });
+    onBeforeUnmount(() => {
+      if (timer) clearInterval(timer);
+      if (_offVersion) _offVersion();
+    });
 
-    return { saves, shown, more, loading, failed, versionId, openSave, openFolder, reload: load };
+    return { saves, shown, more, loading, failed, versionId, openSave, launchSave, openFolder, reload: load };
   },
   template: `
     <div class="home-side-card" :class="{ 'is-editing': editing }">
@@ -129,6 +201,17 @@ export default {
              :title="editing ? '拖动调整位置' : ('打开 ' + s.name)"
              @click.stop="openSave(s)">
           <span class="home-side-item-name">{{ s.name }}</span>
+          <button
+            v-if="!editing"
+            type="button"
+            class="home-save-launch-btn"
+            :title="'启动并直接进入「' + s.name + '」'"
+            @click.stop="launchSave(s)"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <polygon points="6 4 20 12 6 20 6 4"/>
+            </svg>
+          </button>
         </div>
         <div v-if="more > 0" class="home-side-more" @click.stop="openFolder">还有 {{ more }} 个…</div>
       </div>
