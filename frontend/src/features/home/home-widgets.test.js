@@ -14,6 +14,9 @@ import {
   removeWidget,
   listVisibleWidgets,
   resetWidgetPositions,
+  isHomeLayoutFollowResize,
+  setHomeLayoutFollowResize,
+  scaleHomeLayoutPos,
   onLayoutChange,
   onPendingDownloadRequest,
   getPendingDownloadRequest,
@@ -114,6 +117,62 @@ describe('控件可见性', () => {
     const layout = loadHomeLayout();
     expect(layout.title).toBeUndefined();
     expect(layout.visible.download).toBe(true);
+  });
+});
+
+describe('主页布局跟随窗口', () => {
+  beforeEach(() => resetDom());
+
+  it('默认关闭，坐标原样返回（保持旧行为）', () => {
+    const layout = loadHomeLayout();
+    expect(isHomeLayoutFollowResize()).toBe(false);
+    expect(scaleHomeLayoutPos(layout, 100, 50, 800, 600)).toEqual({ x: 100, y: 50 });
+  });
+
+  it('开启后随布局持久化，并按基准尺寸等比换算', () => {
+    saveHomeLayout({ title: { x: 200, y: 100 }, visible: {}, ref: { w: 1000, h: 500 } });
+    setHomeLayoutFollowResize(true);
+    const layout = loadHomeLayout();
+    expect(layout.followResize).toBe(true);
+    expect(layout.ref).toEqual({ w: 1000, h: 500 });
+    // 窗口变成 2000×600：横向 2 倍、纵向 1.2 倍
+    expect(scaleHomeLayoutPos(layout, 200, 100, 2000, 600)).toEqual({ x: 400, y: 120 });
+  });
+
+  it('缺少基准尺寸或尺寸非法时退回 1:1，不会把控件甩到页面外', () => {
+    setHomeLayoutFollowResize(true);
+    const layout = loadHomeLayout();
+    expect(scaleHomeLayoutPos(layout, 120, 80, 900, 700)).toEqual({ x: 120, y: 80 });
+    expect(scaleHomeLayoutPos(layout, 120, 80, 0, 0)).toEqual({ x: 120, y: 80 });
+  });
+
+  it('关闭跟随窗口后恢复 1:1', () => {
+    saveHomeLayout({ title: { x: 200, y: 100 }, visible: {}, ref: { w: 1000, h: 500 } });
+    setHomeLayoutFollowResize(true);
+    setHomeLayoutFollowResize(false);
+    const layout = loadHomeLayout();
+    // 关闭等价于「未开启」，不再写入该字段
+    expect(isHomeLayoutFollowResize()).toBe(false);
+    expect(scaleHomeLayoutPos(layout, 200, 100, 2000, 600)).toEqual({ x: 200, y: 100 });
+  });
+
+  it('非法基准尺寸被丢弃，重置坐标后仍保留跟随开关', () => {
+    saveHomeLayout({ visible: {}, followResize: true, ref: { w: -1, h: 10 } });
+    expect(loadHomeLayout().ref).toBeUndefined();
+    saveHomeLayout({ ...loadHomeLayout(), ref: { w: 900, h: 600 }, title: { x: 1, y: 2 } });
+    resetWidgetPositions();
+    const layout = loadHomeLayout();
+    expect(layout.title).toBeUndefined();
+    expect(layout.followResize).toBe(true);
+    expect(layout.ref).toBeUndefined();
+  });
+
+  it('切换开关会广播 follow-resize 事件供主页重排', () => {
+    const seen = [];
+    const off = onLayoutChange((d) => seen.push(d));
+    setHomeLayoutFollowResize(true);
+    off();
+    expect(seen[0]).toMatchObject({ type: 'follow-resize', enabled: true });
   });
 });
 

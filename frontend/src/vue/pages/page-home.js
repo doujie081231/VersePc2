@@ -26,6 +26,7 @@ import {
   resetWidgetPositions,
   onLayoutChange,
   hydrateHomeLayoutFromBackend,
+  scaleHomeLayoutPos,
   OPTIONAL_WIDGETS,
   WIDGETS,
 } from '../../features/home/home-widgets.js';
@@ -261,6 +262,8 @@ const PageHome = {
       const CARD_W = 110, CARD_H = 64, GAP = 14;
       const cols = Math.max(1, Math.floor((pw - 24) / (CARD_W + GAP)));
       const rows = Math.max(1, Math.floor((ph - 24) / (CARD_H + GAP)));
+      // 新坐标按当前窗口尺寸计算，基准尺寸一并更新（跟随窗口时的换算基准）
+      layout.ref = { w: pw, h: ph };
       // 已占用的格子（核心控件 + 已添加的可选控件，凡是有坐标的都算）
       const taken = new Set();
       const mark = (pos) => {
@@ -323,6 +326,10 @@ const PageHome = {
         }
         if (key === 'avatar') layout.avatar.s = pos.s || this._avatarScale || 1;
       }
+      // 本次确认的坐标是「当前窗口尺寸」下的像素，基准尺寸同步更新，
+      // 这样开启跟随窗口后第一次缩放不会把刚摆好的布局再放大/缩小一遍
+      const page = this.$refs.homePage;
+      if (page) layout.ref = { w: page.clientWidth, h: page.clientHeight };
       saveHomeLayout(layout);
       this.editingLayout = false;
       this.widgetPickerOpen = false;
@@ -345,6 +352,12 @@ const PageHome = {
       if (!page.clientWidth || !page.clientHeight) return;
       const layout = force ? {} : loadHomeLayout();
       const pw = page.clientWidth, ph = page.clientHeight;
+      // 「跟随窗口」已开启但缺少基准尺寸（旧布局或首次开启）：以当前页面尺寸为基准，
+      // 保证打开开关这一刻控件不动，之后的窗口变化才按比例缩放
+      if (!force && layout.followResize === true && !layout.ref) {
+        layout.ref = { w: pw, h: ph };
+        saveHomeLayout(layout);
+      }
       // 默认位置的横向基准取启动器窗口中心，而不是会随经典侧栏收放变宽的 .home-page 中心。
       // 这样收起/固定导航栏时，未拖动过的默认控件不会整体横向漂移。
       const pageRect = page.getBoundingClientRect();
@@ -363,8 +376,10 @@ const PageHome = {
         const pos = (!force && layout[key]) ? layout[key] : null;
         if (pos) {
           const w = el.offsetWidth || 10, h = el.offsetHeight || 10;
-          el.style.left = clampPos(pos.x, 0, Math.max(0, pw - w)) + 'px';
-          el.style.top = clampPos(pos.y, 0, Math.max(0, ph - h)) + 'px';
+          // 开启「跟随窗口」时按基准尺寸等比换算，保持控件之间的相对位置
+          const scaled = scaleHomeLayoutPos(layout, pos.x, pos.y, pw, ph);
+          el.style.left = clampPos(Math.round(scaled.x), 0, Math.max(0, pw - w)) + 'px';
+          el.style.top = clampPos(Math.round(scaled.y), 0, Math.max(0, ph - h)) + 'px';
           el.style.right = 'auto';
           el.style.bottom = 'auto';
           // 已保存位置由 left/top 决定，必须清掉 CSS 默认的 translateX(-50%)，
@@ -583,8 +598,10 @@ const PageHome = {
       const layout = loadHomeLayout();
       const pos = layout.running;
       if (pos && page) {
-        rEl.style.left = clampPos(pos.x, 0, Math.max(0, page.clientWidth - (rEl.offsetWidth || 10))) + 'px';
-        rEl.style.top = clampPos(pos.y, 0, Math.max(0, page.clientHeight - (rEl.offsetHeight || 10))) + 'px';
+        // 与 applyLayout 一致：开启跟随窗口时同样按基准尺寸换算
+        const scaled = scaleHomeLayoutPos(layout, pos.x, pos.y, page.clientWidth, page.clientHeight);
+        rEl.style.left = clampPos(Math.round(scaled.x), 0, Math.max(0, page.clientWidth - (rEl.offsetWidth || 10))) + 'px';
+        rEl.style.top = clampPos(Math.round(scaled.y), 0, Math.max(0, page.clientHeight - (rEl.offsetHeight || 10))) + 'px';
         rEl.style.right = 'auto';
         rEl.style.bottom = 'auto';
       }

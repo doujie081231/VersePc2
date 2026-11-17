@@ -142,6 +142,34 @@ export function loadHomeLayout() {
 }
 
 /**
+ * 把保存的像素坐标换算成当前页面尺寸下的坐标。
+ *
+ * 布局里存的是绝对像素，窗口变大/变小时不会自己动；开启「主页布局跟随窗口」后，
+ * 坐标以 layout.ref（用户确认布局时的页面尺寸）为基准按比例缩放，控件保持相对位置。
+ * 未开启、缺少基准或尺寸非法时按 1:1 返回，行为与旧版本一致。
+ */
+export function scaleHomeLayoutPos(layout, x, y, pw, ph) {
+    const ref = layout && layout.ref;
+    if (!layout || layout.followResize !== true) return { x: x, y: y };
+    if (!ref || !(ref.w > 0) || !(ref.h > 0) || !(pw > 0) || !(ph > 0)) return { x: x, y: y };
+    return { x: x * pw / ref.w, y: y * ph / ref.h };
+}
+
+/** 主页布局是否开启「跟随窗口」缩放 */
+export function isHomeLayoutFollowResize() {
+    return loadHomeLayout().followResize === true;
+}
+
+/** 开启/关闭「主页布局跟随窗口」：写入布局并广播，主页据此立即重排 */
+export function setHomeLayoutFollowResize(enabled) {
+    const layout = loadHomeLayout();
+    layout.followResize = !!enabled;
+    saveHomeLayout(layout);
+    notifyLayoutChange({ type: 'follow-resize', enabled: !!enabled });
+    return layout.followResize;
+}
+
+/**
  * 自愈：给「已添加但没有坐标」的可选控件补一个不重叠的网格坐标。
  * 历史 bug：toggleWidget 添加控件时不写坐标，applyLayout 又回退到 CSS 默认，
  * 导致所有导航卡叠在一起（用户以为"布局变回默认了"）。
@@ -210,6 +238,14 @@ function normalizeLayout(input) {
         if (srcVisible[id] === true) visible[id] = true;
     }
     out.visible = visible;
+    // 「主页布局跟随窗口」开关与缩放基准尺寸：随布局一起持久化。
+    // 基准尺寸记录用户确认布局时的主页尺寸，窗口变化时由 scaleHomeLayoutPos 换算。
+    if (src.followResize === true) out.followResize = true;
+    const ref = src.ref;
+    if (ref && typeof ref === 'object' && ref.w > 0 && ref.h > 0
+        && Number.isFinite(ref.w) && Number.isFinite(ref.h)) {
+        out.ref = { w: ref.w, h: ref.h };
+    }
     return out;
 }
 
@@ -256,12 +292,13 @@ export function listVisibleWidgets() {
 }
 
 /**
- * 重置布局：只清空坐标，保留「已添加」集合。
+ * 重置布局：只清空坐标，保留「已添加」集合与「跟随窗口」开关。
  * 个性化页「恢复主页默认布局」调用这里。
  */
 export function resetWidgetPositions() {
     const layout = loadHomeLayout();
-    saveHomeLayout({ visible: { ...layout.visible } });
+    // 坐标清空后基准尺寸失去意义，一并丢弃；重新拖动时再按当时窗口尺寸记录
+    saveHomeLayout({ visible: { ...layout.visible }, followResize: layout.followResize === true });
     notifyLayoutChange({ type: 'reset' });
     return loadHomeLayout();
 }
