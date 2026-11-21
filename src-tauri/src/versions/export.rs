@@ -6,7 +6,7 @@ use crate::storage;
 use crate::utils;
 
 use super::diagnose::resolve_version_json_recursive;
-use super::external::{get_version_game_dir, is_external_version};
+use super::external::{get_version_game_dir, is_external_version, resolve_external_version_dir};
 
 
 /// POST /api/version/export-script — 导出启动脚本
@@ -186,7 +186,16 @@ pub(crate) fn handle_export_modpack(body: &Option<Value>) -> crate::api::ApiResu
 
     let data_dir = storage::resolve_data_dir();
     let versions_dir = data_dir.join("versions");
-    let version_dir = versions_dir.join(&clean_id);
+    // 外部文件夹版本的目录不在本启动器 data 目录下，必须按 external-folders 配置定位，
+    // 否则会误报「版本目录不存在」而无法导出整合包。
+    let version_dir = if is_external {
+        match resolve_external_version_dir(&version_id) {
+            Some(p) => PathBuf::from(p),
+            None => return ApiResult::err(404, "版本目录不存在"),
+        }
+    } else {
+        versions_dir.join(&clean_id)
+    };
 
     if !version_dir.exists() {
         return ApiResult::err(404, "版本目录不存在");
