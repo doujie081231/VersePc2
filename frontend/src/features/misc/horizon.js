@@ -4,19 +4,11 @@
 // 全部网络与进程操作走 Rust 命令（horizon_latest / horizon_download / horizon_run / horizon_cached），
 // 渲染层只做状态展示。
 
-const invoke = async (cmd, args) => {
-  const core = window.__TAURI__ && window.__TAURI__.core;
-  if (!core || typeof core.invoke !== 'function') {
-    throw new Error('Tauri IPC 不可用');
-  }
-  return core.invoke(cmd, args);
-};
+import { bridge } from '../../core/tauri-bridge.js';
 
-const listen = (event, handler) => {
-  const ev = window.__TAURI__ && window.__TAURI__.event;
-  if (ev && typeof ev.listen === 'function') return ev.listen(event, handler);
-  return Promise.resolve(() => {});
-};
+const invoke = (cmd, args) => bridge.invoke(cmd, args);
+
+const listen = (event, handler) => bridge.onEvent(event, handler);
 
 const humanSize = (bytes) => {
   if (!bytes) return '—';
@@ -139,3 +131,6 @@ export function initHorizon() {
     });
   }
 }
+
+// registry 以副作用方式引入本模块，这里直接完成初始化（内部有 wired 去重）
+initHorizon();

@@ -136,7 +136,7 @@ pub fn horizon_run(path: String) -> Result<(), String> {
             .args(["/C", "start", "", &path])
             .spawn()
             .map_err(|e| format!("启动失败: {e}"))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -151,10 +151,10 @@ pub fn horizon_cached(app: AppHandle) -> Result<Option<String>, String> {
     let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.ends_with("setup.exe") || name.ends_with("windows-x64.zip") {
-                return Ok(Some(path.to_string_lossy().to_string()));
-            }
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && (name.ends_with("setup.exe") || name.ends_with("windows-x64.zip"))
+        {
+            return Ok(Some(path.to_string_lossy().to_string()));
         }
     }
     Ok(None)
