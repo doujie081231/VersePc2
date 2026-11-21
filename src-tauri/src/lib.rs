@@ -14,6 +14,7 @@ mod easytier;
 mod enderlink_online;
 mod favicon;
 mod filesystem;
+mod horizon;
 mod install;
 mod java;
 pub(crate) mod launch;
@@ -798,6 +799,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // Rust 版（Horizon 桌面端）
+            horizon::horizon_latest,
+            horizon::horizon_download,
+            horizon::horizon_run,
+            horizon::horizon_cached,
             // 窗口控制
             window_minimize,
             window_maximize,

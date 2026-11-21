@@ -217,6 +217,10 @@
             <svg class="nav-icon-svg"><use href="#icon-download"/></svg>
             <span>下载</span>
           </button>
+          <button class="nav-btn" data-page="rust" title="Rust 版">
+            <svg class="nav-icon-svg"><use href="#icon-package"/></svg>
+            <span>Rust 版</span>
+          </button>
           <div class="nav-submenu-group">
             <button class="nav-btn nav-submenu-toggle" title="资源">
               <svg class="nav-icon-svg"><use href="#icon-package"/></svg>
@@ -342,6 +346,41 @@
       <div class="content-area">
         <div id="page-home" class="page active">
           <!-- Vue 渐进式改造：内容由 PageHome 组件渲染 -->
+        </div>
+
+        <div id="page-rust" class="page">
+          <style>
+            .rust-page { padding: 24px 28px; max-width: 760px; }
+            .rust-title { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+            .rust-sub { margin: 0 0 18px; font-size: 12px; opacity: .68; line-height: 1.7; }
+            .rust-card { border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 16px 18px; background: rgba(255,255,255,.03); }
+            .rust-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 6px 0; }
+            .rust-row span:first-child { opacity: .6; }
+            .rust-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); margin: 12px 0; overflow: hidden; }
+            .rust-bar i { display: block; height: 100%; width: 0; background: #fff; transition: width .25s ease; }
+            .rust-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+            .rust-btn { padding: 8px 16px; font-size: 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; cursor: pointer; }
+            .rust-btn:disabled { opacity: .4; cursor: not-allowed; }
+            .rust-btn-primary { background: #fff; color: #111; border-color: #fff; }
+            .rust-btn-ghost { border-color: transparent; text-decoration: underline; }
+            .rust-note { margin: 14px 0 0; font-size: 11px; opacity: .5; line-height: 1.7; }
+          </style>
+          <div class="rust-page">
+            <h2 class="rust-title">Rust 版 · Minecraft 26.3</h2>
+            <p class="rust-sub">Horizon 是社区用 Rust 从零重写的 Minecraft Java 26.3（非官方，与 Mojang/微软无关）。桌面端由官方启动器托管，这里负责下载与唤起。</p>
+            <div class="rust-card">
+              <div class="rust-row"><span>最新版本</span><strong id="rust-version">检测中…</strong></div>
+              <div class="rust-row"><span>安装包</span><span id="rust-asset">—</span></div>
+              <div class="rust-row"><span>状态</span><span id="rust-state">未下载</span></div>
+              <div class="rust-bar"><i id="rust-bar-fill"></i></div>
+              <div class="rust-actions">
+                <button id="rust-download" class="rust-btn">下载安装包</button>
+                <button id="rust-run" class="rust-btn rust-btn-primary" disabled>运行安装</button>
+                <button id="rust-site" class="rust-btn rust-btn-ghost">打开官网</button>
+              </div>
+              <p class="rust-note">安装包由 Horizon 官方发布（github.com/horizon-rust/horizon），安装后由它自行下载游戏资源。首次进入需要正版 26.3 或已安装的 Java 版副本。</p>
+            </div>
+          </div>
         </div>
 
         <div id="page-versions" class="page">
