@@ -63,6 +63,11 @@ async function loadModLoaderVersions() {
         text: `${v.version} ${v.stable ? '(稳定)' : ''}`
       }));
       appState.modloaderVersionCustomSelect.setOptions(options);
+      if (!options.length) {
+        // 列表为空时必须清空旧选择，避免把上一个游戏版本的加载器版本装到当前版本
+        appState.modloaderVersionCustomSelect.setOptions([{ value: '', text: '该游戏版本暂无可用 Fabric' }]);
+        appState.modloaderVersionCustomSelect.setValue('');
+      }
       const stable = versions.find(v => v.stable);
       if (stable) appState.modloaderVersionCustomSelect.setValue(stable.version);
       // 游戏版本变化时重置 Fabric API 选择状态（列表在点击卡片时懒加载）
@@ -83,6 +88,10 @@ async function loadModLoaderVersions() {
         text: `${v.version} (${v.type})`
       }));
       appState.modloaderVersionCustomSelect.setOptions(options);
+      if (!options.length) {
+        appState.modloaderVersionCustomSelect.setOptions([{ value: '', text: '该游戏版本暂无可用 Forge' }]);
+        appState.modloaderVersionCustomSelect.setValue('');
+      }
     } else if (appState.currentLoaderType === 'neoforge') {
       const versions = await API.getModLoaderVersions(gameVersion, 'neoforge');
       const options = versions.map(v => ({
@@ -90,7 +99,12 @@ async function loadModLoaderVersions() {
         text: `${v.version} ${v.type ? '(' + v.type + ')' : ''}`
       }));
       appState.modloaderVersionCustomSelect.setOptions(options);
-      if (versions.length > 0) appState.modloaderVersionCustomSelect.setValue(versions[0].version);
+      if (versions.length > 0) {
+        appState.modloaderVersionCustomSelect.setValue(versions[0].version);
+      } else {
+        appState.modloaderVersionCustomSelect.setOptions([{ value: '', text: '该游戏版本暂无可用 NeoForge' }]);
+        appState.modloaderVersionCustomSelect.setValue('');
+      }
     }
   } catch (e) { appState.modloaderVersionCustomSelect.setOptions([{ value: '', text: '加载失败' }]); }
 

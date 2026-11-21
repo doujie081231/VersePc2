@@ -342,7 +342,12 @@ pub(crate) fn detect_client_loader(version_id: &str) -> Value {
 
     let mc_final = mc_version
         .filter(|s| is_valid_mc_ver(s))
-        .or_else(|| resolve_server_download(version_id).and_then(|r| r.get("versionId").and_then(|v| v.as_str()).map(|s| s.to_string())))
+        .or_else(|| {
+            resolve_server_download(version_id)
+                .and_then(|r| r.get("versionId").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .filter(|s| is_valid_mc_ver(s))
+        })
+        .or_else(|| extract_leading_mc_version(version_id))
         .unwrap_or_else(|| version_id.to_string());
 
     let chain_ids: Vec<Value> = chain
@@ -359,11 +364,20 @@ pub(crate) fn detect_client_loader(version_id: &str) -> Value {
 }
 
 pub(crate) fn is_valid_mc_ver(s: &str) -> bool {
-    if let Ok(re) = regex::Regex::new(r"^\d+\.\d+") {
+    // 必须整体是 MC 版本号；不能用 "以数字开头" 判断，
+    // 否则 "26.2-Fabric-0.20.1" 这类完整版本 ID 会被误当成 MC 版本传给加载器安装器。
+    if let Ok(re) = regex::Regex::new(r"^\d+\.\d+(?:\.\d+)?(?:-(?:pre|rc)\d+)?$") {
         re.is_match(s)
     } else {
         false
     }
+}
+
+/// 从完整版本 ID/名称中提取开头的 MC 版本号（如 "26.2-Fabric-0.20.1" → "26.2"）
+fn extract_leading_mc_version(s: &str) -> Option<String> {
+    let re = regex::Regex::new(r"^(\d+\.\d+(?:\.\d+)?(?:-(?:pre|rc)\d+)?)").ok()?;
+    re.captures(s)
+        .and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
 }
 
 /// 解析版本所需 Java 主版本（沿 inheritsFrom 链找 javaVersion.majorVersion）
@@ -450,4 +464,31 @@ pub(crate) fn select_java_for_major(required_major: u32) -> Result<String, Strin
         if max_found > 0 { max_found.to_string() } else { "?".into() },
         required_major
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mc_version_validation_rejects_full_loader_ids() {
+        assert!(is_valid_mc_ver("26.2"));
+        assert!(is_valid_mc_ver("1.21.1"));
+        assert!(is_valid_mc_ver("1.20.1-pre1"));
+        assert!(!is_valid_mc_ver("26.2-Fabric-0.20.1"));
+        assert!(!is_valid_mc_ver("26.3-NeoForge-0.20.1"));
+    }
+
+    #[test]
+    fn leading_mc_version_extracts_from_loader_id() {
+        assert_eq!(
+            extract_leading_mc_version("26.2-Fabric-0.20.1").as_deref(),
+            Some("26.2")
+        );
+        assert_eq!(
+            extract_leading_mc_version("1.21.1-neoforge-21.1.0").as_deref(),
+            Some("1.21.1")
+        );
+        assert_eq!(extract_leading_mc_version("MyPack"), None);
+    }
 }

@@ -14,12 +14,17 @@ use serde_json::{json, Value};
 
 use super::shared;
 
-/// BMCLAPI NeoForge 元数据
-const BMCLAPI_NEOFORGE_META: &str = "https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/maven-metadata.xml";
-const BMCLAPI_FORGE_META: &str = "https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/maven-metadata.xml";
+/// BMCLAPI NeoForge 版本目录（details 接口；maven-metadata.xml 会 302 到失效域名）
+const BMCLAPI_NEOFORGE_DETAILS: &str =
+    "https://bmclapi2.bangbang93.com/neoforge/meta/api/maven/details/releases/net/neoforged/neoforge";
+const BMCLAPI_FORGE_DETAILS: &str =
+    "https://bmclapi2.bangbang93.com/neoforge/meta/api/maven/details/releases/net/neoforged/forge";
 
 /// NeoForge 官方 Maven 版本列表 API
-const NEOFORGE_MAVEN_API: &str = "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
+const NEOFORGE_MAVEN_API: &str =
+    "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
+const FORGE_MAVEN_API: &str =
+    "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/forge";
 
 /// 获取指定 MC 版本的 NeoForge 版本列表
 ///
@@ -29,160 +34,158 @@ const NEOFORGE_MAVEN_API: &str = "https://maven.neoforged.net/api/maven/versions
 /// # 返回
 /// Vec<{version: String, gameVersion: String, type: String}>（第一条 type 为 "推荐"）
 pub async fn get_neoforge_versions_for_game(game_version: &str) -> Vec<Value> {
-    // 解析 MC 版本号
-    let parts: Vec<u32> = game_version
-        .split('.')
-        .filter_map(|p| p.parse().ok())
-        .collect();
-    let mc_major = parts.first().copied().unwrap_or(0);
-    let mc_minor = parts.get(1).copied().unwrap_or(0);
-    let mc_patch = parts.get(2).copied().unwrap_or(0);
-
-    // 判断使用新方案还是旧方案
-    // - 新方案（NeoForge）：MC 1.20.5+ 或 1.21+
-    // - 旧方案（Forge 兼容）：MC 1.20.1 及以前
-    let is_new_scheme = (mc_major == 1 && mc_minor == 20 && mc_patch >= 5)
-        || (mc_major == 1 && mc_minor >= 21);
-
-    let neo_prefix = if is_new_scheme {
-        format!("{}.{}", mc_minor, mc_patch)
-    } else {
-        format!("{}.{}", mc_major, mc_minor)
-    };
-
-    // 拉取所有 NeoForge 版本（XML）
-    let mut all_neoforge_versions: Vec<String> = Vec::new();
-    let mut all_forge_versions: Vec<String> = Vec::new();
-    let mut last_error = String::new();
-
-    // 并发拉取 NeoForge 和 Forge 元数据
-    let (neo_result, forge_result) = tokio::join!(
-        fetch_xml_versions(BMCLAPI_NEOFORGE_META),
-        fetch_xml_versions(BMCLAPI_FORGE_META),
-    );
-
-    if let Ok(v) = neo_result {
-        all_neoforge_versions = v;
-    } else if let Err(e) = neo_result {
-        last_error = e;
-    }
-    if let Ok(v) = forge_result {
-        all_forge_versions = v;
-    }
-
-    // 双源都失败时，回退到官方 Maven API
-    if all_neoforge_versions.is_empty() && all_forge_versions.is_empty() {
-        match shared::fetch_json(NEOFORGE_MAVEN_API).await {
-            Ok(data) => {
-                if let Some(arr) = data.get("versions").and_then(|v| v.as_array()) {
-                    all_neoforge_versions = arr
-                        .iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                        .collect();
-                }
-            }
-            Err(e) => {
-                last_error = e;
-            }
-        }
-    }
-
-    if all_neoforge_versions.is_empty() && all_forge_versions.is_empty() {
-        eprintln!("[NeoForge] 所有源均不可达，最后错误: {}", last_error);
+    let wanted = game_version.trim();
+    if wanted.is_empty() {
         return Vec::new();
     }
 
-    // 匹配 NeoForge 版本（严格按前缀匹配，如 21.1.x）
+    // BMCLAPI 优先（PCL 使用的 details 接口），失败再回退官方 Maven API
+    let (bmcl_neo, bmcl_forge) = tokio::join!(
+        fetch_details_names(BMCLAPI_NEOFORGE_DETAILS),
+        fetch_details_names(BMCLAPI_FORGE_DETAILS),
+    );
+    let mut all_names = bmcl_neo;
+    all_names.extend(bmcl_forge);
+    if all_names.is_empty() {
+        let (official_neo, official_forge) = tokio::join!(
+            fetch_maven_api_names(NEOFORGE_MAVEN_API),
+            fetch_maven_api_names(FORGE_MAVEN_API),
+        );
+        all_names.extend(official_neo);
+        all_names.extend(official_forge);
+    }
+    if all_names.is_empty() {
+        eprintln!("[NeoForge] 所有源均不可达，无法获取版本列表");
+        return Vec::new();
+    }
+
+    // 按每个版本号推导其目标 MC 版本后精确匹配：
+    // 26.x 的 NeoForge 版本形如 26.3.0.115（目标 26.3），1.x 形如 21.1.200（目标 1.21.1）
     let mut matched: Vec<String> = Vec::new();
-    for ver in &all_neoforge_versions {
-        if ver.starts_with(&format!("{}.", neo_prefix)) {
-            matched.push(ver.clone());
+    let mut seen = std::collections::HashSet::new();
+    for name in all_names {
+        if neoforge_target_game(&name).as_deref() == Some(wanted) && seen.insert(name.clone()) {
+            matched.push(name);
         }
     }
-
-    // 旧方案时，匹配 Forge 版本（如 "1.20.1-47.x"）
-    if !is_new_scheme {
-        for ver in &all_forge_versions {
-            if (ver.starts_with(&format!("{}-", game_version))
-                || ver.starts_with(&format!("{}.", game_version)))
-                && !matched.contains(ver) {
-                    matched.push(ver.clone());
-                }
-        }
+    if matched.is_empty() {
+        return Vec::new();
     }
 
-    // 去重 + 倒序
-    matched.sort();
-    matched.dedup();
-    matched.reverse();
+    matched.sort_by(|a, b| {
+        neoforge_sort_key(b)
+            .cmp(&neoforge_sort_key(a))
+            .then_with(|| b.cmp(a))
+    });
 
     // 找一个稳定版本（不含 -beta/-alpha）放到第一位作为"推荐"
-    let stable_idx = matched.iter().position(|v| !v.contains("-beta") && !v.contains("-alpha"));
+    let stable_idx = matched
+        .iter()
+        .position(|v| !v.contains("beta") && !v.contains("alpha"));
     if let Some(idx) = stable_idx
-        && idx > 0 {
-            let stable = matched.remove(idx);
-            matched.insert(0, stable);
-        }
+        && idx > 0
+    {
+        let stable = matched.remove(idx);
+        matched.insert(0, stable);
+    }
 
     // 最多 10 条
     matched.truncate(10);
 
-    // 转换为 JSON 输出格式
     matched
         .iter()
         .enumerate()
         .map(|(i, ver)| {
             json!({
                 "version": ver,
-                "gameVersion": game_version,
+                "gameVersion": wanted,
                 "type": if i == 0 { "推荐" } else { "" },
             })
         })
         .collect()
 }
 
-/// 从 XML 中提取所有 <version>xxx</version> 内容
-async fn fetch_xml_versions(url: &str) -> Result<Vec<String>, String> {
-    let xml = shared::fetch_text(url, 15).await?;
-    Ok(extract_version_tags(&xml))
+/// 从 NeoForge 版本号推导其目标 Minecraft 版本（规则与 PCL 一致）
+///
+/// - `1.20.1-47.1.99` → `1.20.1`（Legacy）
+/// - `0.25w14craftmine.3-beta` → `25w14craftmine`
+/// - `21.1.200` → `1.21.1`
+/// - `26.3.0.115` → `26.3`；`26.1.0.0-alpha.1+snapshot-1` → `26.1-snapshot-1`
+fn neoforge_target_game(api_name: &str) -> Option<String> {
+    if api_name.contains("1.20.1") {
+        return Some("1.20.1".to_string());
+    }
+    let base = api_name.split('-').next().unwrap_or(api_name);
+    if base.starts_with("0.") {
+        return base.split('.').nth(1).map(|s| s.to_string());
+    }
+    let nums: Vec<u64> = base
+        .split('.')
+        .filter_map(|p| p.parse::<u64>().ok())
+        .collect();
+    let major = *nums.first()?;
+    let mut inherit = if major >= 24 {
+        format!(
+            "{}.{}.{}",
+            major,
+            nums.get(1).copied().unwrap_or(0),
+            nums.get(2).copied().unwrap_or(0)
+        )
+    } else {
+        format!("1.{}.{}", major, nums.get(1).copied().unwrap_or(0))
+    };
+    if inherit.ends_with(".0") {
+        inherit.truncate(inherit.len() - 2);
+    }
+    if let Some((_, suffix)) = api_name.split_once('+') {
+        inherit.push('-');
+        inherit.push_str(suffix);
+    }
+    Some(inherit)
 }
 
-/// 从 maven-metadata.xml 中提取所有 <version>...</version> 内容
-fn extract_version_tags(xml: &str) -> Vec<String> {
-    let mut result = Vec::new();
-    let mut in_version = false;
-    let mut current = String::new();
+/// 比较用的数字键（忽略 beta/alpha 等后缀）
+fn neoforge_sort_key(name: &str) -> Vec<u64> {
+    name.split(['-', '+'])
+        .next()
+        .unwrap_or(name)
+        .split('.')
+        .map(|p| p.parse::<u64>().unwrap_or(0))
+        .collect()
+}
 
-    let bytes = xml.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'<' {
-            let start = i + 1;
-            let mut end = start;
-            while end < bytes.len() && bytes[end] != b'>' {
-                end += 1;
-            }
-            if end < bytes.len() {
-                let tag = xml[start..end].trim();
-                if tag == "version" {
-                    in_version = true;
-                    current.clear();
-                } else if tag == "/version" && in_version {
-                    result.push(current.clone());
-                    in_version = false;
-                }
-                i = end + 1;
-            } else {
-                break;
-            }
-        } else if in_version {
-            current.push(bytes[i] as char);
-            i += 1;
-        } else {
-            i += 1;
-        }
-    }
-    result
+/// 从 BMCLAPI details 接口读取版本目录名
+async fn fetch_details_names(url: &str) -> Vec<String> {
+    let Ok(v) = shared::fetch_json(url).await else {
+        return Vec::new();
+    };
+    v.get("files")
+        .and_then(|f| f.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|f| {
+                    f.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 从官方 Maven API 读取版本号
+async fn fetch_maven_api_names(url: &str) -> Vec<String> {
+    let Ok(v) = shared::fetch_json(url).await else {
+        return Vec::new();
+    };
+    v.get("versions")
+        .and_then(|f| f.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|f| f.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 // ============== NeoForge 安装 ==============
@@ -677,4 +680,33 @@ fn patch_installer_mirrors(installer_path: &std::path::Path) -> Result<(), Strin
     std::fs::remove_file(installer_path).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp_path, installer_path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn neoforge_version_maps_to_target_game() {
+        assert_eq!(neoforge_target_game("21.1.200").as_deref(), Some("1.21.1"));
+        assert_eq!(neoforge_target_game("26.3.0.115").as_deref(), Some("26.3"));
+        assert_eq!(
+            neoforge_target_game("1.20.1-47.1.99").as_deref(),
+            Some("1.20.1")
+        );
+        assert_eq!(
+            neoforge_target_game("0.25w14craftmine.3-beta").as_deref(),
+            Some("25w14craftmine")
+        );
+        assert_eq!(
+            neoforge_target_game("26.1.0.0-alpha.1+snapshot-1").as_deref(),
+            Some("26.1-snapshot-1")
+        );
+    }
+
+    #[test]
+    fn neoforge_versions_sort_newest_first() {
+        assert!(neoforge_sort_key("26.3.0.115") > neoforge_sort_key("26.3.0.99"));
+        assert!(neoforge_sort_key("21.1.267") > neoforge_sort_key("21.1.99"));
+    }
 }

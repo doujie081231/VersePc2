@@ -168,6 +168,32 @@ describe('loadModLoaderVersions', () => {
     expect(appState.modloaderVersionCustomSelect.getValue()).toBe('20.4.1');
   });
 
+  it('NeoForge 列表为空时清空上一个游戏版本残留的选择', async () => {
+    appState.currentLoaderType = 'neoforge';
+    appState.modloaderVersionCustomSelect = makeSelect('0.20.1');
+    mockApiRoute('/api/neoforge/versions', { versions: [] });
+
+    await mod.loadModLoaderVersions();
+
+    expect(appState.modloaderVersionCustomSelect.getValue()).toBe('');
+    expect(appState.modloaderVersionCustomSelect.options).toEqual([
+      { value: '', text: '该游戏版本暂无可用 NeoForge' },
+    ]);
+  });
+
+  it('Fabric 列表为空时清空旧选择', async () => {
+    appState.currentLoaderType = 'fabric';
+    appState.modloaderVersionCustomSelect = makeSelect('0.15.0');
+    mockApiRoute('/api/fabric/versions', { versions: [] });
+
+    await mod.loadModLoaderVersions();
+
+    expect(appState.modloaderVersionCustomSelect.getValue()).toBe('');
+    expect(appState.modloaderVersionCustomSelect.options).toEqual([
+      { value: '', text: '该游戏版本暂无可用 Fabric' },
+    ]);
+  });
+
   it('非 Fabric 类型隐藏 Fabric API 区域', async () => {
     appState.currentLoaderType = '';
     document.getElementById('fabric-api-section').style.display = '';

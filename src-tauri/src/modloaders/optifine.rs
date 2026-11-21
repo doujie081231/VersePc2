@@ -155,6 +155,32 @@ async fn resolve_optifine_download_url(filename: &str) -> Result<String, String>
     Ok(format!("https://optifine.net/{}", &html[m.start()..m.end()]))
 }
 
+/// installer 是否可用：体积达到下限且是有效 ZIP
+fn installer_is_valid(path: &std::path::Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(m) => m.len() >= 64 * 1024 && shared::verify_zip_magic(path),
+        Err(_) => false,
+    }
+}
+
+/// 从官方 downloadx 地址取 installer。
+/// optifine.net 会校验 Referer，缺失时返回广告/验证页（表现为 installer 过小）。
+async fn fetch_official_installer(url: &str, filename: &str) -> Option<Vec<u8>> {
+    let referer = format!("{}{}", OPTIFINE_ADLOAD_URL, filename);
+    let resp = shared::shared_client()
+        .get(url)
+        .header("User-Agent", crate::download::mirror::BROWSER_UA)
+        .header("Referer", referer)
+        .timeout(std::time::Duration::from_secs(300))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    resp.bytes().await.ok().map(|b| b.to_vec())
+}
+
 /// 安装 OptiFine 模组加载器
 ///
 /// # 参数
@@ -203,25 +229,44 @@ pub async fn install_optifine(
         game_version,
         optifine_type
     );
-    let download_url = match resolve_optifine_download_url(&jar_filename).await {
-        Ok(u) => u,
-        Err(e) => {
-            let _ = std::fs::remove_file(&installer_path);
-            return json!({ "success": false, "error": format!("获取 OptiFine 下载地址失败: {}", e) });
-        }
-    };
-
-    eprintln!("[OptiFine] 下载 installer: {}", download_url);
-    if let Err(e) = crate::download::single::download_single(
-        &download_url,
+    // 优先使用 BMCLAPI 的 maven 直链（与 PCL 相同）：
+    // optifine.net 的 adloadx/downloadx 需要浏览器会话，部分网络下会返回验证页，
+    // 表现为 installer 只有十几 KB 的 HTML。
+    let bmclapi_url = format!(
+        "https://bmclapi2.bangbang93.com/maven/com/optifine/{}/{}",
+        game_version, jar_filename
+    );
+    eprintln!("[OptiFine] 下载 installer（镜像）: {}", bmclapi_url);
+    let mut installer_ready = crate::download::single::download_single(
+        &bmclapi_url,
         &installer_path,
         None,
         None,
         300,
     )
     .await
-    {
-        return json!({ "success": false, "error": format!("OptiFine installer 下载失败: {}", e) });
+    .is_ok()
+        && installer_is_valid(&installer_path);
+
+    // 镜像不可用时回退官方源：解析 adloadx 页面里的 downloadx 一次性地址
+    if !installer_ready {
+        let _ = std::fs::remove_file(&installer_path);
+        let download_url = match resolve_optifine_download_url(&jar_filename).await {
+            Ok(u) => u,
+            Err(e) => {
+                let _ = std::fs::remove_file(&installer_path);
+                return json!({ "success": false, "error": format!("获取 OptiFine 下载地址失败: {}", e) });
+            }
+        };
+        eprintln!("[OptiFine] 下载 installer（官方）: {}", download_url);
+        if let Some(bytes) = fetch_official_installer(&download_url, &jar_filename).await {
+            let _ = std::fs::write(&installer_path, bytes);
+        }
+        installer_ready = installer_is_valid(&installer_path);
+    }
+    if !installer_ready {
+        let _ = std::fs::remove_file(&installer_path);
+        return json!({ "success": false, "error": "OptiFine installer 下载失败（所有镜像源均失败）" });
     }
 
     // 验证文件
