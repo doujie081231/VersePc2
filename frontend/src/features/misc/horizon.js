@@ -1,14 +1,18 @@
-// features/misc/horizon.js — Rust 版（Horizon 桌面端）页面
+// features/misc/horizon.js — Rust 版（Horizon）在启动器内安装 / 准备 / 启动
 //
-// 桌面端不需要内置引擎：查官方 release → 下载安装包 → 唤起安装，其余由 Horizon 自己维护。
-// 全部网络与进程操作走 Rust 命令（horizon_latest / horizon_download / horizon_run / horizon_cached），
-// 渲染层只做状态展示。
+// 与手机端同一套思路：运行时不单独安装成另一个应用，而是收进本启动器的数据目录，
+// 由这里驱动它自己的 CLI 完成
+//   下载运行时（28MB 便携 zip）→ install latest → prepare --download → play
+// 所有进度与输出都回到本页面（horizon-progress / horizon-log / horizon-step-done）。
+//
+// 后端命令见 src-tauri/src/horizon.rs。
 
 import { bridge } from '../../core/tauri-bridge.js';
 
 const invoke = (cmd, args) => bridge.invoke(cmd, args);
-
 const listen = (event, handler) => bridge.onEvent(event, handler);
+
+const $ = (id) => document.getElementById(id);
 
 const humanSize = (bytes) => {
   if (!bytes) return '—';
@@ -17,77 +21,129 @@ const humanSize = (bytes) => {
 };
 
 let wired = false;
-let latest = null;
-let downloadedPath = null;
+let status = null;
+let busy = false;
+let playing = false;
 
-const $ = (id) => document.getElementById(id);
+function setBusy(value, label) {
+  busy = value;
+  const primary = $('rust-primary');
+  if (primary && value && label) {
+    primary.disabled = true;
+    primary.textContent = label;
+  }
+  if (!value) render();
+}
 
-const setState = (text) => {
-  const el = $('rust-state');
-  if (el) el.textContent = text;
-};
+function appendLog(line, kind) {
+  const box = $('rust-log');
+  if (!box) return;
+  const prefix = kind === 'err' ? '! ' : kind === 'info' ? '· ' : '';
+  box.textContent += `${prefix}${line}\n`;
+  // 只保留最后 400 行，长时间 install 也不会把 DOM 撑爆
+  const lines = box.textContent.split('\n');
+  if (lines.length > 400) box.textContent = lines.slice(-400).join('\n');
+  box.scrollTop = box.scrollHeight;
+}
 
-const setProgress = (fraction) => {
+function setProgress(fraction) {
   const fill = $('rust-bar-fill');
   if (fill) fill.style.width = `${Math.max(0, Math.min(1, fraction)) * 100}%`;
-};
+}
 
-async function refreshCached() {
-  try {
-    const cached = await invoke('horizon_cached');
-    if (cached) {
-      downloadedPath = cached;
-      setState('已下载安装包');
-      setProgress(1);
-      const run = $('rust-run');
-      if (run) run.disabled = false;
-    }
-  } catch (_) {
-    /* 首次运行时目录可能还不存在，忽略 */
+/** 根据后端状态决定主按钮：下载运行时 → 安装版本 → 准备资源 → 启动 */
+function render() {
+  if (!status) return;
+  const primary = $('rust-primary');
+  const detail = $('rust-detail');
+  const prepare = $('rust-prepare');
+  const signin = $('rust-signin');
+  const stop = $('rust-stop');
+  if (!primary || !detail) return;
+
+  primary.disabled = false;
+  if (stop) stop.disabled = !playing;
+  if (signin) signin.disabled = busy;
+  if (prepare) prepare.disabled = busy || !status.runtime || !!status.prepared || !status.account;
+
+  // 顺序照 CLI 的真实前置条件走：运行时 → 正版账号（prepare --download 与 play 都要求）
+  // → 安装版本 → 准备资源 → 启动。没有账号时不让用户点「准备资源」再吃一条 CLI 报错。
+  if (!status.runtime) {
+    detail.textContent = '尚未下载运行时 · 首次约 28 MB';
+    primary.textContent = '下载运行环境';
+    primary.dataset.action = 'runtime';
+  } else if (!status.account) {
+    detail.textContent = `运行时已就绪 · 需要登录拥有 Minecraft: Java 版的正版账号${
+      status.installed && status.installed.length ? ` · 已装 ${status.installed.join(' / ')}` : ''
+    }`;
+    primary.textContent = '登录 Microsoft 账号';
+    primary.dataset.action = 'signin';
+  } else if (!status.installed || status.installed.length === 0) {
+    detail.textContent = `运行时已就绪 · 账号 ${status.account} · 还没有安装 Horizon 版本`;
+    primary.textContent = '安装版本';
+    primary.dataset.action = 'install';
+  } else if (!status.prepared) {
+    detail.textContent = `版本 ${status.installed.join(' / ')} · 账号 ${status.account} · 资源未准备`;
+    primary.textContent = '准备资源';
+    primary.dataset.action = 'prepare';
+  } else {
+    detail.textContent = `已安装 · ${status.installed.join(' / ')}${
+      status.account ? ` · ${status.account}` : ''
+    }`;
+    primary.textContent = playing ? '运行中' : '启动游戏';
+    primary.dataset.action = 'play';
   }
 }
 
-async function loadLatest() {
+async function refresh() {
   try {
-    latest = await invoke('horizon_latest');
-    const ver = $('rust-version');
-    if (ver) ver.textContent = `${latest.version}（${latest.published}）`;
-    const asset = $('rust-asset');
-    if (asset) asset.textContent = `${latest.asset} · ${humanSize(latest.size)}`;
+    status = await invoke('horizon_status');
+    render();
   } catch (e) {
-    const ver = $('rust-version');
-    if (ver) ver.textContent = '检测失败（网络）';
-    setState(String(e && e.message ? e.message : e));
+    const detail = $('rust-detail');
+    if (detail) detail.textContent = `状态读取失败：${e && e.message ? e.message : e}`;
   }
 }
 
-async function startDownload() {
-  if (!latest) return;
-  const btn = $('rust-download');
-  if (btn) btn.disabled = true;
-  setState('下载中…');
-  setProgress(0);
+async function runStep(step, label) {
+  if (busy) return;
+  setBusy(true, label);
   try {
-    const path = await invoke('horizon_download', { url: latest.url, name: latest.asset });
-    downloadedPath = path;
-    setProgress(1);
-    setState('下载完成');
-    const run = $('rust-run');
-    if (run) run.disabled = false;
+    const code = await invoke('horizon_step', { step });
+    if (code !== 0) appendLog(`步骤 ${step} 退出码 ${code}`, 'err');
   } catch (e) {
-    setState(`下载失败：${e && e.message ? e.message : e}`);
+    appendLog(`${label}失败：${e && e.message ? e.message : e}`, 'err');
   } finally {
-    if (btn) btn.disabled = false;
+    if (step === 'play') playing = false;
+    setBusy(false);
+    await refresh();
   }
 }
 
-async function runInstaller() {
-  if (!downloadedPath) return;
-  try {
-    await invoke('horizon_run', { path: downloadedPath });
-    setState('已唤起安装程序');
-  } catch (e) {
-    setState(`启动失败：${e && e.message ? e.message : e}`);
+async function primaryAction() {
+  const action = $('rust-primary').dataset.action;
+  if (action === 'runtime') {
+    if (busy) return;
+    setBusy(true, '下载中…');
+    setProgress(0);
+    try {
+      status = await invoke('horizon_install_runtime');
+      setProgress(1);
+    } catch (e) {
+      appendLog(`下载运行时失败：${e && e.message ? e.message : e}`, 'err');
+    } finally {
+      setBusy(false);
+      await refresh();
+    }
+    return;
+  }
+  if (action === 'install') return runStep('install', '安装中…');
+  if (action === 'signin') return runStep('signin', '等待登录…');
+  if (action === 'prepare') return runStep('prepare', '准备中…');
+  if (action === 'play') {
+    playing = true;
+    render();
+    return runStep('play', '启动中…');
   }
 }
 
@@ -99,18 +155,30 @@ export function initHorizon() {
     const { done, total } = event.payload || {};
     if (total) {
       setProgress(done / total);
-      setState(`下载中 ${humanSize(done)} / ${humanSize(total)}`);
-    } else {
-      setState(`下载中 ${humanSize(done)}`);
+      const primary = $('rust-primary');
+      if (primary && primary.dataset.action === 'runtime') {
+        primary.textContent = `${humanSize(done)} / ${humanSize(total)}`;
+      }
     }
+  });
+
+  listen('horizon-log', (event) => {
+    const { line, kind } = event.payload || {};
+    if (line) appendLog(line, kind);
+  });
+
+  listen('horizon-step-done', (event) => {
+    const { step, code } = event.payload || {};
+    if (step === 'play') playing = false;
+    appendLog(`[${step}] 结束，退出码 ${code}`, code === 0 ? 'info' : 'err');
+    refresh();
   });
 
   const ensurePage = () => {
     if (!$('page-rust')) return false;
-    if (!$('rust-version').dataset.ready) {
-      $('rust-version').dataset.ready = '1';
-      loadLatest();
-      refreshCached();
+    if (!$('rust-detail').dataset.ready) {
+      $('rust-detail').dataset.ready = '1';
+      refresh();
     }
     return true;
   };
@@ -120,16 +188,22 @@ export function initHorizon() {
     if (nav) setTimeout(ensurePage, 30);
   });
 
-  const dl = $('rust-download');
-  if (dl) dl.addEventListener('click', startDownload);
-  const run = $('rust-run');
-  if (run) run.addEventListener('click', runInstaller);
-  const site = $('rust-site');
-  if (site) {
-    site.addEventListener('click', () => {
-      window.open('https://playhorizon.dev', '_blank');
-    });
-  }
+  $('rust-primary')?.addEventListener('click', primaryAction);
+  $('rust-signin')?.addEventListener('click', () => runStep('signin', '等待登录…'));
+  $('rust-prepare')?.addEventListener('click', () => runStep('prepare', '准备中…'));
+  $('rust-stop')?.addEventListener('click', async () => {
+    try {
+      await invoke('horizon_stop');
+      appendLog('已请求停止游戏', 'info');
+      playing = false;
+      render();
+    } catch (e) {
+      appendLog(`停止失败：${e && e.message ? e.message : e}`, 'error');
+    }
+  });
+  $('rust-site')?.addEventListener('click', () => {
+    window.open('https://playhorizon.dev', '_blank');
+  });
 }
 
 // registry 以副作用方式引入本模块，这里直接完成初始化（内部有 wired 去重）

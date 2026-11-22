@@ -350,35 +350,46 @@
 
         <div id="page-rust" class="page">
           <style>
-            .rust-page { padding: 24px 28px; max-width: 760px; }
+            .rust-page { padding: 24px 28px; max-width: 860px; }
             .rust-title { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
-            .rust-sub { margin: 0 0 18px; font-size: 12px; opacity: .68; line-height: 1.7; }
-            .rust-card { border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 16px 18px; background: rgba(255,255,255,.03); }
-            .rust-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 6px 0; }
-            .rust-row span:first-child { opacity: .6; }
-            .rust-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); margin: 12px 0; overflow: hidden; }
-            .rust-bar i { display: block; height: 100%; width: 0; background: #fff; transition: width .25s ease; }
-            .rust-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-            .rust-btn { padding: 8px 16px; font-size: 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; cursor: pointer; }
+            .rust-sub { margin: 0 0 16px; font-size: 12px; opacity: .68; line-height: 1.7; }
+            .rust-card { border: 1px solid rgba(127,127,127,.28); border-radius: 12px; padding: 14px 16px; background: rgba(127,127,127,.06); }
+            .rust-head { display: flex; align-items: center; gap: 12px; }
+            .rust-icon { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; font-size: 17px; background: #2f80ed; color: #fff; }
+            .rust-meta { flex: 1; min-width: 0; }
+            .rust-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+            .rust-badge { font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgba(47,128,237,.18); color: #2f80ed; border: 1px solid rgba(47,128,237,.45); }
+            .rust-detail { margin-top: 3px; font-size: 11.5px; opacity: .62; }
+            .rust-bar { height: 4px; border-radius: 2px; background: rgba(127,127,127,.22); margin: 12px 0 4px; overflow: hidden; }
+            .rust-bar i { display: block; height: 100%; width: 0; background: #2f80ed; transition: width .2s ease; }
+            .rust-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+            .rust-btn { padding: 7px 14px; font-size: 12.5px; border-radius: 8px; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; cursor: pointer; }
             .rust-btn:disabled { opacity: .4; cursor: not-allowed; }
-            .rust-btn-primary { background: #fff; color: #111; border-color: #fff; }
+            .rust-btn-primary { background: #2f80ed; border-color: #2f80ed; color: #fff; min-width: 104px; }
             .rust-btn-ghost { border-color: transparent; text-decoration: underline; }
-            .rust-note { margin: 14px 0 0; font-size: 11px; opacity: .5; line-height: 1.7; }
+            .rust-log { margin: 12px 0 0; padding: 10px 12px; max-height: 190px; overflow: auto; font-size: 11px; line-height: 1.55; border-radius: 8px; background: rgba(0,0,0,.24); border: 1px solid rgba(127,127,127,.2); white-space: pre-wrap; word-break: break-all; }
+            .rust-log:empty { display: none; }
           </style>
           <div class="rust-page">
             <h2 class="rust-title">Rust 版 · Minecraft 26.3</h2>
-            <p class="rust-sub">Horizon 是社区用 Rust 从零重写的 Minecraft Java 26.3（非官方，与 Mojang/微软无关）。桌面端由官方启动器托管，这里负责下载与唤起。</p>
+            <p class="rust-sub">Horizon 是社区用 Rust 从零重写的 Minecraft Java 26.3（非官方，与 Mojang/微软无关）。和手机端一致：运行时收进本启动器，安装版本、准备资源、启动游戏都在这里完成，不会再打开另一个启动器窗口。</p>
             <div class="rust-card">
-              <div class="rust-row"><span>最新版本</span><strong id="rust-version">检测中…</strong></div>
-              <div class="rust-row"><span>安装包</span><span id="rust-asset">—</span></div>
-              <div class="rust-row"><span>状态</span><span id="rust-state">未下载</span></div>
+              <div class="rust-head">
+                <div class="rust-icon">R</div>
+                <div class="rust-meta">
+                  <div class="rust-name">26.3 <em class="rust-badge">Rust</em></div>
+                  <div class="rust-detail" id="rust-detail">检测中…</div>
+                </div>
+                <button id="rust-primary" class="rust-btn rust-btn-primary" disabled>检测中</button>
+              </div>
               <div class="rust-bar"><i id="rust-bar-fill"></i></div>
               <div class="rust-actions">
-                <button id="rust-download" class="rust-btn">下载安装包</button>
-                <button id="rust-run" class="rust-btn rust-btn-primary" disabled>运行安装</button>
-                <button id="rust-site" class="rust-btn rust-btn-ghost">打开官网</button>
+                <button id="rust-signin" class="rust-btn">登录 Microsoft</button>
+                <button id="rust-prepare" class="rust-btn">准备资源</button>
+                <button id="rust-stop" class="rust-btn" disabled>停止游戏</button>
+                <button id="rust-site" class="rust-btn rust-btn-ghost">官网</button>
               </div>
-              <p class="rust-note">安装包由 Horizon 官方发布（github.com/horizon-rust/horizon），安装后由它自行下载游戏资源。首次进入需要正版 26.3 或已安装的 Java 版副本。</p>
+              <pre id="rust-log" class="rust-log"></pre>
             </div>
           </div>
         </div>
