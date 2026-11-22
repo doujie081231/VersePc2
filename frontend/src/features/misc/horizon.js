@@ -6,6 +6,9 @@
 // 所有进度与输出都回到本页面（horizon-progress / horizon-log / horizon-step-done）。
 //
 // 后端命令见 src-tauri/src/horizon.rs。
+//
+// 注意：按钮状态用 `data-rust-action`，不能用 `data-action` —— 那是 core/actions.js
+// 的全局委托属性，未注册的名字会在控制台刷「未注册的动作」并可能抢走点击。
 
 import { bridge } from '../../core/tauri-bridge.js';
 
@@ -71,27 +74,27 @@ function render() {
   if (!status.runtime) {
     detail.textContent = '尚未下载运行时 · 首次约 28 MB';
     primary.textContent = '下载运行环境';
-    primary.dataset.action = 'runtime';
+    primary.dataset.rustAction = 'runtime';
   } else if (!status.account) {
     detail.textContent = `运行时已就绪 · 需要登录拥有 Minecraft: Java 版的正版账号${
       status.installed && status.installed.length ? ` · 已装 ${status.installed.join(' / ')}` : ''
     }`;
     primary.textContent = '登录 Microsoft 账号';
-    primary.dataset.action = 'signin';
+    primary.dataset.rustAction = 'signin';
   } else if (!status.installed || status.installed.length === 0) {
     detail.textContent = `运行时已就绪 · 账号 ${status.account} · 还没有安装 Horizon 版本`;
     primary.textContent = '安装版本';
-    primary.dataset.action = 'install';
+    primary.dataset.rustAction = 'install';
   } else if (!status.prepared) {
     detail.textContent = `版本 ${status.installed.join(' / ')} · 账号 ${status.account} · 资源未准备`;
     primary.textContent = '准备资源';
-    primary.dataset.action = 'prepare';
+    primary.dataset.rustAction = 'prepare';
   } else {
     detail.textContent = `已安装 · ${status.installed.join(' / ')}${
       status.account ? ` · ${status.account}` : ''
     }`;
     primary.textContent = playing ? '运行中' : '启动游戏';
-    primary.dataset.action = 'play';
+    primary.dataset.rustAction = 'play';
   }
 }
 
@@ -112,7 +115,10 @@ async function runStep(step, label) {
     const code = await invoke('horizon_step', { step });
     if (code !== 0) appendLog(`步骤 ${step} 退出码 ${code}`, 'err');
   } catch (e) {
-    appendLog(`${label}失败：${e && e.message ? e.message : e}`, 'err');
+    const msg = e && e.message ? e.message : String(e);
+    appendLog(`${label}失败：${msg}`, 'err');
+    const detail = $('rust-detail');
+    if (detail) detail.textContent = `${label}失败：${msg}`;
   } finally {
     if (step === 'play') playing = false;
     setBusy(false);
@@ -121,7 +127,7 @@ async function runStep(step, label) {
 }
 
 async function primaryAction() {
-  const action = $('rust-primary').dataset.action;
+  const action = $('rust-primary').dataset.rustAction;
   if (action === 'runtime') {
     if (busy) return;
     setBusy(true, '下载中…');
@@ -130,7 +136,10 @@ async function primaryAction() {
       status = await invoke('horizon_install_runtime');
       setProgress(1);
     } catch (e) {
-      appendLog(`下载运行时失败：${e && e.message ? e.message : e}`, 'err');
+      const msg = e && e.message ? e.message : String(e);
+      appendLog(`下载运行时失败：${msg}`, 'err');
+      const detail = $('rust-detail');
+      if (detail) detail.textContent = `下载运行时失败：${msg}`;
     } finally {
       setBusy(false);
       await refresh();
@@ -156,7 +165,7 @@ export function initHorizon() {
     if (total) {
       setProgress(done / total);
       const primary = $('rust-primary');
-      if (primary && primary.dataset.action === 'runtime') {
+      if (primary && primary.dataset.rustAction === 'runtime') {
         primary.textContent = `${humanSize(done)} / ${humanSize(total)}`;
       }
     }

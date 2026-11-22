@@ -21,10 +21,13 @@ use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, Emitter, Manager};
 
 const REPO: &str = "horizon-rust/horizon";
-/// 便携包（单文件 exe，28MB），比 setup.exe 更适合被当作运行时收编
+/// 便携包（单文件 exe，约 26MB），比 setup.exe 更适合被当作运行时收编
 const ZIP_ASSET: &str = "horizon-launcher-windows-x64.zip";
 const EXE_NAME: &str = "horizon-launcher.exe";
-/// GitHub 在国内不稳，和手机端一致走加速前缀兜底
+/// 运行时元数据（官网静态 JSON）。GitHub API 在国内常年超时，先用这个；
+/// 服务器上的这只是「最近一次发布」的快照，拿不到时再回落到 GitHub API。
+const META_URL: &str = "https://verselauncher.cn/download/horizon-launcher-latest.json";
+/// GitHub 资产的加速前缀：只在官网直链失败时用（内容仍是 GitHub 原始资产）
 const MIRRORS: &[&str] = &[
     "https://ghfast.top/",
     "https://gh-proxy.com/",
@@ -47,12 +50,16 @@ pub struct HorizonStatus {
     pub data_dir: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Deserialize)]
 pub struct HorizonRelease {
     pub tag: String,
     pub version: String,
     pub asset: String,
+    /// 首选下载地址（官网静态直链）
     pub url: String,
+    /// GitHub 原始资产地址：直链失效时用镜像兜底
+    #[serde(default)]
+    pub upstream: String,
     pub size: u64,
     pub published: String,
     pub notes: String,
@@ -89,13 +96,37 @@ fn run_capture(exe: &Path, args: &[&str]) -> Result<String, String> {
     Ok(text)
 }
 
-/// 查 Horizon 最新桌面版（挑 Windows x64 便携 zip）
-#[tauri::command]
-pub async fn horizon_latest() -> Result<HorizonRelease, String> {
-    let client = reqwest::Client::builder()
+fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
         .user_agent("VersePC2")
+        .connect_timeout(std::time::Duration::from_secs(6))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())
+}
+
+/// 官网快照（小 JSON，0.1 秒级）。GitHub API 在国内经常直接超时，所以先问这里。
+async fn latest_from_site() -> Result<HorizonRelease, String> {
+    let client = http_client(8)?;
+    let rel: HorizonRelease = client
+        .get(META_URL)
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("HTTP {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("解析失败: {e}"))?;
+    if rel.url.trim().is_empty() {
+        return Err("元数据缺少下载地址".into());
+    }
+    Ok(rel)
+}
+
+/// 兜底：GitHub API 现查（API 可用但官网快照过旧/缺文件时）
+async fn latest_from_github() -> Result<HorizonRelease, String> {
+    let client = http_client(12)?;
 
     let releases: serde_json::Value = client
         .get(format!("https://api.github.com/repos/{REPO}/releases?per_page=10"))
@@ -121,11 +152,16 @@ pub async fn horizon_latest() -> Result<HorizonRelease, String> {
         });
         if let Some(asset) = picked {
             let tag = rel["tag_name"].as_str().unwrap_or("").to_string();
+            let url = asset["browser_download_url"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
             return Ok(HorizonRelease {
                 version: tag.trim_start_matches("launcher@").to_string(),
                 tag,
                 asset: asset["name"].as_str().unwrap_or("").to_string(),
-                url: asset["browser_download_url"].as_str().unwrap_or("").to_string(),
+                upstream: url.clone(),
+                url,
                 size: asset["size"].as_u64().unwrap_or(0),
                 published: rel["published_at"]
                     .as_str()
@@ -138,6 +174,17 @@ pub async fn horizon_latest() -> Result<HorizonRelease, String> {
         }
     }
     Err("没有找到可用的 Windows 运行包".into())
+}
+
+/// 查 Horizon 最新桌面版：官网快照优先，GitHub API 兜底
+#[tauri::command]
+pub async fn horizon_latest() -> Result<HorizonRelease, String> {
+    match latest_from_site().await {
+        Ok(rel) => Ok(rel),
+        Err(site_err) => latest_from_github()
+            .await
+            .map_err(|gh_err| format!("官网快照不可用（{site_err}）；GitHub 也不可用（{gh_err}）")),
+    }
 }
 
 /// 当前状态：运行时 / 已装版本 / 资源 / 账号
@@ -205,15 +252,23 @@ pub async fn horizon_install_runtime(app: AppHandle) -> Result<HorizonStatus, St
 
     let client = reqwest::Client::builder()
         .user_agent("VersePC2")
+        .connect_timeout(std::time::Duration::from_secs(8))
+        // 26MB 的包，给足整体时间；卡死由 connect/read 超时兜住
+        .timeout(std::time::Duration::from_secs(900))
         .build()
         .map_err(|e| e.to_string())?;
 
     let mut last_err = String::new();
     let mut downloaded: Option<PathBuf> = None;
+    // 官网直链 → GitHub 原始资产 → GitHub + 镜像（镜像只能套在 GitHub 地址上）
     let mut urls = vec![rel.url.clone()];
-    for m in MIRRORS {
-        urls.push(format!("{m}{}", rel.url));
+    if !rel.upstream.trim().is_empty() && rel.upstream != rel.url {
+        urls.push(rel.upstream.clone());
+        for m in MIRRORS {
+            urls.push(format!("{m}{}", rel.upstream));
+        }
     }
+    urls.dedup();
     let tmp = dir.join(format!("{ZIP_ASSET}.part"));
     for (idx, url) in urls.iter().enumerate() {
         let _ = app.emit(
