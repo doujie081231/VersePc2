@@ -27,6 +27,10 @@ let wired = false;
 let status = null;
 let busy = false;
 let playing = false;
+/// 设备码登录：CLI 只打一行「To sign in, open <url> in a browser and enter the code XXXX」
+/// 然后在后台等你登完。不把这句话显式呈现出来，用户只会看到「等待登录…」以为卡死。
+let signinUrl = '';
+let signinOpened = false;
 
 function setBusy(value, label) {
   busy = value;
@@ -47,6 +51,42 @@ function appendLog(line, kind) {
   const lines = box.textContent.split('\n');
   if (lines.length > 400) box.textContent = lines.slice(-400).join('\n');
   box.scrollTop = box.scrollHeight;
+}
+
+/** 从 CLI 输出里抓设备码与验证地址；抓到就展开面板（浏览器只自动开一次） */
+function captureSignin(line) {
+  const code = line.match(/enter the code\s+([A-Za-z0-9-]{4,})/i);
+  const url = line.match(/open\s+(https?:\/\/\S+)\s+in a browser/i);
+  if (!code && !url) return;
+
+  const panel = $('rust-signin-panel');
+  if (panel) panel.hidden = false;
+  if (code) {
+    const el = $('rust-signin-code');
+    if (el) el.textContent = code[1].toUpperCase();
+  }
+  if (url) {
+    signinUrl = url[1];
+    const el = $('rust-signin-url');
+    if (el) el.textContent = signinUrl.replace(/^https?:\/\//, '');
+  }
+  if (!signinOpened && signinUrl) {
+    signinOpened = true;
+    try {
+      bridge.openExternal(signinUrl);
+    } catch {
+      window.open(signinUrl, '_blank');
+    }
+  }
+}
+
+function resetSigninPanel() {
+  signinUrl = '';
+  signinOpened = false;
+  const panel = $('rust-signin-panel');
+  if (panel) panel.hidden = true;
+  const code = $('rust-signin-code');
+  if (code) code.textContent = '—';
 }
 
 function setProgress(fraction) {
@@ -102,6 +142,7 @@ function render() {
 async function refresh() {
   try {
     status = await invoke('horizon_status');
+    if (status && status.account) resetSigninPanel();
     render();
   } catch (e) {
     const detail = $('rust-detail');
@@ -111,6 +152,7 @@ async function refresh() {
 
 async function runStep(step, label) {
   if (busy) return;
+  if (step === 'signin') resetSigninPanel();
   setBusy(true, label);
   try {
     const code = await invoke('horizon_step', { step });
@@ -174,7 +216,9 @@ export function initHorizon() {
 
   listen('horizon-log', (event) => {
     const { line, kind } = event.payload || {};
-    if (line) appendLog(line, kind);
+    if (!line) return;
+    appendLog(line, kind);
+    captureSignin(line);
   });
 
   listen('horizon-step-done', (event) => {
@@ -209,6 +253,37 @@ export function initHorizon() {
       render();
     } catch (e) {
       appendLog(`停止失败：${e && e.message ? e.message : e}`, 'error');
+    }
+  });
+  $('rust-signin-copy')?.addEventListener('click', async () => {
+    const code = $('rust-signin-code')?.textContent || '';
+    if (!code || code === '—') return;
+    try {
+      if (bridge.clipboard && bridge.clipboard.writeText) await bridge.clipboard.writeText(code);
+      else await navigator.clipboard.writeText(code);
+      appendLog(`设备码 ${code} 已复制`, 'info');
+    } catch (e) {
+      appendLog(`复制失败：${e && e.message ? e.message : e}`, 'err');
+    }
+  });
+  // 设备码有有效期，登不进去时得能退出等待态（kill 掉正在等的那次 sign-in）
+  $('rust-signin-cancel')?.addEventListener('click', async () => {
+    try {
+      await invoke('horizon_stop');
+      appendLog('已取消登录等待', 'info');
+    } catch (e) {
+      appendLog(`取消失败：${e && e.message ? e.message : e}`, 'err');
+    }
+    resetSigninPanel();
+    setBusy(false);
+    await refresh();
+  });
+  $('rust-signin-open')?.addEventListener('click', () => {
+    const url = signinUrl || 'https://www.microsoft.com/link';
+    try {
+      bridge.openExternal(url);
+    } catch {
+      window.open(url, '_blank');
     }
   });
   $('rust-site')?.addEventListener('click', () => {

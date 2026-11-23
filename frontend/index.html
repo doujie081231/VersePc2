@@ -369,6 +369,12 @@
             .rust-btn-ghost { border-color: transparent; text-decoration: underline; }
             .rust-log { margin: 12px 0 0; padding: 10px 12px; max-height: 190px; overflow: auto; font-size: 11px; line-height: 1.55; border-radius: 8px; background: rgba(0,0,0,.24); border: 1px solid rgba(127,127,127,.2); white-space: pre-wrap; word-break: break-all; }
             .rust-log:empty { display: none; }
+            .rust-signin { margin-top: 12px; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(47,128,237,.45); background: rgba(47,128,237,.08); }
+            .rust-signin-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+            .rust-signin-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+            .rust-signin-label { font-size: 12px; opacity: .7; }
+            .rust-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 20px; font-weight: 700; letter-spacing: 3px; color: #2f80ed; background: rgba(47,128,237,.12); padding: 3px 10px; border-radius: 6px; }
+            .rust-signin-tip { margin-top: 8px; font-size: 11.5px; line-height: 1.6; opacity: .7; }
           </style>
           <div class="rust-page">
             <h2 class="rust-title">Rust 版 · Minecraft 26.3</h2>
@@ -388,6 +394,17 @@
                 <button id="rust-prepare" class="rust-btn">准备资源</button>
                 <button id="rust-stop" class="rust-btn" disabled>停止游戏</button>
                 <button id="rust-site" class="rust-btn rust-btn-ghost">官网</button>
+              </div>
+              <div id="rust-signin-panel" class="rust-signin" hidden>
+                <div class="rust-signin-title">等待你在浏览器里登录 Microsoft</div>
+                <div class="rust-signin-row">
+                  <span class="rust-signin-label">设备码</span>
+                  <code id="rust-signin-code" class="rust-code">—</code>
+                  <button id="rust-signin-copy" class="rust-btn">复制代码</button>
+                  <button id="rust-signin-open" class="rust-btn rust-btn-primary">打开登录页</button>
+                  <button id="rust-signin-cancel" class="rust-btn rust-btn-ghost">取消登录</button>
+                </div>
+                <div class="rust-signin-tip">打开 <span id="rust-signin-url">microsoft.com/link</span> 并输入上面的代码。请使用拥有 Minecraft: Java 版的账号；登录完成后本页会自动刷新，无需手动关闭。</div>
               </div>
               <pre id="rust-log" class="rust-log"></pre>
             </div>
