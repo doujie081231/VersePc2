@@ -64,6 +64,10 @@ const version = tauriConf.version || '0.0.0';
 console.log(`[build-portable] 版本号: ${version}`);
 console.log(`[build-portable] 构建目录: ${buildRoot}`);
 
+// 1.5 确保内置的 Horizon 运行时包存在（被 include_bytes! 编进 exe，不进 git）
+//     缺失时自动下载；下载失败会直接抛错，避免编出一个「点 Rust 版就要下 27MB」的包而不自知。
+run('node scripts/fetch-horizon-runtime.mjs');
+
 // 2. 重定向 Cargo 构建产物到 E 盘（避免 C 盘 target 目录不断膨胀）
 process.env.CARGO_TARGET_DIR = cargoTargetDir;
 

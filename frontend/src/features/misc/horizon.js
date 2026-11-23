@@ -72,8 +72,9 @@ function render() {
   // 顺序照 CLI 的真实前置条件走：运行时 → 正版账号（prepare --download 与 play 都要求）
   // → 安装版本 → 准备资源 → 启动。没有账号时不让用户点「准备资源」再吃一条 CLI 报错。
   if (!status.runtime) {
-    detail.textContent = '尚未下载运行时 · 首次约 28 MB';
-    primary.textContent = '下载运行环境';
+    // 正常情况运行时随安装包内置，首次进页面就解出来了；走到这里说明内置包损坏/被杀软拦了
+    detail.textContent = '内置运行时不可用 · 可点此在线下载（约 27 MB）';
+    primary.textContent = '修复运行环境';
     primary.dataset.rustAction = 'runtime';
   } else if (!status.account) {
     detail.textContent = `运行时已就绪 · 需要登录拥有 Minecraft: Java 版的正版账号${

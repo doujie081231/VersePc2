@@ -39,3 +39,6 @@ playwright-report/
 
 # 覆盖率报告（仅本地与 CI 产物）
 coverage/
+
+# 内置 Horizon 运行时（26.9MB 二进制，构建前由 scripts/fetch-horizon-runtime.mjs 拉取）
+src-tauri/assets/horizon-launcher-windows-x64.zip

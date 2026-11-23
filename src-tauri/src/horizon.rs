@@ -65,6 +65,10 @@ pub struct HorizonRelease {
     pub notes: String,
 }
 
+/// 随包内置的运行时（官方便携 zip，26.9MB）。用户不用等 27MB 下载，
+/// 也不需要站点出带宽；首次进入 Rust 版时解出 exe 即可（1~3 秒）。
+static BUNDLED_ZIP: &[u8] = include_bytes!("../assets/horizon-launcher-windows-x64.zip");
+
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let dir = base.join("horizon");
@@ -74,6 +78,47 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn exe_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir(app)?.join(EXE_NAME))
+}
+
+/// 从随包的 zip 里解出 `horizon-launcher.exe`。
+///
+/// 先写 `.part` 再改名：解到一半被中断也不会留下一个「看起来存在」的半截 exe。
+fn extract_bundled(dir: &Path) -> Result<(), String> {
+    if BUNDLED_ZIP.len() < 1024 {
+        return Err("内置运行时包为空".into());
+    }
+    let reader = std::io::Cursor::new(BUNDLED_ZIP);
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| format!("内置运行时包损坏: {e}"))?;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        if !entry.name().to_ascii_lowercase().ends_with(EXE_NAME) {
+            continue;
+        }
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let tmp = dir.join(format!("{EXE_NAME}.part"));
+        {
+            let mut out = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+            std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+            out.sync_all().map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(&tmp, dir.join(EXE_NAME)).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    Err("内置包里没有 horizon-launcher.exe".into())
+}
+
+/// 运行时已就位就直接用；不在则从内置包解出。返回是否可用。
+fn ensure_runtime(dir: &Path) -> bool {
+    if dir.join(EXE_NAME).is_file() {
+        return true;
+    }
+    match extract_bundled(dir) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("[horizon] 解出内置运行时失败: {e}");
+            false
+        }
+    }
 }
 
 /// 运行时的数据目录（Horizon 自己定的，用于判断资源是否就绪）
@@ -192,9 +237,11 @@ pub async fn horizon_latest() -> Result<HorizonRelease, String> {
 pub async fn horizon_status(app: AppHandle) -> Result<HorizonStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let dir = data_dir(&app)?;
+        // 首次进入 Rust 版：从随包 zip 解出运行时（不联网、不等下载）
+        let runtime = ensure_runtime(&dir);
         let exe = dir.join(EXE_NAME);
         let mut st = HorizonStatus {
-            runtime: exe.is_file(),
+            runtime,
             exe: exe.to_string_lossy().to_string(),
             data_dir: dir.to_string_lossy().to_string(),
             ..Default::default()
@@ -247,8 +294,24 @@ pub async fn horizon_status(app: AppHandle) -> Result<HorizonStatus, String> {
 pub async fn horizon_install_runtime(app: AppHandle) -> Result<HorizonStatus, String> {
     use futures_util::StreamExt;
 
-    let rel = horizon_latest().await?;
     let dir = data_dir(&app)?;
+    // 常见路径：包里自带，解出来就能用（不联网、不给站点出带宽）
+    if dir.join(EXE_NAME).is_file() || extract_bundled(&dir).is_ok() {
+        let exe = exe_path(&app)?;
+        let _ = app.emit(
+            "horizon-log",
+            serde_json::json!({ "line": "已解出内置运行时（无需下载）", "kind": "ok" }),
+        );
+        let _ = run_capture(&exe, &["settings", "language", "zh"]);
+        return horizon_status(app.clone()).await;
+    }
+
+    // 兜底：内置包损坏时再走网络
+    let _ = app.emit(
+        "horizon-log",
+        serde_json::json!({ "line": "内置运行时不可用，改为在线下载", "kind": "info" }),
+    );
+    let rel = horizon_latest().await?;
 
     let client = reqwest::Client::builder()
         .user_agent("VersePC2")
