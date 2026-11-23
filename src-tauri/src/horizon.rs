@@ -600,3 +600,28 @@ fn parse_account(text: &str) -> Option<String> {
         })
         .filter(|s| !s.is_empty())
 }
+
+#[cfg(test)]
+mod bundled_runtime_tests {
+    use super::*;
+
+    /// 内置包必须真能解出可执行文件——这是「用户不用下载 27MB」的唯一依据，
+    /// 包坏了（截断、上游换了布局）必须在构建时就暴露，而不是等用户点开才发现。
+    #[test]
+    fn bundled_pack_extracts_launcher() {
+        let dir = std::env::temp_dir().join(format!("verse-horizon-bundled-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        extract_bundled(&dir).expect("解出内置运行时失败");
+        let exe = dir.join(EXE_NAME);
+        let size = std::fs::metadata(&exe).expect("解出后没有 exe").len();
+        assert!(size > 50 * 1024 * 1024, "解出的 exe 只有 {size} 字节，明显不对");
+
+        // 第二次：已存在就直接可用，不重复解包
+        assert!(ensure_runtime(&dir));
+        assert_eq!(std::fs::metadata(&exe).unwrap().len(), size);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
