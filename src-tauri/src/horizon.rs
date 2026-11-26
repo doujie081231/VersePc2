@@ -257,10 +257,10 @@ pub async fn horizon_status(app: AppHandle) -> Result<HorizonStatus, String> {
             st.selected = selected;
         }
         // settings 里的 selected_version 作为兜底（versions 已给就用 versions 的）
-        if st.selected.is_none() {
-            if let Ok(text) = run_capture(&exe, &["settings", "--json"]) {
-                st.selected = parse_selected(&text);
-            }
+        if st.selected.is_none()
+            && let Ok(text) = run_capture(&exe, &["settings", "--json"])
+        {
+            st.selected = parse_selected(&text);
         }
         if let Ok(text) = run_capture(&exe, &["account", "list", "--json"]) {
             st.account = parse_account(&text);
@@ -573,17 +573,17 @@ fn parse_account(text: &str) -> Option<String> {
                 .and_then(|x| x.as_bool())
                 .unwrap_or(false)
                 || row.get("current").and_then(|x| x.as_bool()).unwrap_or(false);
-            if selected {
-                if let Some(n) = name_of(row) {
-                    return Some(n);
-                }
+            if selected
+                && let Some(n) = name_of(row)
+            {
+                return Some(n);
             }
         }
         // owner=true 表示这台机器上就一个账号、归它用
-        if w.owner {
-            if let Some(n) = w.accounts.first().and_then(name_of) {
-                return Some(n);
-            }
+        if w.owner
+            && let Some(n) = w.accounts.first().and_then(name_of)
+        {
+            return Some(n);
         }
         return w.accounts.first().and_then(name_of);
     }
