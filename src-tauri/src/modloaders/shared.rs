@@ -18,6 +18,9 @@ use std::os::windows::process::CommandExt;
 /// 由安装编排层注入，用于把「下载支持库 / 运行安装器」等耗时步骤反馈到安装界面。
 pub type LoaderProgress = std::sync::Arc<dyn Fn(u32, &str) + Send + Sync>;
 
+/// 库文件并发下载进度回调：(已完成数, 总数)
+pub type LibProgress = std::sync::Arc<dyn Fn(usize, usize) + Send + Sync>;
+
 /// 安全触发进度回调（未注入时什么也不做）
 pub(crate) fn report_progress(progress: Option<&LoaderProgress>, pct: u32, msg: &str) {
     if let Some(cb) = progress {
@@ -553,32 +556,48 @@ pub fn ensure_parent_dir(path: &Path) -> bool {
 /// # 参数
 /// - `libs`: (url, dest_path) 列表
 /// - `parallel`: 并发数
+/// - `progress`: 可选进度回调 (已完成数, 总数)，每完成一个文件调用一次
 ///
 /// # 返回
 /// (成功数, 失败数)
 pub async fn download_libraries_concurrent(
     libs: Vec<(String, PathBuf)>,
     parallel: usize,
+    progress: Option<LibProgress>,
 ) -> (usize, usize) {
     if libs.is_empty() {
         return (0, 0);
     }
     let parallel = parallel.max(1).min(libs.len());
+    let total = libs.len();
     let mut success = 0usize;
     let mut fail = 0usize;
     let mut tasks = tokio::task::JoinSet::new();
+
+    let mut done = 0usize;
+    let notify = |done: usize| {
+        if let Some(cb) = &progress {
+            cb(done, total);
+        }
+    };
 
     for (url, dest) in libs {
         // 控制并发数
         while tasks.len() >= parallel {
             match tasks.join_next().await {
                 Some(Ok(Ok(()))) => success += 1,
+                Some(Ok(Err(e))) => {
+                    fail += 1;
+                    file_log(&format!("[lib] 下载失败: {}", e));
+                }
                 _ => fail += 1,
             }
+            done += 1;
+            notify(done);
         }
         tasks.spawn(async move {
             // 程序内部方式下载；失败时改用系统 curl 兜底（能连上 reqwest 连不上的源）
-            if crate::download::single::download_with_mirror(
+            let first_err = match crate::download::single::download_with_mirror(
                 &url,
                 &dest,
                 None,
@@ -588,11 +607,14 @@ pub async fn download_libraries_concurrent(
                 None,
             )
             .await
-            .is_ok()
             {
-                return Ok::<(), String>(());
+                Ok(()) => return Ok::<(), String>(()),
+                Err(e) => e,
+            };
+            match download_with_curl(&url, &dest, 300).await {
+                Ok(()) => Ok(()),
+                Err(e) => Err(format!("{} ({} / {})", url, first_err, e)),
             }
-            download_with_curl(&url, &dest, 300).await
         });
     }
 
@@ -600,8 +622,14 @@ pub async fn download_libraries_concurrent(
     while let Some(result) = tasks.join_next().await {
         match result {
             Ok(Ok(())) => success += 1,
+            Ok(Err(e)) => {
+                fail += 1;
+                file_log(&format!("[lib] 下载失败: {}", e));
+            }
             _ => fail += 1,
         }
+        done += 1;
+        notify(done);
     }
 
     (success, fail)
@@ -703,7 +731,7 @@ pub async fn install_merged_loader(
     // 6. 下载合并后版本的全部库
     report(30, "正在下载依赖库...".to_string());
     let libs_dir = libraries_dir();
-    let (_ok, fail) = download_basic_libraries(&merged, &libs_dir).await;
+    let (_ok, fail) = download_basic_libraries(&merged, &libs_dir, None).await;
     if fail > 0 {
         // 所有需下载的库均失败：不中断安装（版本被拒绝会导致整个整合包装不上）。
         // 缺失库由“文件修复 / 启动前补全”自动下载补齐。

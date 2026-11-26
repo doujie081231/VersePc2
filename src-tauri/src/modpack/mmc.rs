@@ -20,7 +20,7 @@ use serde_json::{json, Map, Value};
 use tauri::AppHandle;
 
 use super::curseforge_shared as cf_shared;
-use super::{emit_progress, normalize_version_id, versions_dir};
+use super::{emit_progress, import_log, normalize_version_id, versions_dir};
 use crate::modloaders::shared as ml_shared;
 
 /// MMC 整合包解析出的覆盖信息
@@ -60,7 +60,7 @@ impl MmcComponents {
 
 /// 导入 MMC 整合包
 pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &str) -> Value {
-    eprintln!("[mmc] 开始导入: {}", file_path);
+    import_log("MMC", &format!("开始导入: {}", file_path));
 
     let file = match std::fs::File::open(file_path) {
         Ok(f) => f,
@@ -89,8 +89,20 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
     };
     let components = parse_components(&pack_json);
     if components.minecraft.is_empty() {
+        import_log("MMC", "错误: mmc-pack.json 未提供游戏版本");
         return json!({ "success": false, "error": "该 MMC 整合包未提供游戏版本信息，无法安装！" });
     }
+    import_log(
+        "MMC",
+        &format!(
+            "组件: mc={} forge={} neoforge={} fabric={} quilt={}",
+            components.minecraft,
+            components.forge,
+            components.neoforge,
+            components.fabric,
+            components.quilt
+        ),
+    );
 
     // 2. JSON-Patches（仅保留 components 中声明的 uid）
     let patch_jsons = collect_patches(&mut archive, &base);
@@ -135,15 +147,18 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
 
     // 4. 安装原版
     emit_progress(app, 8, "正在准备基础版本...", "base");
+    import_log("MMC", &format!("安装基础版本 {}", components.minecraft));
     let app_owned = app.clone();
     let on_progress = Some(Box::new(move |pct: u32, msg: String| {
         let mapped = 8 + (pct as u64 * 12 / 100).min(12) as u32;
         emit_progress(&app_owned, mapped, &msg, "base")
     }) as ml_shared::BaseVersionProgress);
     if let Err(e) = ml_shared::ensure_base_version_installed(&components.minecraft, on_progress).await {
+        import_log("MMC", &format!("基础版本安装失败: {}", e));
         let _ = std::fs::remove_dir_all(&version_dir);
         return json!({ "success": false, "versionId": version_id, "error": e });
     }
+    import_log("MMC", "基础版本安装完成");
 
     // 提前读取原版 JSON 并复制客户端 JAR：加载器安装完成后可能清理原版目录，
     // 之后就无法再从这里取到基准版本信息。
@@ -186,6 +201,13 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
         };
         if components.has_loader() {
             emit_progress(app, 25, "正在安装模组加载器...", "loader-install");
+            import_log(
+                "MMC",
+                &format!(
+                    "安装加载器: forge={} neoforge={} fabric={}",
+                    components.forge, components.neoforge, components.fabric
+                ),
+            );
             if let Err(e) = super::mrpack_native::install_loader(
                 &components.forge,
                 &components.neoforge,
@@ -195,9 +217,11 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
             )
             .await
             {
+                import_log("MMC", &format!("加载器安装失败: {}", e));
                 let _ = std::fs::remove_dir_all(&version_dir);
                 return json!({ "success": false, "versionId": version_id, "error": e });
             }
+            import_log("MMC", "加载器安装完成");
         }
         lv_id
     };
@@ -230,11 +254,13 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
 
     // 8. 解压实例文件（.minecraft/ 与 libraries/）与图标
     emit_progress(app, 45, "正在解压整合包文件...", "extract");
+    import_log("MMC", "开始解压实例文件");
     if let Err(e) = extract_instance_files(&mut archive, &base, &version_dir, app) {
-        eprintln!("[mmc] 解压失败: {}", e);
+        import_log("MMC", &format!("解压失败: {}", e));
         let _ = std::fs::remove_dir_all(&version_dir);
         return json!({ "success": false, "versionId": version_id, "error": e });
     }
+    import_log("MMC", "解压实例文件完成");
     extract_instance_icon(&mut archive, &base, &version_dir, &instance_cfg);
 
     // 9. 迁移 instance.cfg 中可映射的启动设置（版本隔离 + JVM 参数）
@@ -250,9 +276,10 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
 
     // 11. 校验/补全库文件
     emit_progress(app, 70, "正在验证整合包完整性...", "verify");
+    import_log("MMC", "校验/补全库文件");
     let (verify_ok, _checked, missing) = cf_shared::verify_import_libs(&version_id).await;
     if !verify_ok {
-        eprintln!("[mmc] 库文件补全失败: {} 个缺失", missing);
+        import_log("MMC", &format!("库文件补全失败: {} 个缺失", missing));
         return json!({
             "success": false,
             "versionId": version_id,
@@ -268,7 +295,7 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
     {
         emit_progress(app, 82, "正在下载游戏资源...", "assets");
         if let Err(e) = super::mrpack_native::download_assets(app, asset_index, &settings).await {
-            eprintln!("[mmc] 资源下载异常(非致命): {}", e);
+            import_log("MMC", &format!("资源下载异常(非致命): {}", e));
         }
     }
     if let Some(ref merged) = merged_json {
@@ -299,6 +326,10 @@ pub async fn import_mmc(app: &AppHandle, file_path: &str, custom_version_name: &
         100,
         &format!("整合包 \"{}\" 导入完成！", pack_name),
         "done",
+    );
+    import_log(
+        "MMC",
+        &format!("导入完成: versionId={} mc={}", version_id, components.minecraft),
     );
 
     json!({
@@ -944,7 +975,7 @@ async fn download_client_jar_if_missing(app: &AppHandle, version_id: &str, merge
         )
         .await
         {
-            eprintln!("[mmc] 客户端JAR下载失败(非致命): {}", e);
+            import_log("MMC", &format!("客户端JAR下载失败(非致命): {}", e));
         }
     }
 }

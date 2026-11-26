@@ -271,6 +271,31 @@ pub fn emit_progress(app: &AppHandle, progress: u32, message: &str, stage: &str)
     );
 }
 
+/// 写入整合包导入日志（modpack-import.log），便于复现定位导入卡住/失败。
+///
+/// `tag` 区分导入器（MMC / ZIP / CurseForge），日志行形如
+/// `[2026-01-01 12:00:00] [MMC] 消息`。
+pub fn import_log(tag: &str, msg: &str) {
+    eprintln!("[{}] {}", tag, msg);
+    let dir = data_dir().join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("modpack-import.log");
+    let line = format!(
+        "[{}] [{}] {}",
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+        tag,
+        msg
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{}", line);
+    }
+}
+
 /// 发送带文件列表的导入进度事件
 #[allow(dead_code)]
 pub fn emit_progress_with_files(

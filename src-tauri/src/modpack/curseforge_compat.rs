@@ -169,7 +169,7 @@ pub async fn verify_import_libs(version_id: &str) -> (bool, usize, usize) {
             }
         }
         if !to_download.is_empty() {
-            let (success, fail) = ml_shared::download_libraries_concurrent(to_download, 16).await;
+            let (success, fail) = ml_shared::download_libraries_concurrent(to_download, 16, None).await;
             eprintln!(
                 "[Modpack] 核心库补全: 成功 {}, 失败 {}",
                 success, fail
@@ -193,7 +193,7 @@ pub async fn verify_import_libs(version_id: &str) -> (bool, usize, usize) {
             }
         }
         if !to_download.is_empty() {
-            let (success, fail) = ml_shared::download_libraries_concurrent(to_download, 16).await;
+            let (success, fail) = ml_shared::download_libraries_concurrent(to_download, 16, None).await;
             eprintln!(
                 "[Modpack] 非核心库补全: 成功 {}, 失败 {}",
                 success, fail

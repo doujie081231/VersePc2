@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-use super::{emit_progress, normalize_version_id, versions_dir};
+use super::{emit_progress, import_log, normalize_version_id, versions_dir};
 
 /// 导入 CurseForge 整合包
 ///
@@ -32,7 +32,7 @@ pub async fn import_hmcl(
     file_path: &str,
     custom_version_name: &str,
 ) -> Value {
-    eprintln!("[theseus-adapter] 开始导入 HMCL: {}", file_path);
+    import_log("ZIP", &format!("开始导入 HMCL: {}", file_path));
     // HMCL 格式走通用 ZIP 解压
     import_zip_generic(app, file_path, custom_version_name).await
 }
@@ -43,7 +43,7 @@ pub async fn import_raw_zip(
     file_path: &str,
     custom_version_name: &str,
 ) -> Value {
-    eprintln!("[theseus-adapter] 开始导入普通 ZIP: {}", file_path);
+    import_log("ZIP", &format!("开始导入普通 ZIP: {}", file_path));
     import_zip_generic(app, file_path, custom_version_name).await
 }
 
@@ -109,6 +109,7 @@ async fn import_zip_generic(
     // 5. 解压所有文件到版本目录
     emit_progress(app, 20, "正在解压文件...", "extract");
     let total = archive.len();
+    import_log("ZIP", &format!("开始解压 {} 个条目到 {}", total, version_dir.display()));
     for i in 0..total {
         if let Ok(mut entry) = archive.by_index(i) {
             let name = entry.name().replace('\\', "/");
@@ -134,6 +135,7 @@ async fn import_zip_generic(
     }
 
     emit_progress(app, 100, "导入完成", "completed");
+    import_log("ZIP", &format!("导入完成: versionId={}", version_id));
 
     json!({
         "success": true,

@@ -58,6 +58,7 @@ pub(super) async fn fetch_version_details(url: &str, download_source: &str) -> R
 pub(super) async fn download_basic_libraries(
     version_details: &Value,
     libraries_dir: &PathBuf,
+    progress: Option<super::shared::LibProgress>,
 ) -> (usize, usize) {
     let libraries = version_details
         .get("libraries")
@@ -119,7 +120,7 @@ pub(super) async fn download_basic_libraries(
     if tasks.is_empty() {
         return (0, 0);
     }
-    download_libraries_concurrent(tasks, 16).await
+    download_libraries_concurrent(tasks, 16, progress).await
 }
 
 /// 确保原版 Minecraft 已安装；缺失时自动下载安装。
@@ -130,7 +131,9 @@ pub async fn ensure_base_version_installed(
     game_version: &str,
     on_progress: Option<BaseVersionProgress>,
 ) -> Result<(), String> {
-    let report = on_progress.unwrap_or_else(|| Box::new(|_, _| {}) as BaseVersionProgress);
+    let report: std::sync::Arc<dyn Fn(u32, String) + Send + Sync> = std::sync::Arc::from(
+        on_progress.unwrap_or_else(|| Box::new(|_, _| {}) as BaseVersionProgress),
+    );
     file_log(&format!("[base] 检查基础版本 {}", game_version));
 
     let base_dir = versions_dir().join(game_version);
@@ -207,10 +210,19 @@ pub async fn ensure_base_version_installed(
         ).await.map_err(|e| format!("下载客户端文件失败: {}", e))?;
     }
 
-    // 5. 并发下载核心库
+    // 5. 并发下载核心库（逐文件回报进度：30~88 区间，避免界面长时间停在同一个百分比）
     report(30, "正在下载依赖库...".to_string());
     let libs_dir = libraries_dir();
-    let (_ok, fail) = download_basic_libraries(&version_details, &libs_dir).await;
+    let report_for_libs = report.clone();
+    let lib_progress: super::shared::LibProgress = std::sync::Arc::new(move |done, total| {
+        let pct = if total > 0 {
+            30 + (done as u32 * 58 / total as u32).min(58)
+        } else {
+            30
+        };
+        report_for_libs(pct, format!("正在下载依赖库 {}/{}", done, total));
+    });
+    let (_ok, fail) = download_basic_libraries(&version_details, &libs_dir, Some(lib_progress)).await;
     if fail > 0 {
         // 依赖库下载失败不中断安装（部分库失败时版本会被拒绝，导致整合包安装中止）。
         // 缺失库由“文件修复 / 启动前补全”自动下载补齐。

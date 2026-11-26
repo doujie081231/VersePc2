@@ -127,23 +127,7 @@ pub(crate) enum LoaderKind {
 
 /// 写入整合包导入日志（modpack-import.log），便于复现定位导入失败
 fn import_log(msg: &str) {
-    eprintln!("[CurseForge] {}", msg);
-    let dir = crate::storage::resolve_data_dir().join("logs");
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("modpack-import.log");
-    let line = format!(
-        "[{}] [CurseForge] {}",
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-        msg
-    );
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
-        use std::io::Write;
-        let _ = writeln!(f, "{}", line);
-    }
+    super::import_log("CurseForge", msg);
 }
 
 /// 导入 CurseForge 整合包
