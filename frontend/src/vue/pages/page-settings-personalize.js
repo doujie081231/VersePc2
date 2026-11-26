@@ -13,6 +13,7 @@ import { applyWallpaperByName, applyWeWallpaper, applyPanoramaThemeByName, apply
 import { showGlobalDownloadProgress, hideGlobalDownloadProgress } from '../../features/settings/wallpaper-engine.js';
 
 import { personalizeState } from '../../features/settings/personalize-state.js';
+import { isHomeLayoutFollowResize, setHomeLayoutFollowResize } from '../../features/home/home-widgets.js';
 import VButton from '@/components/verse/VButton.vue';
 
 const PageSettingsPersonalize = (function () {
@@ -530,12 +531,20 @@ const PageSettingsPersonalize = (function () {
     name: 'LayoutCard',
     components: { VButton },
     data() {
-      return { resettingHome: false };
+      return { resettingHome: false, followHomeLayout: false };
     },
     computed: {
       state() { return personalizeState; }
     },
+    mounted() {
+      // 开关状态存在主页布局里（跟随窗口属于布局属性），挂载时同步一次
+      this.followHomeLayout = typeof isHomeLayoutFollowResize === 'function' ? isHomeLayoutFollowResize() : false;
+    },
     methods: {
+      onFollowHomeLayoutChange(enabled) {
+        this.followHomeLayout = !!enabled;
+        if (typeof setHomeLayoutFollowResize === 'function') setHomeLayoutFollowResize(!!enabled);
+      },
       onNavWidthInput(value) {
         if (typeof applyNavWidthValue === 'function') applyNavWidthValue(value);
       },
@@ -569,6 +578,13 @@ const PageSettingsPersonalize = (function () {
             <div class="layout-subsection">
               <h4>主页布局</h4>
               <p class="form-hint" style="color:var(--text-secondary);font-size:13px;margin:0 0 12px;">恢复主页控件（软件名 / 头像 / 版本卡 / 启动按钮）的默认位置与头像缩放</p>
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="setting-home-layout-follow" :checked="followHomeLayout" @change="onFollowHomeLayoutChange($event.target.checked)">
+                  <span>主页布局跟随窗口</span>
+                </label>
+                <span class="form-hint">开启后，确认过的主页布局在改变启动器窗口大小时按比例跟随，控件保持相对位置；默认关闭，关闭时控件停留在原来的像素位置</span>
+              </div>
               <VButton variant="secondary" @click="resetHomeLayout" :disabled="resettingHome">
                 {{ resettingHome ? '已恢复' : '恢复主页默认布局' }}
               </VButton>
