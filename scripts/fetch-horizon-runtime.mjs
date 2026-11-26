@@ -6,6 +6,9 @@
 // 也不让我们的站点出带宽。它是二进制产物、会随上游更新，所以不进 git；
 // 构建前若缺失就由本脚本拉一份（优先国内可达的加速镜像）。
 //
+// 上游 horizon-rust/horizon 的 release 资产目前已无法匿名下载（404），
+// 因此在 VersePc2 的 Release 里保留同名副本，脚本优先用它，上游仅作兜底。
+//
 // 用法：
 //   node scripts/fetch-horizon-runtime.mjs           # 缺失才下载
 //   node scripts/fetch-horizon-runtime.mjs --force   # 强制重下
@@ -24,6 +27,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
 const target = join(projectRoot, 'src-tauri', 'assets', 'horizon-launcher-windows-x64.zip');
 
+/// 本仓库 Release 内的副本（与上游 0.2.105 相同，已按字节校验）
+const MIRRORED_ASSET =
+  'https://github.com/doujie081231/VersePc2/releases/download/horizon-runtime-0.2.105/horizon-launcher-windows-x64.zip';
 const UPSTREAM =
   'https://github.com/horizon-rust/horizon/releases/download/launcher%400.2.105/horizon-launcher-windows-x64.zip';
 const EXPECTED_SIZE = Number(process.env.HORIZON_RUNTIME_SIZE || 26933819);
@@ -42,6 +48,8 @@ if (!force && existsSync(target)) {
 
 const candidates = [
   process.env.HORIZON_RUNTIME_URL,
+  ...MIRRORS.map((m) => m + MIRRORED_ASSET),
+  MIRRORED_ASSET,
   ...MIRRORS.map((m) => m + UPSTREAM),
   UPSTREAM,
 ].filter(Boolean);
