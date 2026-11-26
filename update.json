@@ -1,29 +1,29 @@
 {
-  "version": "1.9.1",
-  "releaseName": "v1.9.1",
-  "releaseDate": "2026-11-16",
-  "releaseNotes": "VersePC2 v1.9.1\n\n修复：\n- 皮肤库无法加载：补上 Verse 皮肤站受控接口路由注册与分发，列表与皮肤纹理恢复正常\n- 第三方账户头像与皮肤模型不显示：会话接口改用无横杠 UUID 查询（失败再回退带横杠），并解析与统一 slim / default 皮肤模型\n- 皮肤库布局只占左侧三分之一：页面根节点撑满容器，皮肤卡片网格按可用宽度自适应铺满",
+  "version": "1.9.2",
+  "releaseName": "v1.9.2",
+  "releaseDate": "2026-11-26",
+  "releaseNotes": "VersePC2 v1.9.2\n\n修复：\n- 启动前补全反复提示「仍有文件缺失」：现在直接列出缺失文件名，并明确提示缺少下载地址、无法自动补全的文件\n- 整合包安装长时间停在 12% 且无日志：基础库下载改为逐文件进度，MMC / HMCL / 普通 ZIP 导入补充 modpack-import.log\n- 深色主题 + 液态玻璃下「选择背景风格」文字看不清：壁纸与主题选项改用当前主题文字色\n\n新增：\n- 一键更新全部可更新模组：按当前加载器与游戏版本筛选可安装的新版本，更新前二次确认，旧文件备份到 mods/.backup",
   "files": {
     "win-x64": {
-      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.9.1/VersePC2.exe",
-      "size": 66033664,
-      "sha256": "e2e8ccbe29968878719714599e4c3b4bfc1863317744258eef544153f2b434a5"
+      "url": "https://gitee.com/doujie081231/verse-pc2/releases/download/v1.9.2/VersePC2.exe",
+      "size": 93202944,
+      "sha256": "475e2afa365df7f51b99479f3d3554903948cabff59061f53c3add9aeb9a988c"
     },
     "linux-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.9.1/VersePC2-linux-x86_64",
-      "size": 15037792,
-      "sha256": "83c2aa34dd5048960e995a1a9276e5be83087a973651e63757af07336d1c407b"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.9.2/VersePC2-linux-x86_64",
+      "size": 42133376,
+      "sha256": "9aef6d588b55b62071481885846894b59dd0055a45f0a59c91645a86a63bc8ae"
     },
     "macos-x86_64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.9.1/VersePC2-macos-x86_64.zip",
-      "size": 6104550,
-      "sha256": "1cf2248e3b8719cef0c22d1a0341eed2db4b5f0844514314ab16e76400d36d76"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.9.2/VersePC2-macos-x86_64.zip",
+      "size": 33265815,
+      "sha256": "5a599b436d7affb949cbe34b9ba2be8d338a897e2c20a6b95a80f2ebe1e117b9"
     },
     "macos-aarch64": {
-      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.9.1/VersePC2-macos-aarch64.zip",
-      "size": 5699307,
-      "sha256": "5ee5fbc42fa8794f2f5223e520469c6350916d4d4341c3840d4c82084c769600"
+      "url": "https://github.com/doujie081231/VersePc2/releases/download/v1.9.2/VersePC2-macos-aarch64.zip",
+      "size": 32852506,
+      "sha256": "ee21426600cf63a529177ea17184baea1f31fce4c8c1cbaba665dc5419956eb2"
     }
   },
-  "signature": "UzbzIOYog3f2UAw8b3wrRUT7lRYld6rTjAbQ/7axQny7xttGTue33cvSaYVvYQNzPc2Qg/1ccbxgRHmJIV5OBQ=="
+  "signature": "mbcY6urwbVvAareuXiEpURzzkhR/hWa8MkCvYerislyQkjRKx+KDv5U8tD653yc9srH2HP1sdPHHkt8HKkceDw=="
 }
