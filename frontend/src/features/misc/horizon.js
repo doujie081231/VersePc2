@@ -203,8 +203,8 @@ export function initHorizon() {
   if (wired) return;
   wired = true;
 
-  listen('horizon-progress', (event) => {
-    const { done, total } = event.payload || {};
+  listen('horizon-progress', (payload) => {
+    const { done, total } = payload || {};
     if (total) {
       setProgress(done / total);
       const primary = $('rust-primary');
@@ -214,15 +214,15 @@ export function initHorizon() {
     }
   });
 
-  listen('horizon-log', (event) => {
-    const { line, kind } = event.payload || {};
+  listen('horizon-log', (payload) => {
+    const { line, kind } = payload || {};
     if (!line) return;
     appendLog(line, kind);
     captureSignin(line);
   });
 
-  listen('horizon-step-done', (event) => {
-    const { step, code } = event.payload || {};
+  listen('horizon-step-done', (payload) => {
+    const { step, code } = payload || {};
     if (step === 'play') playing = false;
     appendLog(`[${step}] 结束，退出码 ${code}`, code === 0 ? 'info' : 'err');
     refresh();
