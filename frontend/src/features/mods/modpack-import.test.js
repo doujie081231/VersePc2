@@ -197,6 +197,21 @@ describe('导入流程', () => {
     });
   });
 
+  it('后端提示部分模组缺失时也要展示警告', async () => {
+    mockApiRoute('/api/modpack/import', {
+      success: true,
+      name: 'PartialPack',
+      warning: '2/10 个Mod下载失败: a, b。请检查网络后重试。',
+    });
+    await openNameModal();
+    await confirmName('PartialPack');
+
+    await vi.waitFor(() => {
+      expect(document.getElementById('toast-container').textContent).toContain('2/10 个Mod下载失败');
+    });
+    expect(findTask('modpack-').status).toBe('completed');
+  });
+
   it('后端返回失败时标记任务失败并提示', async () => {
     mockApiRoute('/api/modpack/import', { success: false, error: '压缩包损坏' });
     await openNameModal();

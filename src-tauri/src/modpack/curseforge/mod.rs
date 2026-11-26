@@ -162,9 +162,10 @@ pub async fn import_curseforge(
     app: &AppHandle,
     file_path: &str,
     custom_version_name: &str,
+    base: &str,
 ) -> Value {
     eprintln!("[CurseForge] 开始导入: {}", file_path);
-    import_log(&format!("开始导入: {}", file_path));
+    import_log(&format!("开始导入: {} (base={:?})", file_path, base));
 
     // 1. 打开 zip 找 manifest.json
     let file = match std::fs::File::open(file_path) {
@@ -176,12 +177,13 @@ pub async fn import_curseforge(
         Err(e) => return json!({ "success": false, "error": format!("无法读取 ZIP: {}", e) }),
     };
 
-    // 找到 manifest.json
+    // 找到 manifest.json（支持整包被套一层文件夹）
+    let manifest_target = format!("{}manifest.json", base).to_lowercase();
     let manifest_idx = {
         let mut found: Option<usize> = None;
         for i in 0..archive.len() {
             if let Ok(entry) = archive.by_index(i)
-                && entry.name().to_lowercase() == "manifest.json" {
+                && entry.name().replace('\\', "/").to_lowercase() == manifest_target {
                     found = Some(i);
                     break;
                 }
@@ -391,6 +393,17 @@ pub async fn import_curseforge(
     };
 
     // 主流程（包含 overrides 解压、mods 下载、验证等）
+    // PCL 读取 manifest 的 overrides 字段决定覆盖目录；默认 overrides/
+    let overrides_rel = manifest
+        .overrides
+        .as_deref()
+        .unwrap_or("overrides")
+        .trim_matches('/');
+    let overrides_prefix = if overrides_rel.is_empty() || overrides_rel == "." {
+        base.to_string()
+    } else {
+        format!("{}{}/", base, overrides_rel)
+    };
     let result = match run_import_main(
         app,
         &mut archive,
@@ -408,6 +421,7 @@ pub async fn import_curseforge(
         &cf_api_key,
         &settings,
         file_path,
+        &overrides_prefix,
     )
     .await
     {

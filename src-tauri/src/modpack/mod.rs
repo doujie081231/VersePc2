@@ -61,6 +61,7 @@ pub fn unregister_modpack_abort(token: &str) {
 
 pub mod curseforge;
 pub mod curseforge_shared;
+pub mod mcbbs;
 pub mod mmc;
 pub mod mrpack_native;
 pub mod theseus;
@@ -94,15 +95,15 @@ pub async fn import_modpack(
         });
     }
 
-    // 识别整合包格式
-    let format = match detect_format(file_path) {
+    // 识别整合包格式（同时返回内层基础目录，兼容被套了一层文件夹的整合包）
+    let (format, base) = match detect_format(file_path) {
         Ok(f) => f,
         Err(e) => {
             return json!({ "success": false, "error": e });
         }
     };
 
-    eprintln!("[modpack] 识别为 {} 格式", format);
+    eprintln!("[modpack] 识别为 {} 格式（base={:?}）", format, base);
 
     let result = match format {
         ModpackFormat::Mrpack => {
@@ -123,15 +124,19 @@ pub async fn import_modpack(
         }
         ModpackFormat::Curseforge => {
             // CurseForge 走独立的 curseforge 模块（theseus 不识别 manifest.json）
-            curseforge::import_curseforge(app, file_path, custom_version_name).await
+            curseforge::import_curseforge(app, file_path, custom_version_name, &base).await
+        }
+        ModpackFormat::Mcbbs => {
+            // MCBBS / BBSMC：mcbbs.packmeta（或带 addons 的 manifest.json）+ overrides/
+            mcbbs::import_mcbbs(app, file_path, custom_version_name, &base).await
         }
         ModpackFormat::Hmcl => {
-            // HMCL 暂走简化的 ZIP 解压（这些us 不直接支持）
-            theseus_adapter::import_hmcl(app, file_path, custom_version_name).await
+            // HMCL：modpack.json + minecraft/（PCL 只复制 minecraft/ 到版本目录）
+            theseus_adapter::import_hmcl(app, file_path, custom_version_name, &base).await
         }
         ModpackFormat::RawZip => {
-            // 普通 ZIP 直接解压
-            theseus_adapter::import_raw_zip(app, file_path, custom_version_name).await
+            // 普通 ZIP：若含 .minecraft/（或 minecraft/）则以其为游戏根目录解压
+            theseus_adapter::import_raw_zip(app, file_path, custom_version_name, &base).await
         }
     };
 
@@ -183,11 +188,12 @@ pub async fn import_modpack(
 }
 
 /// 整合包格式枚举
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ModpackFormat {
     Mrpack,     // Modrinth .mrpack
     Mmc,        // MultiMC / Prism（含 mmc-pack.json）
     Curseforge, // CurseForge（含 manifest.json 或 minecraftinstance.xml）
+    Mcbbs,      // MCBBS / BBSMC（含 mcbbs.packmeta，或带 addons 的 manifest.json）
     Hmcl,       // HMCL（含 modpack.json）
     RawZip,     // 普通 ZIP
 }
@@ -198,6 +204,7 @@ impl std::fmt::Display for ModpackFormat {
             ModpackFormat::Mrpack => write!(f, "Modrinth .mrpack"),
             ModpackFormat::Mmc => write!(f, "MultiMC"),
             ModpackFormat::Curseforge => write!(f, "CurseForge"),
+            ModpackFormat::Mcbbs => write!(f, "MCBBS"),
             ModpackFormat::Hmcl => write!(f, "HMCL"),
             ModpackFormat::RawZip => write!(f, "普通 ZIP"),
         }
@@ -205,58 +212,95 @@ impl std::fmt::Display for ModpackFormat {
 }
 
 /// 通过读取压缩包内的关键文件识别整合包格式
-fn detect_format(file_path: &str) -> Result<ModpackFormat, String> {
+///
+/// 返回 `(格式, 内层基础目录)`。基础目录用于兼容「整包被套了一层文件夹」的
+/// 下载产物（如 `小寂寂寂整合包/manifest.json`），为空表示关键文件在压缩包根目录。
+/// 判定顺序与 PCL 的 ModpackInstall 保持一致：
+/// mcbbs.packmeta → mmc-pack.json → modrinth.index.json →
+/// manifest.json（有 addons 为 MCBBS，否则 CurseForge）→ modpack.json。
+fn detect_format(file_path: &str) -> Result<(ModpackFormat, String), String> {
     let file = std::fs::File::open(file_path)
         .map_err(|e| format!("无法打开文件: {}", e))?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("无法读取 ZIP: {}", e))?;
 
-    let mut has_mmc_pack = false;
-    let mut has_modrinth_index = false;
-    let mut has_curseforge_manifest = false;
-    let mut has_curseforge_mci = false;
-    let mut has_hmcl_modpack = false;
-
+    // 收集全部文件条目：保留原始大小写（解压时要用），另存小写用于匹配
+    let mut names: Vec<(String, String)> = Vec::new();
     for i in 0..archive.len() {
-        let entry = match archive.by_index(i) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        let name = entry.name().replace('\\', "/").to_lowercase();
-        // MMC 整合包：mmc-pack.json 可能在根目录或单层子目录（优先于其它格式判断）
-        if name.ends_with("mmc-pack.json") {
-            let base = &name[..name.len() - "mmc-pack.json".len()];
-            if base.matches('/').count() <= 1 {
-                has_mmc_pack = true;
-            }
-        }
-        // 只看根目录下的关键文件
-        let is_root = name.matches('/').count() <= 1;
-        if !is_root {
+        let Ok(entry) = archive.by_index(i) else { continue };
+        if entry.is_dir() {
             continue;
         }
-        if name == "modrinth.index.json" {
-            has_modrinth_index = true;
-        } else if name == "manifest.json" {
-            has_curseforge_manifest = true;
-        } else if name == "minecraftinstance.xml" {
-            has_curseforge_mci = true;
-        } else if name == "modpack.json" {
-            has_hmcl_modpack = true;
+        let original = entry.name().replace('\\', "/");
+        let lower = original.to_lowercase();
+        names.push((original, lower));
+    }
+
+    // 候选基础目录：根目录 + 单层子目录（PCL 同样只检查一层）
+    let mut bases: Vec<String> = vec![String::new()];
+    for (original, _) in &names {
+        if let Some(idx) = original.find('/') {
+            let base = &original[..=idx];
+            let rest = &original[idx + 1..];
+            if !rest.contains('/') && !bases.iter().any(|b| b == base) {
+                bases.push(base.to_string());
+            }
         }
     }
 
-    if has_mmc_pack {
-        Ok(ModpackFormat::Mmc)
-    } else if has_modrinth_index {
-        Ok(ModpackFormat::Mrpack)
-    } else if has_curseforge_manifest || has_curseforge_mci {
-        Ok(ModpackFormat::Curseforge)
-    } else if has_hmcl_modpack {
-        Ok(ModpackFormat::Hmcl)
-    } else {
-        Ok(ModpackFormat::RawZip)
+    for base in &bases {
+        let base_lower = base.to_lowercase();
+        let has = |file: &str| {
+            let target = format!("{}{}", base_lower, file);
+            names.iter().any(|(_, lower)| lower == &target)
+        };
+
+        if has("mcbbs.packmeta") {
+            return Ok((ModpackFormat::Mcbbs, base.clone()));
+        }
+        if has("mmc-pack.json") {
+            return Ok((ModpackFormat::Mmc, base.clone()));
+        }
+        if has("modrinth.index.json") {
+            return Ok((ModpackFormat::Mrpack, base.clone()));
+        }
+        if has("manifest.json") {
+            // MCBBS 的 manifest.json 带 addons，CurseForge 的没有
+            let is_mcbbs = read_zip_json(&mut archive, &format!("{}manifest.json", base))
+                .map(|v| v.get("addons").is_some())
+                .unwrap_or(false);
+            return Ok((
+                if is_mcbbs { ModpackFormat::Mcbbs } else { ModpackFormat::Curseforge },
+                base.clone(),
+            ));
+        }
+        if has("minecraftinstance.xml") {
+            return Ok((ModpackFormat::Curseforge, base.clone()));
+        }
+        if has("modpack.json") {
+            return Ok((ModpackFormat::Hmcl, base.clone()));
+        }
     }
+
+    Ok((ModpackFormat::RawZip, String::new()))
+}
+
+/// 按名称读取 ZIP 内 JSON（忽略大小写与反斜杠）
+pub(crate) fn read_zip_json(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Value> {
+    let target = name.replace('\\', "/").to_lowercase();
+    for i in 0..archive.len() {
+        let Ok(mut entry) = archive.by_index(i) else { continue };
+        if entry.name().replace('\\', "/").to_lowercase() != target {
+            continue;
+        }
+        let mut buf = String::new();
+        if std::io::Read::read_to_string(&mut entry, &mut buf).is_err() {
+            return None;
+        }
+        let buf = buf.trim_start_matches('\u{feff}');
+        return serde_json::from_str(buf).ok();
+    }
+    None
 }
 
 /// 发送导入进度事件
@@ -380,30 +424,80 @@ mod format_tests {
         file
     }
 
-    fn detect(entries: &[(&str, &str)]) -> ModpackFormat {
+    fn detect(entries: &[(&str, &str)]) -> (ModpackFormat, String) {
         let file = make_zip(entries);
         detect_format(file.path().to_str().unwrap()).unwrap()
     }
 
     #[test]
     fn detect_mmc_pack_at_root_and_subfolder() {
-        assert!(matches!(detect(&[("mmc-pack.json", "{}")]), ModpackFormat::Mmc));
-        assert!(matches!(
+        assert_eq!(detect(&[("mmc-pack.json", "{}")]).0, ModpackFormat::Mmc);
+        assert_eq!(
             detect(&[("GTNH/mmc-pack.json", "{}"), ("GTNH/instance.cfg", "name=x")]),
-            ModpackFormat::Mmc
-        ));
+            (ModpackFormat::Mmc, "GTNH/".to_string())        );
+    }
+
+    #[test]
+    fn detect_mcbbs_packmeta_and_addons_manifest() {
+        // mcbbs.packmeta 在根目录
+        assert_eq!(
+            detect(&[("mcbbs.packmeta", "{}"), ("overrides/mods/a.jar", "")]),
+            (ModpackFormat::Mcbbs, String::new())
+        );
+        // 整包被套了一层文件夹
+        assert_eq!(
+            detect(&[
+                ("小寂寂寂整合包/mcbbs.packmeta", "{}"),
+                ("小寂寂寂整合包/overrides/mods/a.jar", "")
+            ]),
+            (ModpackFormat::Mcbbs, "小寂寂寂整合包/".to_string())
+        );
+        // 带 addons 的 manifest.json 是 MCBBS，不是 CurseForge
+        assert_eq!(
+            detect(&[
+                ("manifest.json", r#"{"addons":[{"id":"game","version":"1.20.1"}]}"#),
+                ("overrides/mods/a.jar", "")
+            ]),
+            (ModpackFormat::Mcbbs, String::new())
+        );
+        // 没有 addons 的 manifest.json 仍是 CurseForge
+        assert_eq!(
+            detect(&[
+                ("manifest.json", r#"{"minecraft":{"version":"1.20.1"}}"#),
+                ("overrides/mods/a.jar", "")
+            ]),
+            (ModpackFormat::Curseforge, String::new())
+        );
+        // 套了一层文件夹的 CurseForge / HMCL 也要识别出 base
+        assert_eq!(
+            detect(&[
+                ("Pack/manifest.json", r#"{"minecraft":{"version":"1.20.1"}}"#),
+                ("Pack/overrides/mods/a.jar", "")
+            ]),
+            (ModpackFormat::Curseforge, "Pack/".to_string())
+        );
+        assert_eq!(
+            detect(&[
+                ("Pack/modpack.json", r#"{"gameVersion":"1.20.1"}"#),
+                ("Pack/minecraft/mods/a.jar", "")
+            ]),
+            (ModpackFormat::Hmcl, "Pack/".to_string())
+        );
     }
 
     #[test]
     fn detect_keeps_existing_formats() {
-        assert!(matches!(
+        assert_eq!(
             detect(&[("modrinth.index.json", "{}")]),
-            ModpackFormat::Mrpack
-        ));
-        assert!(matches!(
-            detect(&[("manifest.json", "{}")]),
-            ModpackFormat::Curseforge
-        ));
-        assert!(matches!(detect(&[("mods/a.jar", "")]), ModpackFormat::RawZip));
+            (ModpackFormat::Mrpack, String::new())
+        );
+        assert_eq!(
+            detect(&[("modpack.json", r#"{"gameVersion":"1.20.1"}"#)]),
+            (ModpackFormat::Hmcl, String::new())
+        );
+        assert_eq!(
+            detect(&[("mods/a.jar", "")]),
+            (ModpackFormat::RawZip, String::new())
+        );
     }
 }

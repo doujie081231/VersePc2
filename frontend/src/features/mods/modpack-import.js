@@ -286,6 +286,14 @@ function withDownloadManager(fn) {
                 if (typeof showToast === 'function' && !_useVIsland) {
                     showToast('整合包 "' + (result.name || file.name) + '" 导入成功！', 'success');
                 }
+                // 与 PCL 一致：有模组下载失败/缺失时必须明确提示，不能只报"导入成功"
+                var importWarning = result.warning || '';
+                if (!importWarning && Array.isArray(result.failedMods) && result.failedMods.length > 0) {
+                    importWarning = result.failedMods.length + ' 个模组下载失败，可重新导入补下载';
+                }
+                if (importWarning && typeof showToast === 'function') {
+                    showToast(importWarning, 'warning', 10000);
+                }
                 if (typeof loadVersions === 'function') loadVersions(true);
             } else {
                 featureBridge.modpackImporting = false;

@@ -24,8 +24,8 @@ pub(crate) fn extract_overrides_with_progress(
     archive: &mut zip::ZipArchive<std::fs::File>,
     dest_dir: &Path,
     app: &AppHandle,
+    prefix: &str,
 ) -> Result<Vec<Value>, String> {
-    let prefix = "overrides/";
     let dest_canonical = dest_dir
         .canonicalize()
         .unwrap_or_else(|_| dest_dir.to_path_buf());

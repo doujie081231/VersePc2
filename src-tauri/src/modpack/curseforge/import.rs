@@ -37,6 +37,7 @@ pub(crate) async fn run_import_main(
     cf_api_key: &str,
     settings: &Value,
     file_path: &str,
+    overrides_prefix: &str,
 ) -> Result<Value, String> {
     // 记录导入前原版版本目录是否已存在：若为本次流程新建，导入收尾时清理，避免遗留独立原版目录
     let base_vanilla_pre_existed = {
@@ -52,7 +53,7 @@ pub(crate) async fn run_import_main(
 
     // 2.7 overrides 解压
     emit_progress(app, 40, "解压覆盖文件...", "extract");
-    let _override_files = extract_overrides_with_progress(archive, version_dir, app)?;
+    let _override_files = extract_overrides_with_progress(archive, version_dir, app, overrides_prefix)?;
 
     // 2.8 根目录图标提取
     extract_root_icon(archive, version_dir);
