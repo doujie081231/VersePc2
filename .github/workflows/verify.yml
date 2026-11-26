@@ -121,6 +121,12 @@ jobs:
         shell: pwsh
         run: npm run build:web
 
+      # 内置 Horizon 运行时未入库（26.9MB 二进制），构建前按脚本拉取；
+      # horizon.rs 通过 include_bytes! 编译期嵌入，缺文件会直接编译失败。
+      - name: Fetch bundled Horizon runtime
+        shell: pwsh
+        run: node scripts/fetch-horizon-runtime.mjs
+
       - name: Cargo test
         shell: pwsh
         run: cargo test --manifest-path src-tauri/Cargo.toml

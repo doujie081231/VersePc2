@@ -49,6 +49,12 @@ jobs:
             Write-Host "sponsor-orders-found"
           }
 
+      # 内置 Horizon 运行时未入库（26.9MB 二进制），构建前按脚本拉取；
+      # horizon.rs 通过 include_bytes! 编译期嵌入，缺文件会直接编译失败。
+      - name: Fetch bundled Horizon runtime
+        shell: pwsh
+        run: node scripts/fetch-horizon-runtime.mjs
+
       # 直接 cargo build bin（bundle targets 为空，无需 tauri build 打包安装器）。
       # 关键：必须显式启用 custom-protocol。裸 cargo build 时 generate_context! 走 dev 分支，
       # 不嵌入 frontend-dist 的 64MB 资源，产物只有约 17MB 且窗口白屏；官方便携版用

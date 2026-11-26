@@ -88,6 +88,11 @@ jobs:
             echo sponsor-orders-found
           fi
 
+      # 内置 Horizon 运行时未入库（26.9MB 二进制），horizon.rs 用 include_bytes!
+      # 编译期嵌入，缺失会编译失败；全平台都需先拉取。
+      - name: Fetch bundled Horizon runtime
+        run: node scripts/fetch-horizon-runtime.mjs
+
       - name: Build release binary
         run: |
           TARGET="${{ matrix.target }}"
