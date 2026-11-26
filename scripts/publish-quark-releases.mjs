@@ -105,15 +105,32 @@ function uploadAndArchive(label, fid, files) {
   for (const p of newPaths) {
     if (!existsSync(p)) throw new Error(`[${label}] 文件不存在: ${p}`);
   }
-  console.log(`[${label}] 上传 ${newPaths.map((p) => basename(p)).join(', ')}`);
-  const uploaded = runCli(['upload', ...newPaths, '--parent-fid', fid]);
-  console.log(`[${label}] 上传完成: ${uploaded.msg}`);
 
+  // 先移走旧文件再上传：夸克对同名文件会自动改名（VersePC2(1).exe），
+  // 先清空目录才能保证新包保留正确的文件名。上传失败时把旧文件移回来。
+  let trashFid = null;
   if (oldFiles.length > 0) {
-    const trashFid = ensureTrashFid();
+    trashFid = ensureTrashFid();
     if (!trashFid) throw new Error(`[${label}] 无法创建旧版本目录`);
     console.log(`[${label}] 移动 ${oldFiles.length} 个旧文件到「旧版本-待删除」`);
     runCli(['move', ...oldFiles.map((f) => f.fid), '--target-fid', trashFid]);
+  }
+
+  console.log(`[${label}] 上传 ${newPaths.map((p) => basename(p)).join(', ')}`);
+  let uploaded;
+  try {
+    uploaded = runCli(['upload', ...newPaths, '--parent-fid', fid]);
+    console.log(`[${label}] 上传完成: ${uploaded.msg}`);
+  } catch (e) {
+    if (trashFid && oldFiles.length > 0) {
+      console.warn(`[${label}] 上传失败，回滚旧文件`);
+      try {
+        runCli(['move', ...oldFiles.map((f) => f.fid), '--target-fid', fid]);
+      } catch (rollbackError) {
+        console.warn(`[${label}] 回滚失败: ${rollbackError.message}`);
+      }
+    }
+    throw e;
   }
   return uploaded;
 }
