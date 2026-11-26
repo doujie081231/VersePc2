@@ -882,6 +882,17 @@ html[data-theme="dark"][data-liquid-glass] .theme-option.active {
     );
 }
 
+/* 深色主题 + 液态玻璃：卡片本身是深色玻璃，硬编码的深色文字会看不清，
+   统一改用当前主题文字色（含选中态） */
+html[data-theme="dark"][data-liquid-glass] .wallpaper-option .wallpaper-name,
+html[data-theme="dark"][data-liquid-glass] .panorama-theme-option .wallpaper-name,
+html[data-theme="dark"][data-liquid-glass] .wallpaper-option.active .wallpaper-name,
+html[data-theme="dark"][data-liquid-glass] .panorama-theme-option.active .wallpaper-name,
+html[data-theme="dark"][data-liquid-glass] .theme-option.active .theme-name {
+    color: var(--text-primary);
+    text-shadow: none;
+}
+
 .color-picker-row {
     display: flex;
     align-items: center;
