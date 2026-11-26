@@ -141,6 +141,29 @@ pub(crate) async fn handle_check_updates(body: &Option<Value>) -> ApiResult {
     ApiResult::ok(result)
 }
 
+/// POST /api/mods/apply-updates — 批量更新可更新模组
+pub(crate) async fn handle_apply_updates(body: &Option<Value>) -> ApiResult {
+    let version_id = body
+        .as_ref()
+        .and_then(|b| b.get("versionId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let updates = body
+        .as_ref()
+        .and_then(|b| b.get("updates"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if version_id.is_empty() {
+        return ApiResult::err(400, "Missing versionId");
+    }
+    if updates.is_empty() {
+        return ApiResult::err(400, "没有可更新的模组");
+    }
+    let result = mods::apply_mod_updates(version_id, &updates).await;
+    ApiResult::ok(result)
+}
+
 /// POST /api/mods/install-from-file — 从文件安装模组
 pub(crate) fn handle_install_from_file(body: &Option<Value>) -> ApiResult {
     let version_id = body

@@ -581,6 +581,7 @@ const API = {
     easytierLog: () => apiGet('/api/easytier/log'),
 
     checkModUpdates: (versionId) => apiPost('/api/mods/check-updates', { versionId }),
+    applyModUpdates: (versionId, updates) => apiPost('/api/mods/apply-updates', { versionId, updates }, 600000),
 
     // === 崩溃分析器 ===
     getCrashLogs: (version) => apiGet('/api/crash/logs', { version }),

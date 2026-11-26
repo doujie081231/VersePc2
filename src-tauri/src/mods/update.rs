@@ -1,12 +1,13 @@
-// mods/update.rs — 模组更新检查
+// mods/update.rs — 模组更新检查与批量更新
 // 职责：通过 SHA1 哈希批量查询 Modrinth，检查已安装模组是否有更新
 //
-// 流程：
+// 流程（对齐 PCL 的「检查模组更新」）：
 //   1. 读取 mods 目录下所有 .jar 文件
 //   2. 计算 SHA1 哈希
-//   3. POST /version_files 查询每个哈希对应的版本信息
+//   3. POST /version_files 查询当前版本；POST /version_files/update
+//      携带当前加载器与游戏版本，查询真正可安装的新版本
 //   4. 批量拉取项目信息补充名称
-//   5. 返回 { updates, total, checked }
+//   5. 返回 { updates, total, checked }，只包含有可安装新版本的模组
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -76,53 +77,50 @@ pub async fn check_mod_updates(version_id: &str) -> Value {
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    // POST /version_files 批量查询
+    // 当前版本信息（用于展示"当前版本"；失败不影响更新判断）
     let hash_list: Vec<String> = hashes.keys().cloned().collect();
-    let post_body = json!({ "hashes": hash_list, "algorithm": "sha1" });
-    let url = format!("{}/version_files", MODRINTH_API);
+    let current_res = post_version_files(
+        &client,
+        &format!("{}/version_files", MODRINTH_API),
+        &json!({ "hashes": hash_list, "algorithm": "sha1" }),
+    )
+    .await
+    .unwrap_or_else(|_| json!({}));
 
-    let resp = match client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .json(&post_body)
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            return json!({
-                "updates": [],
-                "total": mod_files.len(),
-                "checked": hash_list.len(),
-                "error": e.to_string()
-            });
-        }
-    };
-
-    if !resp.status().is_success() {
-        return json!({
-            "updates": [],
-            "total": mod_files.len(),
-            "checked": hash_list.len(),
-            "error": format!("HTTP {}", resp.status())
-        });
+    // 最新可安装版本：带上当前加载器与游戏版本，避免给出装不上的更新（与 PCL 一致）
+    let ctx = crate::server_host::detect_client_loader(&version_id);
+    let loader = ctx.get("loader").and_then(|v| v.as_str()).unwrap_or("");
+    let mc_version = ctx.get("mcVersion").and_then(|v| v.as_str()).unwrap_or("");
+    let mut update_body = json!({ "hashes": hash_list, "algorithm": "sha1" });
+    if !loader.is_empty() && loader != "vanilla" {
+        update_body["loaders"] = json!([loader]);
+    }
+    if !mc_version.is_empty() {
+        update_body["game_versions"] = json!([mc_version]);
     }
 
-    let version_res: Value = match resp.json().await {
+    let latest_res = match post_version_files(
+        &client,
+        &format!("{}/version_files/update", MODRINTH_API),
+        &update_body,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             return json!({
                 "updates": [],
                 "total": mod_files.len(),
                 "checked": hash_list.len(),
-                "error": e.to_string()
+                "error": e
             });
         }
     };
 
     // 收集所有 projectId，批量拉取项目信息
-    let version_obj = version_res.as_object().cloned().unwrap_or_default();
-    let project_ids: Vec<String> = version_obj
+    let latest_obj = latest_res.as_object().cloned().unwrap_or_default();
+    let current_obj = current_res.as_object().cloned().unwrap_or_default();
+    let project_ids: Vec<String> = latest_obj
         .values()
         .filter_map(|v| v.get("project_id").and_then(|p| p.as_str()).map(|s| s.to_string()))
         .collect::<Vec<_>>();
@@ -149,14 +147,38 @@ pub async fn check_mod_updates(version_id: &str) -> Value {
                 }
     }
 
-    // 组装更新列表
+    // 组装更新列表：只保留确实存在可安装新版本的模组
     let mut updates: Vec<Value> = Vec::new();
-    for (hash, info) in version_obj.iter() {
+    for (hash, latest_ver) in latest_obj.iter() {
         let local = match hashes.get(hash) {
             Some(l) => l,
             None => continue,
         };
-        let project_id = info.get("project_id").and_then(|p| p.as_str()).unwrap_or("");
+        let latest_id = latest_ver.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let current_ver = current_obj.get(hash);
+        let current_id = current_ver
+            .and_then(|v| v.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        // 有当前版本信息时按版本 ID 判断；否则退回文件哈希判断
+        let has_update = if !current_id.is_empty() {
+            current_id != latest_id
+        } else {
+            !version_contains_hash(latest_ver, hash)
+        };
+        if !has_update {
+            continue;
+        }
+
+        let Some(file) = primary_file(latest_ver) else { continue };
+        let download_url = file.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let new_file_name = file.get("filename").and_then(|v| v.as_str()).unwrap_or("");
+        if download_url.is_empty() || new_file_name.is_empty() {
+            continue;
+        }
+
+        let project_id = latest_ver.get("project_id").and_then(|p| p.as_str()).unwrap_or("");
         let project = project_map.get(project_id);
         let mod_name = project
             .and_then(|p| p.get("title"))
@@ -165,18 +187,191 @@ pub async fn check_mod_updates(version_id: &str) -> Value {
         updates.push(json!({
             "fileName": local.0,
             "modName": mod_name,
-            "currentVersion": info.get("version_number").and_then(|v| v.as_str()).unwrap_or(""),
-            "currentVersionId": info.get("id").and_then(|v| v.as_str()).unwrap_or(""),
+            "currentVersion": current_ver
+                .and_then(|v| v.get("version_number"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
+            "currentVersionId": current_id,
+            "targetVersion": latest_ver.get("version_number").and_then(|v| v.as_str()).unwrap_or(""),
+            "targetVersionId": latest_id,
+            "downloadUrl": download_url,
+            "newFileName": new_file_name,
+            "sha1": file.get("hashes").and_then(|h| h.get("sha1")).and_then(|v| v.as_str()).unwrap_or(""),
+            "size": file.get("size").and_then(|v| v.as_u64()).unwrap_or(0),
             "projectUrl": format!("https://modrinth.com/mod/{}", project_id),
             "projectId": project_id
         }));
     }
+    updates.sort_by(|a, b| {
+        let an = a.get("modName").and_then(|v| v.as_str()).unwrap_or("");
+        let bn = b.get("modName").and_then(|v| v.as_str()).unwrap_or("");
+        an.to_lowercase().cmp(&bn.to_lowercase())
+    });
 
     json!({
         "updates": updates,
         "total": mod_files.len(),
         "checked": hash_list.len()
     })
+}
+
+/// POST 批量查询 Modrinth 版本接口
+async fn post_version_files(
+    client: &reqwest::Client,
+    url: &str,
+    body: &Value,
+) -> Result<Value, String> {
+    let resp = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    resp.json::<Value>().await.map_err(|e| e.to_string())
+}
+
+/// 版本的所有文件中是否包含指定 SHA1（用于识别"本地已是最新"）
+fn version_contains_hash(version: &Value, sha1: &str) -> bool {
+    version
+        .get("files")
+        .and_then(|v| v.as_array())
+        .map(|files| {
+            files.iter().any(|f| {
+                f.get("hashes")
+                    .and_then(|h| h.get("sha1"))
+                    .and_then(|v| v.as_str())
+                    == Some(sha1)
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// 取版本的主文件（primary 优先，否则第一个）
+fn primary_file(version: &Value) -> Option<&Value> {
+    let files = version.get("files")?.as_array()?;
+    files
+        .iter()
+        .find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false))
+        .or_else(|| files.first())
+}
+
+/// 批量更新模组：下载新文件、备份旧文件后替换（对齐 PCL 的批量更新）
+///
+/// `items` 为 `check_mod_updates` 返回的更新项。旧文件移动到
+/// `mods/.backup/<时间戳>/`，便于回滚。
+pub async fn apply_mod_updates(version_id: &str, items: &[Value]) -> Value {
+    let settings = storage::load_settings();
+    let mods_dir = match resolve_version_mods_dir(&settings, version_id) {
+        Some(d) => d,
+        None => {
+            return json!({
+                "success": false,
+                "updated": 0,
+                "failed": items.len(),
+                "failedFiles": [],
+                "error": "无法确定模组目录"
+            });
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(&mods_dir) {
+        return json!({
+            "success": false,
+            "updated": 0,
+            "failed": items.len(),
+            "failedFiles": [],
+            "error": format!("创建目录失败: {}", e)
+        });
+    }
+
+    let backup_dir = mods_dir
+        .join(".backup")
+        .join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
+    let mut updated = 0usize;
+    let mut failed_files: Vec<Value> = Vec::new();
+
+    for item in items {
+        let file_name = item.get("fileName").and_then(|v| v.as_str()).unwrap_or("");
+        let download_url = item.get("downloadUrl").and_then(|v| v.as_str()).unwrap_or("");
+        let new_file_name = item
+            .get("newFileName")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(file_name);
+        let sha1 = item
+            .get("sha1")
+            .and_then(|v| v.as_str())
+            .filter(|s| s.len() == 40);
+        let size = item
+            .get("size")
+            .and_then(|v| v.as_u64())
+            .filter(|s| *s > 0);
+
+        if !is_safe_file_name(file_name)
+            || !is_safe_file_name(new_file_name)
+            || download_url.is_empty()
+        {
+            failed_files.push(json!({ "fileName": file_name, "error": "参数无效" }));
+            continue;
+        }
+
+        let part_path = mods_dir.join(format!(".{}.part", new_file_name));
+        let download = crate::download::download_with_mirror_retry(
+            download_url,
+            &part_path,
+            sha1,
+            size,
+            "china-first",
+            300,
+        )
+        .await;
+        if let Err(e) = download {
+            let _ = std::fs::remove_file(&part_path);
+            failed_files.push(json!({ "fileName": file_name, "error": e }));
+            continue;
+        }
+
+        // 旧文件移入备份目录（PCL 放入回收站，这里保留在 mods/.backup 下）
+        let old_path = mods_dir.join(file_name);
+        if old_path.exists() {
+            let _ = std::fs::create_dir_all(&backup_dir);
+            let _ = std::fs::rename(&old_path, backup_dir.join(file_name));
+        }
+
+        let dest = mods_dir.join(new_file_name);
+        if dest.exists() {
+            let _ = std::fs::remove_file(&dest);
+        }
+        match std::fs::rename(&part_path, &dest) {
+            Ok(()) => updated += 1,
+            Err(e) => {
+                let _ = std::fs::remove_file(&part_path);
+                failed_files.push(json!({
+                    "fileName": file_name,
+                    "error": format!("替换文件失败: {}", e)
+                }));
+            }
+        }
+    }
+
+    json!({
+        "success": failed_files.is_empty(),
+        "updated": updated,
+        "failed": failed_files.len(),
+        "failedFiles": failed_files,
+        "backupDir": backup_dir.to_string_lossy(),
+    })
+}
+
+/// 校验文件名是否安全（禁止目录穿越与非法分隔符）
+fn is_safe_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains("..")
+        && !name.contains('/')
+        && !name.contains('\\')
 }
 
 /// 解析版本 mods 目录
@@ -304,5 +499,46 @@ fn to_modrinth_cdn_mirror(url: &str) -> String {
         url.replace("cdn-alt.modrinth.com", "mod.mcimirror.top")
     } else {
         url.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_contains_hash_matches_any_file() {
+        let version = json!({
+            "files": [
+                { "hashes": { "sha1": "aaa" } },
+                { "hashes": { "sha1": "bbb" } }
+            ]
+        });
+        assert!(version_contains_hash(&version, "bbb"));
+        assert!(!version_contains_hash(&version, "ccc"));
+        assert!(!version_contains_hash(&json!({}), "aaa"));
+    }
+
+    #[test]
+    fn primary_file_prefers_primary_flag() {
+        let version = json!({
+            "files": [
+                { "filename": "a.jar", "primary": false },
+                { "filename": "b.jar", "primary": true }
+            ]
+        });
+        assert_eq!(primary_file(&version).unwrap()["filename"], "b.jar");
+        let no_flag = json!({ "files": [{ "filename": "only.jar" }] });
+        assert_eq!(primary_file(&no_flag).unwrap()["filename"], "only.jar");
+        assert!(primary_file(&json!({})).is_none());
+    }
+
+    #[test]
+    fn safe_file_name_rejects_traversal() {
+        assert!(is_safe_file_name("mod-1.0.jar"));
+        assert!(!is_safe_file_name(""));
+        assert!(!is_safe_file_name("../evil.jar"));
+        assert!(!is_safe_file_name("dir/evil.jar"));
+        assert!(!is_safe_file_name("dir\\evil.jar"));
     }
 }

@@ -42,6 +42,7 @@ async function checkModUpdatesForVersion() {
 }
 
 function showModUpdateDialog(updates, checkedCount) {
+  S._pendingModUpdates = updates;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
@@ -53,24 +54,71 @@ function showModUpdateDialog(updates, checkedCount) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(u.modName)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escapeHtml(u.fileName)} | 当前版本: ${escapeHtml(u.currentVersion)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escapeHtml(u.fileName)} | ${escapeHtml(u.currentVersion || '未知')} → ${escapeHtml(u.targetVersion || '新版本')}</div>
       </div>
-      <a href="${u.projectUrl}" target="_blank" style="color: var(--accent-ink);font-size:13px;text-decoration:none;white-space:nowrap;margin-left:12px;">查看更新</a>
+      <a href="${u.projectUrl}" target="_blank" style="color: var(--accent-ink);font-size:13px;text-decoration:none;white-space:nowrap;margin-left:12px;">查看</a>
     </div>
   `).join('');
 
   dialog.innerHTML = `
     <h3 style="margin:0 0 4px 0;color:var(--text-primary);">模组更新检查</h3>
-    <p style="margin:0 0 16px 0;font-size:13px;color:var(--text-muted);">已检查 ${checkedCount} 个模组，发现 ${updates.length} 个可在 Modrinth 上找到</p>
+    <p style="margin:0 0 16px 0;font-size:13px;color:var(--text-muted);">已检查 ${checkedCount} 个模组，发现 ${updates.length} 个有可用更新（已按当前加载器与游戏版本筛选）</p>
     <div>${listHtml}</div>
-    <div style="margin-top:16px;text-align:right;">
+    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">
       <button class="btn btn-secondary"${actionAttrs('closeOverlay')}>关闭</button>
+      <button class="btn btn-primary"${actionAttrs('applyAllModUpdates')}>更新全部 (${updates.length})</button>
     </div>
   `;
 
   overlay.appendChild(dialog);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
+}
+
+let _applyingModUpdates = false;
+
+async function applyAllModUpdates(overlayEl) {
+  const updates = S._pendingModUpdates || [];
+  const versionId = appState.currentSettingsVersionId;
+  if (!versionId || updates.length === 0) {
+    showToast('没有可更新的模组', 'info');
+    return;
+  }
+  if (_applyingModUpdates) {
+    showToast('正在更新，请稍候...', 'info');
+    return;
+  }
+  const confirmed = await showConfirmDialog(
+    '更新全部模组',
+    `将更新 ${updates.length} 个模组。旧文件会备份到 mods/.backup 目录，更新后部分模组需重启游戏才能生效。确定继续吗？`,
+    '开始更新',
+    '取消'
+  );
+  if (!confirmed) return;
+
+  _applyingModUpdates = true;
+  showToast(`正在更新 ${updates.length} 个模组...`, 'info');
+  try {
+    const result = await API.applyModUpdates(versionId, updates);
+    if (result.error) {
+      showToast('更新失败: ' + result.error, 'error');
+      return;
+    }
+    const updated = result.updated || 0;
+    const failed = result.failed || 0;
+    if (failed > 0) {
+      showToast(`已更新 ${updated} 个模组，${failed} 个失败`, 'error');
+    } else {
+      showToast(`已更新 ${updated} 个模组`, 'success');
+      const overlay = overlayEl?.closest('.modal-overlay');
+      if (overlay) overlay.remove();
+    }
+    loadInstalledModsForSettings();
+  } catch (e) {
+    showToast('更新失败: ' + (e.message || '未知错误'), 'error');
+  } finally {
+    _applyingModUpdates = false;
+  }
 }
 
 async function loadInstalledModsForSettings() {
@@ -291,7 +339,7 @@ async function removeModFromManager(fileName) {
   });
 }
 
-export { checkModUpdatesForVersion, showModUpdateDialog, loadInstalledModsForSettings, renderModMgrList, previewMod, filterInstalledMods, filterModMgrTab, selectAllMods, installModFromFile, installModByFile, openBrowseMods, goDownloadMods, toggleModInManager, removeModFromManager };
+export { checkModUpdatesForVersion, showModUpdateDialog, applyAllModUpdates, loadInstalledModsForSettings, renderModMgrList, previewMod, filterInstalledMods, filterModMgrTab, selectAllMods, installModFromFile, installModByFile, openBrowseMods, goDownloadMods, toggleModInManager, removeModFromManager };
 
 // 批量安装完成后刷新版本设置中的已安装模组列表
 registerLazyLoader('vset:installed-mods', loadInstalledModsForSettings);

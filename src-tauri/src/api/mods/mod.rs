@@ -70,6 +70,7 @@ pub async fn handle(
         "POST /api/mods/toggle" => Some(handle_toggle(body)),
         "POST /api/mods/delete" => Some(handle_delete(body)),
         "POST /api/mods/check-updates" => Some(handle_check_updates(body).await),
+        "POST /api/mods/apply-updates" => Some(handle_apply_updates(body).await),
         "POST /api/mods/install-from-file" => Some(handle_install_from_file(body)),
         "POST /api/mods/remove" => Some(handle_remove(body)),
         // ===== 对话框 =====
