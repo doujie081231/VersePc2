@@ -717,16 +717,22 @@ async fn handle_download_deps(app: &AppHandle, body: &Option<Value>) -> ApiResul
                             }
                     let sha1 = if file.sha1.is_empty() { None } else { Some(file.sha1.clone()) };
                     let size = if file.size > 0 { Some(file.size) } else { None };
-                    match crate::download::download_with_mirror_retry(
-                        &file.url,
-                        &dest,
-                        sha1.as_deref(),
-                        size,
-                        &source_cur,
-                        120,
-                    )
-                    .await
-                    {
+                    // 缺少下载地址的文件（例如 Forge 安装器本地生成的 srg/extra 核心库）无法从网络补全，
+                    // 必须计入失败并带上文件名，否则“补全 → 复查仍缺”会变成无限循环。
+                    let dl_result = if file.url.trim().is_empty() {
+                        Err("缺少下载地址，无法自动补全".to_string())
+                    } else {
+                        crate::download::download_with_mirror_retry(
+                            &file.url,
+                            &dest,
+                            sha1.as_deref(),
+                            size,
+                            &source_cur,
+                            120,
+                        )
+                        .await
+                    };
+                    match dl_result {
                         Ok(()) => {
                             stats_cur.lock().unwrap().completed += 1;
                             eprintln!("[launch/download-deps] 下载成功: {}", file.name);

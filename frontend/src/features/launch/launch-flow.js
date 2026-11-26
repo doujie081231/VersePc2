@@ -210,7 +210,11 @@ export async function handleLaunch() {
       // 补全成功后重新检查，确认无缺失再继续启动
       const depCheck2 = await API.launchCheck(versionId, externalVersionDir);
       if (depCheck2.missingFiles && depCheck2.missingFiles.length > 0) {
-        const stillMsg = `仍有 ${depCheck2.missingFiles.length} 个文件缺失，请再次点击补全`;
+        const names = depCheck2.missingFiles
+          .map(f => String((f && (f.name || f.path)) || '').split(/[\\/]/).filter(Boolean).pop() || '')
+          .filter(Boolean);
+        const nameText = names.length ? `：${names.join('、')}` : '';
+        const stillMsg = `仍有 ${depCheck2.missingFiles.length} 个文件缺失${nameText}（缺少下载地址或需安装器生成，无法自动补全）`;
         setLaunchStep('download', 'error', stillMsg);
         showLaunchError(stillMsg);
         launchBtn.disabled = false;

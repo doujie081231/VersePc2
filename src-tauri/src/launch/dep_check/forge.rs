@@ -409,7 +409,14 @@ pub(crate) fn check_forge_core(
                     let classifier_suffix = if parts.len() >= 4 { format!("-{}", parts[3]) } else { String::new() };
                     let maven_file = format!("{}-{}{}.jar", artifact_id, version, classifier_suffix);
                     forge_url = if group_id == "net.minecraft" {
-                        format!("https://libraries.minecraft.net/{}/{}/{}/{}", group_path, artifact_id, version, maven_file)
+                        // net.minecraft:client:<ver>:srg / :extra 是 Forge 安装器在本地生成的产物，
+                        // Maven 上没有对应文件；留空交由补全流程提示“缺少下载地址”，
+                        // 而不是请求一个必然 404 的地址。
+                        if parts.len() >= 4 {
+                            String::new()
+                        } else {
+                            format!("https://libraries.minecraft.net/{}/{}/{}/{}", group_path, artifact_id, version, maven_file)
+                        }
                     } else {
                         format!("https://maven.minecraftforge.net/{}/{}/{}/{}", group_path, artifact_id, version, maven_file)
                     };
