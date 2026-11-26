@@ -16,6 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "test:density": "node scripts/check-test-density.mjs",
     "test:coverage:check": "node scripts/check-coverage.mjs",
+    "release:quark": "node scripts/publish-quark-releases.mjs",
     "test:e2e": "npm run build:web && playwright test",
     "lint": "eslint frontend/src scripts/*.mjs vite.config.mjs",
     "arch:cycles": "madge --circular --extensions js frontend/src",
