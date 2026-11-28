@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // lan-redstone.test.js — 红石联机节点、隧道启停与主流程单元测试
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCommandCalls, installTauriMock, mockApiRoute, mockCommand } from '../../test-utils/tauri-mock.js';
+import { getApiCalls, getCommandCalls, installTauriMock, mockApiRoute, mockCommand } from '../../test-utils/tauri-mock.js';
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock('./ui-components.js', () => ({ showToast: toast }));
@@ -95,6 +95,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   installTauriMock();
+  mockApiRoute('/api/current-context', { selectedVersion: '1.20.1', loader: 'forge', loaderVersion: '47.2.0' });
   resetBridge();
   buildDom();
   resetS();
@@ -356,7 +357,7 @@ describe('redstoneStart', () => {
   it('版本信息缺失时显示未选择', async () => {
     S._redstoneServers = [{ name: '南京', address: 'nj.hongshi.site' }];
     mockApiRoute('/api/game/status', { running: true, lanPort: 25566 });
-    fetch.mockResolvedValue({ ok: true, json: async () => ({}) });
+    mockApiRoute('/api/current-context', {});
 
     await mod.redstoneStart();
 
@@ -367,7 +368,7 @@ describe('redstoneStart', () => {
   it('版本接口异常时记录日志并继续', async () => {
     S._redstoneServers = [{ name: '南京', address: 'nj.hongshi.site' }];
     mockApiRoute('/api/game/status', { running: true, lanPort: 25566 });
-    fetch.mockRejectedValue(new Error('bad gateway'));
+    mockApiRoute('/api/current-context', { status: 500, body: { error: 'bad gateway' } });
 
     await mod.redstoneStart();
 
@@ -487,7 +488,7 @@ describe('redstoneRefreshCurrentVersion', () => {
   });
 
   it('仅有加载器时省略版本号', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => ({ selectedVersion: '1.21', loader: 'fabric' }) });
+    mockApiRoute('/api/current-context', { selectedVersion: '1.21', loader: 'fabric' });
 
     await mod.redstoneRefreshCurrentVersion();
 
@@ -495,7 +496,7 @@ describe('redstoneRefreshCurrentVersion', () => {
   });
 
   it('无加载器时标记原版', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => ({ selectedVersion: '1.21' }) });
+    mockApiRoute('/api/current-context', { selectedVersion: '1.21' });
 
     await mod.redstoneRefreshCurrentVersion();
 
@@ -503,7 +504,7 @@ describe('redstoneRefreshCurrentVersion', () => {
   });
 
   it('接口失败展示读取失败', async () => {
-    fetch.mockResolvedValue({ ok: false, status: 502, json: async () => ({}) });
+    mockApiRoute('/api/current-context', { status: 502, body: { error: 'bad gateway' } });
 
     await mod.redstoneRefreshCurrentVersion();
 
@@ -516,7 +517,7 @@ describe('redstoneRefreshCurrentVersion', () => {
 
     await mod.redstoneRefreshCurrentVersion();
 
-    expect(fetch).not.toHaveBeenCalled();
+    expect(getApiCalls().some((c) => c.path === '/api/current-context')).toBe(false);
   });
 });
 

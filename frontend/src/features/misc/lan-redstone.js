@@ -125,23 +125,20 @@ async function redstoneStart() {
     // 读取当前选中的游戏版本，作为房间描述上传到联机大厅
     let versionDesc = '';
     try {
-        const ctxRes = await fetch('/api/current-context');
-        if (ctxRes.ok) {
-            const ctx = await ctxRes.json();
-            if (ctx && ctx.selectedVersion) {
-                const mcVer = ctx.selectedVersion;
-                const loader = ctx.loader || '';
-                const loaderVer = ctx.loaderVersion || '';
-                if (loader && loaderVer) {
-                    let shortLoaderVer = loaderVer;
-                    const m = loaderVer.match(/(\d+\.\d+(?:\.\d+)?)/);
-                    if (m) shortLoaderVer = m[1];
-                    versionDesc = mcVer + ' / ' + loader.charAt(0).toUpperCase() + loader.slice(1) + ' ' + shortLoaderVer;
-                } else if (loader) {
-                    versionDesc = mcVer + ' / ' + loader.charAt(0).toUpperCase() + loader.slice(1);
-                } else {
-                    versionDesc = mcVer + ' / 原版';
-                }
+        const ctx = await API.getCurrentContext();
+        if (ctx && ctx.selectedVersion) {
+            const mcVer = ctx.selectedVersion;
+            const loader = ctx.loader || '';
+            const loaderVer = ctx.loaderVersion || '';
+            if (loader && loaderVer) {
+                let shortLoaderVer = loaderVer;
+                const m = loaderVer.match(/(\d+\.\d+(?:\.\d+)?)/);
+                if (m) shortLoaderVer = m[1];
+                versionDesc = mcVer + ' / ' + loader.charAt(0).toUpperCase() + loader.slice(1) + ' ' + shortLoaderVer;
+            } else if (loader) {
+                versionDesc = mcVer + ' / ' + loader.charAt(0).toUpperCase() + loader.slice(1);
+            } else {
+                versionDesc = mcVer + ' / 原版';
             }
         }
     } catch (e) { addRedstoneLog('读取当前版本失败: ' + e.message); }
@@ -220,9 +217,7 @@ async function redstoneRefreshCurrentVersion() {
     const verBox = document.getElementById('redstone-current-version');
     if (!verBox) return;
     try {
-        const res = await fetch('/api/current-context');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const ctx = await res.json();
+        const ctx = await API.getCurrentContext();
         if (ctx && ctx.selectedVersion) {
             const mcVer = ctx.selectedVersion;
             const loader = ctx.loader || '';

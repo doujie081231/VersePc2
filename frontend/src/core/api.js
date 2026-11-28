@@ -447,6 +447,7 @@ const API = {
         apiPost('/api/launch/download-deps', { versionId, sessionId }, timeout || 180000),
     getLaunchSessionStatus: (sessionId) => apiGet('/api/launch/session-status', { sessionId }),
     getGameStatus: () => apiGet('/api/game/status'),
+    getCurrentContext: () => apiGet('/api/current-context'),
     stopGameInstance: (sessionId) => apiPost('/api/game/stop', { sessionId }),
     cleanupScan: () => apiPost('/api/cleanup/scan'),
     cleanupRun: () => apiPost('/api/cleanup'),

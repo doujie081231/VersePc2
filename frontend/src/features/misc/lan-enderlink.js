@@ -156,11 +156,8 @@ async function enderlinkStart() {
     const isPublic = publicEl ? publicEl.classList.contains('active') : true;
     let versionDesc = '';
     try {
-        const ctxRes = await fetch('/api/current-context');
-        if (ctxRes.ok) {
-            const ctx = await ctxRes.json();
-            if (ctx && ctx.selectedVersion) versionDesc = ctx.selectedVersion;
-        }
+        const ctx = await API.getCurrentContext();
+        if (ctx && ctx.selectedVersion) versionDesc = ctx.selectedVersion;
     } catch (e) {}
 
     S._enderlinkOpening = true;

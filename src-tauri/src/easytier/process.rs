@@ -200,6 +200,24 @@ async fn http_get_quick(http_port: u16, path: &str) -> Option<Value> {
     Some(serde_json::from_str::<Value>(&text).unwrap_or_else(|_| json!({ "text": text })))
 }
 
+/// 把 Terracotta 内核的 stdout/stderr 追加到 logs/terracotta.log。
+/// 否则内核异常时没有任何可排查信息（前端只能看到笼统的“JSON 错误”/协议错误）。
+fn attach_terracotta_log(cmd: &mut tokio::process::Command) {
+    let path = state::get_log_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        && let Ok(f2) = f.try_clone()
+    {
+        cmd.stdout(std::process::Stdio::from(f));
+        cmd.stderr(std::process::Stdio::from(f2));
+    }
+}
+
 /// 结束 terracotta 进程树。
 /// 只 kill 直接子进程会留下 easytier-core 等孙进程，它们继续占着虚拟网卡和房间会话，
 /// 导致下次创建房间被节点判定为「房间人数已达上限」，往往要重启电脑才能恢复。
@@ -450,9 +468,8 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
     let _ = std::fs::remove_file(&port_file);
 
     let mut cmd = tokio::process::Command::new(&bin_path);
-    cmd.arg("--hmcl").arg(&port_file)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
+    cmd.arg("--hmcl").arg(&port_file);
+    attach_terracotta_log(&mut cmd);
     #[cfg(target_os = "windows")]
     {
         cmd.creation_flags(0x08000000);
@@ -503,9 +520,26 @@ pub async fn start_host(game_port: u16, player_name: &str) -> Result<Value, Stri
     for attempt in 0..3 {
         tokio::time::sleep(Duration::from_millis(1000 + attempt * 500)).await;
         match http_get_raw(http_port, &format!("/state/scanning?{}", q)).await {
-            Ok(_) => {
+            // 正常返回 JSON；若控制接口返回 HTML/纯文本（内核尚未就绪），
+            // 不能当作成功，否则前端会一直停在“正在创建隧道连接中”。
+            Ok(v) if is_json_control_response(&v) => {
                 last_err.clear();
                 break;
+            }
+            Ok(v) => {
+                last_err = format!(
+                    "控制接口返回非 JSON: {}",
+                    v.get("text").and_then(|t| t.as_str()).unwrap_or("").chars().take(120).collect::<String>()
+                );
+                eprintln!("[terracotta] /state/scanning 第{}次返回异常: {}", attempt + 1, last_err);
+                if attempt == 2 {
+                    state::update_status(|s| {
+                        s.error_type = Some("scanning_failed".into());
+                        s.error_message = Some(last_err.clone());
+                    });
+                    let _ = stop().await;
+                    return Err(format!("陶瓦联机初始化失败: {}", last_err));
+                }
             }
             Err(e) => {
                 last_err = e;
@@ -557,9 +591,8 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
     let _ = std::fs::remove_file(&port_file);
 
     let mut cmd = tokio::process::Command::new(&bin_path);
-    cmd.arg("--hmcl").arg(&port_file)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
+    cmd.arg("--hmcl").arg(&port_file);
+    attach_terracotta_log(&mut cmd);
     #[cfg(target_os = "windows")]
     {
         cmd.creation_flags(0x08000000);
@@ -608,9 +641,25 @@ pub async fn start_guest(room_code: &str, player_name: &str) -> Result<Value, St
     for attempt in 0..3 {
         tokio::time::sleep(Duration::from_millis(1000 + attempt * 500)).await;
         match http_get_raw(http_port, &format!("/state/guesting?{}", q)).await {
-            Ok(_) => {
+            // 同 scanning：非 JSON 响应不能视为成功
+            Ok(v) if is_json_control_response(&v) => {
                 last_err.clear();
                 break;
+            }
+            Ok(v) => {
+                last_err = format!(
+                    "控制接口返回非 JSON: {}",
+                    v.get("text").and_then(|t| t.as_str()).unwrap_or("").chars().take(120).collect::<String>()
+                );
+                eprintln!("[terracotta] /state/guesting 第{}次返回异常: {}", attempt + 1, last_err);
+                if attempt == 2 {
+                    state::update_status(|s| {
+                        s.error_type = Some("guesting_failed".into());
+                        s.error_message = Some(last_err.clone());
+                    });
+                    let _ = stop().await;
+                    return Err(format!("陶瓦联机初始化失败: {}", last_err));
+                }
             }
             Err(e) => {
                 last_err = e;
@@ -824,6 +873,12 @@ async fn try_recover_saved() -> Result<(), String> {
     }
 }
 
+/// 控制接口是否返回了 JSON。
+/// `http_get_raw` 会把非 JSON 文本包成 `{ "text": ... }`，状态切换命令不能把它当成功。
+fn is_json_control_response(v: &Value) -> bool {
+    v.get("text").is_none()
+}
+
 /// 解析 /state 响应并写入全局状态
 /// 返回 true 表示状态已更新；false 表示 index 未前进（旧/重复状态被忽略，采用单调 index 保护）
 fn update_state_from_api(v: Value) -> bool {
@@ -896,4 +951,16 @@ fn update_state_from_api(v: Value) -> bool {
         }
     });
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn control_response_requires_real_json() {
+        assert!(is_json_control_response(&json!({ "state": "scanning" })));
+        assert!(!is_json_control_response(&json!({ "text": "<html>proxy error</html>" })));
+        assert!(!is_json_control_response(&json!({ "text": "Bad Gateway" })));
+    }
 }

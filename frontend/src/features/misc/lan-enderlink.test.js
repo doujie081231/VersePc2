@@ -102,6 +102,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   installTauriMock();
+  mockApiRoute('/api/current-context', { selectedVersion: '1.20.1' });
   resetBridge();
   buildDom();
   resetS();
@@ -402,8 +403,8 @@ describe('enderlinkStart', () => {
   it('非公开模式与默认版本', async () => {
     S._enderlinkNodes = [{ name: 'A', frpIp: 'a', frpPort: 1 }];
     mockApiRoute('/api/game/status', { running: true, lanPort: 25566 });
+    mockApiRoute('/api/current-context', {});
     document.getElementById('enderlink-public').classList.remove('active');
-    fetch.mockResolvedValue({ ok: true, json: async () => ({}) });
 
     await mod.enderlinkStart();
 
@@ -447,7 +448,7 @@ describe('enderlinkStart', () => {
   it('版本接口异常时使用默认版本', async () => {
     S._enderlinkNodes = [{ name: 'A', frpIp: 'a', frpPort: 1 }];
     mockApiRoute('/api/game/status', { running: true, lanPort: 25566 });
-    fetch.mockRejectedValue(new Error('bad'));
+    mockApiRoute('/api/current-context', { status: 500, body: { error: 'bad' } });
 
     await mod.enderlinkStart();
 
